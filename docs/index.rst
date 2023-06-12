@@ -25,7 +25,7 @@
 
 .. highlight:: python
 
-.. image:: cq_title_image.png
+.. image:: assets/cq_title_image.png
 
 If you've ever wondered if there is a better alternative to doing mechanical CAD with
 proprietary software products, `Build123d <https://build123d.readthedocs.io/en/latest/>`_
@@ -59,15 +59,16 @@ Table Of Contents
     :maxdepth: 2
 
     installation.rst
-    bearing.rst
-    chain.rst
-    drafting.rst
-    finger_jointed_boxes.rst
-    fastener.rst
-    flange.rst
     pipe.rst
-    sprocket.rst
-    thread.rst
+
+..    bearing.rst
+..    chain.rst
+..    drafting.rst
+..    finger_jointed_boxes.rst
+..    fastener.rst
+..    flange.rst
+..    sprocket.rst
+..    thread.rst
 
 ==================
 Indices and tables

@@ -1,0 +1,59 @@
+[build-system]
+
+requires = [
+    "setuptools>=45",
+    "wheel",
+    "setuptools_scm[toml]>=6.2",
+]
+
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bd_warehouse"
+#version = "0.1.0" # Uncomment this for the next release?
+dynamic = ["version"]
+authors = [
+    {name = "Roger Maitland", email = "gumyr9@gmail.com"},
+]
+description = "A python CAD programming library "
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = [
+    "3d models",
+    "3d printing",
+    "3d",
+    "brep",
+    "cad",
+    "cadquery",
+    "opencscade",
+    "python",
+]
+license = {text = "Apache-2.0"}
+classifiers = [
+    "License :: OSI Approved :: Apache-2.0 License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
+
+dependencies = [
+    "build123d",
+    "typing_extensions >= 4.4.0, <5",
+]
+
+[tool.setuptools]
+# ...
+# By default, include-package-data is true in pyproject.toml, so you do
+# NOT have to specify this line.
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# bd_warehouse = ["*.csv"]
+"*" = ["*.csv"]
+
+exclude = ["bd_warehouse._dev"]
+
+[tool.setuptools_scm]
+write_to = "src/bd_warehouse/_version.py"

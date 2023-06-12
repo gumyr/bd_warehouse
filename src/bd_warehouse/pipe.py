@@ -74,9 +74,11 @@ license:
 """
 from __future__ import annotations
 import csv
+import importlib.resources as pkg_resources
 from typing import Literal, Union
 from build123d import *
 from build123d import tuplify
+import bd_warehouse
 
 
 # fmt: off
@@ -113,8 +115,8 @@ class PipeSection(BaseSketchObject):
 
     # Read the pipe data
     pipe_data = {}
-    with open("pipe.csv", "r") as file:
-        reader = csv.reader(file)
+    with pkg_resources.open_text(bd_warehouse, "pipe.csv") as csvfile:
+        reader = csv.reader(csvfile)
         next(reader, None)  # skip the header row
         for row in reader:
             if len(row) == 0:  # skip blank rows

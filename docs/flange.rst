@@ -1,10 +1,10 @@
 ..
-    bd_warehouse/pipe
+    bd_warehouse/flange
 
     by:   Gumyr
-    date: June 11th 2023
+    date: June 12th 2023
 
-    desc: This is the documentation for b3d_warehouse/pipe.
+    desc: This is the documentation for b3d_warehouse/flange.
 
     license:
 
@@ -22,20 +22,25 @@
         See the License for the specific language governing permissions and
         limitations under the License.
 
-####################################
-pipe - standardized parametric pipes
-####################################
+########################################
+flange - standardized parametric flanges
+########################################
 
 .. highlight:: python
 
 .. image:: assets/pipe_logo.png
 	:alt: pipe_logo
 
-Pipes are a critical component of many industrial and chemical processing facilities.
-The pipe sub-package provides Pipe and PipeSection classes that make the creation of
-industry standard sized pipes easy by providing an API that just requires selection
-from commonly used parameters.
-
+Flanges are mechanical components used in piping systems to connect pipes,
+valves, and equipment. They provide a secure and leak-tight connection by
+bolting two flange faces together. Flanges allow for easy assembly and
+disassembly, enabling maintenance and modifications in the system. They are
+available in various materials, sizes, and pressure ratings to suit different
+applications. Flanges also provide flexibility by allowing different types of
+connections, such as welding, threaded, or flanged connections. They play a
+critical role in industries like oil and gas, chemical, and power generation,
+ensuring the safe and efficient operation of piping systems by facilitating
+proper alignment, support, and sealing of the connected components.
 
 .. code-block:: python
 
@@ -126,46 +131,13 @@ Specifications
 
 The pipes created by this package are based off the following standards:
 
-* ASTM A312 is a standard specification issued by the American Society for
-  Testing and Materials (ASTM) that covers seamless,  welded, and heavily
-  cold-worked austenitic stainless steel pipe intended for high-temperature 
-  and general corrosive service. The standard specifies various dimensions,  
-  mechanical properties,  testing requirements,  and acceptable manufacturing 
-  practices for stainless steel pipes.
-* ASME B36 is a standard issued by the American Society of Mechanical Engineers
-  (ASME) that provides guidelines for the dimensions, tolerances, and related 
-  requirements of steel pipes and fittings. It covers both seamless and welded 
-  pipes made from various materials, including carbon steel, stainless steel, 
-  and alloy steel. The standard specifies the nominal pipe sizes (NPS), outside 
-  diameters (OD), wall thicknesses, and length dimensions. ASME B36 aims to ensure 
-  consistency and compatibility in the design, manufacturing, and installation of 
-  steel pipes, facilitating efficient piping system construction and operation in 
-  various industries.
-* ASTM B88 is a standard specification issued by ASTM International for seamless 
-  copper water tube used in plumbing applications. The standard defines the requirements 
-  for copper water tube in terms of its dimensions, chemical composition, mechanical 
-  properties, and permissible variations. It covers various sizes and types of copper 
-  water tube, including both hard-drawn and annealed tempers. ASTM B88 ensures the 
-  quality and reliability of copper water tube by providing specifications for its 
-  manufacturing and performance. It serves as a reference for manufacturers, engineers, 
-  and contractors involved in plumbing systems, ensuring compatibility, durability, 
-  and safe water transportation.
-* ASTM F628 is a standard specification issued by ASTM International that pertains 
-  to the installation and performance requirements of plastic pipes in non-pressure 
-  applications. It specifically focuses on the installation of plastic pipes, such 
-  as PVC (Polyvinyl Chloride) and CPVC (Chlorinated Polyvinyl Chloride), for drainage, 
-  waste, and vent systems. The standard covers various aspects, including pipe sizes, 
-  materials, dimensions, joint methods, and testing procedures. ASTM F628 ensures the 
-  proper installation and performance of plastic pipes in non-pressure plumbing 
-  applications, promoting safe and efficient drainage and waste disposal systems in 
-  residential and commercial buildings.
-* ASTM D1785 is a standard specification issued by ASTM International for rigid 
-  polyvinyl chloride (PVC) pipes used in pressure applications, primarily in potable
-  water systems. The standard outlines the requirements for PVC pipes in terms of 
-  their dimensions, material properties, and quality control procedures. It covers 
-  various aspects, including pipe sizes, wall thicknesses, chemical composition, 
-  hydrostatic pressure testing, and marking. ASTM D1785 ensures the durability, 
-  strength, and safety of PVC pipes by establishing guidelines for their manufacturing, 
-  performance, and testing. The standard serves as a reference for manufacturers, 
-  engineers, and regulatory bodies to ensure the reliable and efficient use of PVC 
-  pipes in pressure applications.
+  * ASME B16.5 is a standard issued by the American Society of Mechanical Engineers
+    (ASME) that provides specifications for pipe flanges and flanged fittings. It
+    covers a wide range of flange types, sizes, materials, and pressure ratings.
+    ASME B16.5 establishes the dimensions, tolerances, and technical requirements
+    for flanges used in various industries, including oil and gas, chemical, and
+    power generation. The standard ensures the compatibility, integrity, and
+    performance of flanged connections, facilitating proper alignment, sealing, and
+    strength of the joint. It serves as a reference for manufacturers, engineers,
+    and designers in the selection, design, and installation of flanges, promoting
+    safe and reliable operation of piping systems.

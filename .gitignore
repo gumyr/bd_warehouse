@@ -1,0 +1,26 @@
+# Packaging debris
+dist/
+*.egg-info/
+src/build123d/_version.py
+
+# Testing debris
+__pycache__/
+
+# Coverage debris
+.coverage
+htmlcov/
+
+# Docs debris
+docs/_build/
+
+# User generated debris
+*.swp
+*.log
+*.step
+*.STEP
+*.stl
+*.svg
+
+#mypy cache
+.mypy_cache
+build
