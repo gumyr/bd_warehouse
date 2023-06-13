@@ -25,7 +25,7 @@
 
 .. highlight:: python
 
-.. image:: assets/cq_title_image.png
+.. image:: assets/bd_title_image.png
 
 If you've ever wondered if there is a better alternative to doing mechanical CAD with
 proprietary software products, `Build123d <https://build123d.readthedocs.io/en/latest/>`_
