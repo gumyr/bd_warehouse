@@ -60,13 +60,13 @@ Table Of Contents
 
     installation.rst
     pipe.rst
+    flange.rst
 
 ..    bearing.rst
 ..    chain.rst
 ..    drafting.rst
 ..    finger_jointed_boxes.rst
 ..    fastener.rst
-..    flange.rst
 ..    sprocket.rst
 ..    thread.rst
 

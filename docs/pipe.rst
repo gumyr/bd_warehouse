@@ -60,6 +60,8 @@ from commonly used parameters.
 There are three parameters that required to define a pipe: nps, material, and
 identifier.
 
+.. _nps:
+
 nps
 ---
 
@@ -85,8 +87,9 @@ are provided separately. It serves as a convenient way to communicate and
 compare pipe sizes within the industry, facilitating the selection and
 compatibility of pipes, fittings, and related components.
 
-Valid NPS values are strings in the form: "1/8", "1/4", "3/8", "1/2", "3/4", "1", 
-"1 1/4", "1 1/2", "2", "2 1/2", "3", "4", etc.
+.. py:module:: pipe
+
+.. autoclass:: Nps
 
 material & identifier
 ---------------------

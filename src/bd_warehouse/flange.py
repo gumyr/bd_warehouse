@@ -167,30 +167,14 @@ def imperial_str_to_float(measure: str) -> float:
     return result
 
 
+# fmt: off
 # Nominal pipe size (NPS) to nominal diameter
 nps_to_dn = {
-    "1/2": 15,
-    "3/4": 20,
-    "1": 25,
-    "1 1/4": 32,
-    "1 1/2": 40,
-    "2": 50,
-    "2 1/2": 65,
-    "3": 80,
-    "4": 100,
-    "5": 125,
-    "6": 150,
-    "8": 200,
-    "10": 250,
-    "12": 300,
-    "14": 350,
-    "16": 400,
-    "18": 450,
-    "20": 500,
-    "22": 550,
-    "24": 600,
+    "1/2": 15, "3/4": 20, "1": 25, "1 1/4": 32, "1 1/2": 40, "2": 50, 
+    "2 1/2": 65, "3": 80, "4": 100, "5": 125, "6": 150, "8": 200, "10": 250, 
+    "12": 300, "14": 350, "16": 400, "18": 450, "20": 500, "22": 550, "24": 600
 }
-# fmt: off
+
 # ASME 16.5 Table 7 Templates for Drilling Class 150 Pipe Flanges and Flanged Fittings
 drilling_class_150 = {
     "1/2":[90,60.3,"5/8",4,"1/2",55,"…",50],
@@ -229,7 +213,7 @@ drilling_class_300 = {
     "4":[255,200.0,"7/8",8,"3/4",115,125,95],
     "5":[280,235.0,"7/8",8,"3/4",120,135,110],
     "6":[320,269.9,"7/8",12,"3/4",120,140,110],
-    "8":[380,330.2,1,12,"7/8",140,150,120],
+    "8":[380,330.2,"1",12,"7/8",140,150,120],
     "10":[445,387.4,"1 1/8",16,1,160,170,140],
     "12":[520,450.8,"1 1/4",16,"1 1/8",170,185,145],
     "14":[585,514.4,"1 1/4",20,"1 1/8",180,190,160],
@@ -723,5 +707,7 @@ class WeldNeckFlange(Flange):
         )
 
         # Add the joints
-        RigidJoint("pipe", self, Location(Plane.XY.offset(Y + face_thickness)))
-        RigidJoint("face", self, Location(Plane.YX))
+        # RigidJoint("pipe", self, Location(Plane.XY.offset(Y + face_thickness)))
+        # RigidJoint("face", self, Location(Plane.YX))
+        RigidJoint("pipe", self, Location(Plane.YX.offset(-Y - face_thickness)))
+        RigidJoint("face", self, Location(Plane.XY))

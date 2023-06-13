@@ -80,7 +80,6 @@ from build123d import *
 from build123d import tuplify
 import bd_warehouse
 
-
 # fmt: off
 Nps = Literal[
     "1/8", "1/4", "3/8", "1/2", "3/4", "1", "1 1/4", "1 1/2", "2", "2 1/2", "3", "4", "5",
@@ -233,5 +232,5 @@ class Pipe(BasePartObject):
         self.material = material
 
         # Add the joints
-        RigidJoint("inlet", self, path[0].location_at(0))
+        RigidJoint("inlet", self, Location(Plane(path[0] @ 0, z_dir=-(path[0] % 0))))
         RigidJoint("outlet", self, path[-1].location_at(1))

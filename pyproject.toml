@@ -25,7 +25,7 @@ keywords = [
     "brep",
     "cad",
     "cadquery",
-    "opencscade",
+    "opencascade",
     "python",
 ]
 license = {text = "Apache-2.0"}
@@ -47,13 +47,14 @@ dependencies = [
 include-package-data = true
 
 [tool.setuptools.packages.find]
+namespaces = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-# bd_warehouse = ["*.csv"]
 "*" = ["*.csv"]
+# "bd_warehouse.data" = ["*.csv"]
 
-exclude = ["bd_warehouse._dev"]
+# exclude = ["bd_warehouse._dev"]
 
 [tool.setuptools_scm]
 write_to = "src/bd_warehouse/_version.py"

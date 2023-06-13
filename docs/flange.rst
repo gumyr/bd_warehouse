@@ -28,8 +28,8 @@ flange - standardized parametric flanges
 
 .. highlight:: python
 
-.. image:: assets/pipe_logo.png
-	:alt: pipe_logo
+.. image:: assets/flange_logo.png
+	:alt: flange_logo
 
 Flanges are mechanical components used in piping systems to connect pipes,
 valves, and equipment. They provide a secure and leak-tight connection by
@@ -45,91 +45,106 @@ proper alignment, support, and sealing of the connected components.
 .. code-block:: python
 
   from build123d import *
-  from bd_warehouse.pipe import Pipe
+  from bd_warehouse.flange import SlipOnFlange, WeldNeckFlange
 
-  stainless_pipe = Pipe(
-      nps="2 1/2",
-      material="stainless",
-      identifier="10S",
-      path=Edge.make_line((0, 0, 0), (5 * FT, 0, 0)),
-  )
+  flange1 = SlipOnFlange(nps="8", flange_class=150)
+  flange2 = WeldNeckFlange(nps="12", flange_class=300, face_type="Ring")
 
-  with BuildPart() as copper_pipes:
-      with BuildLine(Plane.XZ):
-          l1 = Line((0, 0), (0, 6 * FT))
-          l2 = Line(l1 @ 1 + (0, -3 * IN), l1 @ 1 + (1 * FT, -3 * IN))
-          l3 = RadiusArc(l2 @ 1, l2 @ 1 + (0, -3 * FT), 1.5 * FT)
-          l4 = Line(l3 @ 1, l3 @ 1 + (-1 * FT, 0))
-      Pipe(nps="6", material="copper", identifier="K")
-
-There are three parameters that required to define a pipe: nps, material, and
-identifier.
+There are two required and one optional parameters used to define a flange: ``nps``, 
+``flange_class``, and ``face_type``.
 
 nps
 ---
 
-NPS stands for "Nominal Pipe Size." It is a standard designation used to
-indicate the approximate inside diameter (ID) of a pipe or fitting, typically
-for industrial and plumbing applications. NPS is expressed as a numerical value
-without any unit of measurement.
+See :ref:`Pipe NPS <nps>` for a description of the Nominal Pipe Size.
 
-It's important to note that NPS does not directly correspond to the actual
-physical dimensions of the pipe. Instead, it provides a convenient reference
-for pipe sizing and selection purposes. The actual outside diameter (OD) and
-wall thickness of a pipe can vary depending on the specific material,
-manufacturing standards, and application requirements.
+flange_class
+------------
 
-NPS values are based on a standardized system and are associated with a
-specific set of dimensions and tolerances provided by various standards, such
-as ASME B36.10 for carbon and alloy steel pipes and ASME B36.19 for stainless
-steel pipes.
+Flange class refers to the pressure-temperature rating assigned to a flange
+based on its design and construction. It represents the maximum pressure and
+temperature at which the flange can safely operate without failure. Flange
+classes are defined by various standards, such as ASME B16.5 or API 6A, and are
+typically identified by a numerical value (e.g., Class 150, Class 300, etc.).
+Each flange class has specific requirements for materials, dimensions, and
+performance, ensuring that the flange can withstand the specified pressure and
+temperature conditions. Flange class selection is crucial for maintaining the
+integrity and safety of a piping system by ensuring that the flange can handle
+the intended service conditions.
 
-When specifying or discussing pipe sizes, NPS is commonly used to identify the
-general size range of a pipe, and further details such as OD and wall thickness
-are provided separately. It serves as a convenient way to communicate and
-compare pipe sizes within the industry, facilitating the selection and
-compatibility of pipes, fittings, and related components.
+.. py:module:: flange
 
-Valid NPS values are strings in the form: "1/8", "1/4", "3/8", "1/2", "3/4", "1", 
-"1 1/4", "1 1/2", "2", "2 1/2", "3", "4", etc.
+.. autoclass:: FlangeClass
 
-material & identifier
----------------------
+face_type
+---------
 
-The dimensions of pipes vary by the pipe material as described in the following
-Specifications section.  
+The face of a flange refers to the surface where two flanges come into contact
+with each other during the connection. There are several different types
+of flange faces, each serving a specific purpose. These include:
 
-The following table defines the available materials and the valid identifier's
-for each material:
+* Flat Face (FF): The flange faces are flat and parallel to each other. It
+  is typically used in low-pressure applications where leakage prevention
+  is not a significant concern.
+* Raised Face (RF): The flange faces have a raised portion around the
+  perimeter. The raised face provides a compression seal when the flanges
+  are bolted together, improving the sealing capability.
+* Lap Joint (LJ): The flange faces have a flat surface, and a separate lap
+  joint stub end is used between the flanges. It allows easy alignment and
+  rotation of the flanges during assembly.
+* Ring Type Joint (RTJ): The flange faces have grooves to accommodate a
+  metallic ring gasket. It is commonly used in high-pressure and
+  high-temperature applications, providing excellent sealing performance.
+* Tongue and Groove: The flange faces have a tongue-like projection on one
+  flange and a corresponding groove on the other flange. It ensures proper
+  alignment and prevents movement or rotation between the flanges.
 
-+-------------+---------------------------------+----------------------------------------------------------------+
-| material    | description                     | identifier or schedule                                         |
-+=============+=================================+================================================================+
-| "abs"       | drainage or vent pipes          | "40"                                                           |
-+-------------+---------------------------------+----------------------------------------------------------------+
-| "copper"    | plumbing pipes                  | "K", "L", "M"                                                  |
-+-------------+---------------------------------+----------------------------------------------------------------+
-| "iron"      | iron/steel pipes                | "STD", "XS", "XXS"                                             |
-+-------------+---------------------------------+----------------------------------------------------------------+
-| "pvc"       | water pipes                     | "40", "80"                                                     |
-+-------------+---------------------------------+----------------------------------------------------------------+
-| "stainless" | austenitic stainless steel pipe | "5S", "10S", "20S", "40S", "80S"                               |
-+-------------+---------------------------------+----------------------------------------------------------------+
-| "steel"     | steel pipes                     | "10", "20", "30", "40", "60", "80", "100", "120", "140", "160" |
-+-------------+---------------------------------+----------------------------------------------------------------+
+The selection of the flange face type depends on the specific application,
+pressure, temperature, and sealing requirements of the piping system. Different
+flange faces offer varying levels of sealing capability and ease of assembly,
+allowing engineers and designers to choose the most suitable option for their
+intended purpose.
+
+.. autoclass:: FaceType
+
 
 Joints
 ------
 
-All pipes are created with two ``RigidJoint``: ``inlet`` and ``outlet``.  These joints 
-are positioned in the center of the pipe and oriented such that connecting the outlet
-of one pipe to the inlet of another will align them appropriately.
+All flanges are created with two ``RigidJoint``: ``pipe`` and ``face``.  These joints 
+are positioned in the center of the flange and oriented such that they can be easily
+connected to pipes and each other. For example:
 
+.. code-block:: python
+
+    inlet_flange = WeldNeckFlange(nps="12", flange_class=300, face_type="Ring")
+    outlet_flange = SlipOnFlange(nps="12", flange_class=300)
+    pipe = Pipe(
+        nps="12",
+        material="steel",
+        identifier="40",
+        path=Edge.make_line((0, 0, 0), (6 * FT, 0, 0)),
+    )
+
+    pipe.joints["inlet"].connect_to(inlet_flange.joints["pipe"])
+    pipe.joints["outlet"].connect_to(outlet_flange.joints["pipe"])
+
+.. image:: assets/pipe_and_flanges.png
+	:alt: pipe_and_flanges
+
+Flange Types
+------------
+
+.. autoclass:: SlipOnFlange
+    :members:
+
+.. autoclass:: WeldNeckFlange
+    :members:
 
 Specifications
 --------------
 
-The pipes created by this package are based off the following standards:
+The flanges created by this package are based off the following standards:
 
   * ASME B16.5 is a standard issued by the American Society of Mechanical Engineers
     (ASME) that provides specifications for pipe flanges and flanged fittings. It
