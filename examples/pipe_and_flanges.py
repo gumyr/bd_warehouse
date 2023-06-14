@@ -10,6 +10,7 @@ set_defaults(reset_camera=False, ortho=True)
 
 inlet_flange = WeldNeckFlange(nps="12", flange_class=300, face_type="Ring")
 outlet_flange = SlipOnFlange(nps="12", flange_class=300)
+
 pipe = Pipe(
     nps="12",
     material="steel",

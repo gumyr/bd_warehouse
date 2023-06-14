@@ -514,6 +514,90 @@ class Flange(BasePartObject):
         return (face_section, height)
 
 
+class BlindFlange(Flange):
+    """BlindFlange
+
+    Blind Flange: A blind flange is a solid disk with no bore and
+    is used to close off the end of a pipe or vessel. It is commonly used
+    to isolate or terminate piping systems.
+
+    Args:
+        nps (Nps): nominal pipe size
+        flange_class (FlangeClass): class
+        face_type (FaceType, optional): face options. Defaults to "Raised".
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional):
+            object alignment. Defaults to ( Align.CENTER, Align.CENTER, Align.MIN, ).
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+    Joints:
+        "face" (Rigid): attachment point on the flange face for other flanges
+
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        nps: Nps,
+        flange_class: FlangeClass,
+        face_type: FaceType = "Raised",
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[Align, tuple[Align, Align, Align]] = (
+            Align.CENTER,
+            Align.CENTER,
+            Align.MIN,
+        ),
+        mode: Mode = Mode.ADD,
+    ):
+        self.nps = nps
+        self.flange_class = flange_class
+        self.face_type = face_type
+
+        # Validate inputs
+        Flange.inputs_are_valid(nps, flange_class, face_type)
+
+        # Get the flange parameters
+        flange_data, bolt_data = Flange.get_flange_data(nps, flange_class, face_type)
+        O, tf, B = (flange_data[i] for i in [0, 1, 9])
+        W, d_imp, n = bolt_data[1], bolt_data[2], bolt_data[3]
+        d = imperial_str_to_float(d_imp)
+
+        # Get the face profile if any
+        face_profile, face_thickness = Flange.get_face_section_data(
+            nps, flange_class, face_type
+        )
+
+        self.od = O  #: Outside diameter
+        self.thickness = tf + face_thickness  #: Overall thickness
+
+        # Create the profile
+        with BuildSketch(Plane.XZ) as flange_profile:
+            with Locations((0, face_thickness)):
+                Rectangle(O, tf, align=(Align.CENTER, Align.MIN))
+            vertices = [
+                v
+                for v in flange_profile.vertices().group_by(Axis.Y)[-1]
+                + flange_profile.vertices().group_by(Axis.Y)[-2]
+            ]
+            fillet(flange_profile.vertices().group_by(Axis.Y)[-1], tf / 4)
+            if face_profile is not None:
+                add(face_profile)
+            Rectangle(
+                B,
+                face_thickness,
+                align=(Align.CENTER, Align.MIN),
+                mode=Mode.SUBTRACT,
+            )
+
+        super().__init__(
+            flange_profile.sketch, W, n, d, rotation, tuplify(align, 3), mode
+        )
+
+        # Add the joints
+        RigidJoint("face", self, Location(Plane.YX))
+
+
 class SlipOnFlange(Flange):
     """SlipOnFlange
 
@@ -615,6 +699,98 @@ class SlipOnFlange(Flange):
 
         # Add the joints
         RigidJoint("pipe", self, Location(Plane.YX.offset(-(1 / 16) * IN)))
+        RigidJoint("face", self, Location(Plane.XY))
+
+
+class SocketWeldFlange(Flange):
+    """SocketWeldFlange
+
+    Socket Weld Flange: Socket weld flanges have a socket-like end
+    that is welded to the pipe. They are used for small-diameter and
+    high-pressure piping systems.
+
+    Args:
+        nps (Nps): nominal pipe size
+        flange_class (FlangeClass): class
+        face_type (FaceType, optional): face options. Defaults to "Raised".
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional):
+            object alignment. Defaults to ( Align.CENTER, Align.CENTER, Align.MIN, ).
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+    Joints:
+        "pipe" (Rigid): attachment point for pipe attached to flange
+        "face" (Rigid): attachment point on the flange face for other flanges
+
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        nps: Nps,
+        flange_class: FlangeClass,
+        face_type: FaceType = "Raised",
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[Align, tuple[Align, Align, Align]] = (
+            Align.CENTER,
+            Align.CENTER,
+            Align.MIN,
+        ),
+        mode: Mode = Mode.ADD,
+    ):
+        self.nps = nps
+        self.flange_class = flange_class
+        self.face_type = face_type
+
+        # Validate inputs
+        Flange.inputs_are_valid(nps, flange_class, face_type)
+
+        # Get the flange parameters
+        flange_data, bolt_data = Flange.get_flange_data(nps, flange_class, face_type)
+        O, tf, X, Y, B11, B13, r, D = (
+            flange_data[i] for i in [0, 1, 3, 5, 9, 11, 12, 14]
+        )
+        W, d_imp, n = bolt_data[1], bolt_data[2], bolt_data[3]
+        d = imperial_str_to_float(d_imp)
+
+        # Get the face profile if any
+        face_profile, face_thickness = Flange.get_face_section_data(
+            nps, flange_class, face_type
+        )
+
+        self.od = O  #: Outside diameter
+        self.id = B13  #: Inside diameter
+        self.thickness = Y + face_thickness  #: Overall thickness
+
+        # Create the profile
+        with BuildSketch(Plane.XZ) as flange_profile:
+            with Locations((0, face_thickness)):
+                Rectangle(X, Y, align=(Align.CENTER, Align.MIN))
+                Rectangle(O, tf, align=(Align.CENTER, Align.MIN))
+            vertices = [
+                v
+                for v in flange_profile.vertices().group_by(Axis.Y)[-1]
+                + flange_profile.vertices().group_by(Axis.Y)[-2]
+            ]
+            fillet(vertices, (Y - tf) / 4)
+            if face_profile is not None:
+                add(face_profile)
+            Rectangle(
+                B13,
+                Y + face_thickness,
+                align=(Align.CENTER, Align.MIN),
+                mode=Mode.SUBTRACT,
+            )
+            with Locations((0, Y + face_thickness)):
+                Rectangle(B11, D, align=(Align.CENTER, Align.MAX), mode=Mode.SUBTRACT)
+
+        super().__init__(
+            flange_profile.sketch, W, n, d, rotation, tuplify(align, 3), mode
+        )
+
+        # Add the joints
+        RigidJoint("pipe", self, Location(Plane.YX.offset(-(Y + face_thickness - D))))
         RigidJoint("face", self, Location(Plane.XY))
 
 

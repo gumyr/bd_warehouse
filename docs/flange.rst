@@ -135,7 +135,13 @@ connected to pipes and each other. For example:
 Flange Types
 ------------
 
+.. autoclass:: BlindFlange
+    :members:
+
 .. autoclass:: SlipOnFlange
+    :members:
+
+.. autoclass:: SocketWeldFlange
     :members:
 
 .. autoclass:: WeldNeckFlange
