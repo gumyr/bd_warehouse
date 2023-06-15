@@ -138,6 +138,9 @@ Flange Types
 .. autoclass:: BlindFlange
     :members:
 
+.. autoclass:: LappedFlange
+    :members:
+
 .. autoclass:: SlipOnFlange
     :members:
 
