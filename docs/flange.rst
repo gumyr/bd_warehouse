@@ -141,6 +141,9 @@ Flange Types
 .. autoclass:: LappedFlange
     :members:
 
+.. autoclass:: LappedFlangeStub
+    :members:
+
 .. autoclass:: SlipOnFlange
     :members:
 

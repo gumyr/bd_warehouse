@@ -36,6 +36,7 @@ from bd_warehouse.flange import (
     BlindFlange,
     SocketWeldFlange,
     LappedFlange,
+    LappedFlangeStub,
 )
 
 from ocp_vscode import show, show_object, set_port, set_defaults
@@ -51,6 +52,9 @@ trunk_inlet_flange = SlipOnFlange(nps=trunk_pipe_size, flange_class=300)
 blind_flange = BlindFlange(nps="3", flange_class=300)
 socket_flange = SocketWeldFlange(nps="3", flange_class=300)
 lapped_flange = LappedFlange(nps="5", flange_class=300)
+lapped_flange_stub = LappedFlangeStub(
+    nps="5", material="steel", pipe_identifier="40", stub_length=6 * IN
+)
 
 with BuildPart() as pipes:
     # Create trunk pipe
@@ -84,7 +88,7 @@ with BuildPart() as pipes:
 
     # Create horizontal pipe intersecting trunk pipe
     horizontal_pipe_outlet = Location(
-        Plane((3 * FT, -2 * FT, 0 * FT), z_dir=(0, -1, 0))
+        Plane((3 * FT, -1 * FT, 0 * FT), z_dir=(0, -1, 0))
     )
     with BuildSketch(horizontal_pipe_outlet):
         pipe_section = PipeSection(nps="5", material="steel", identifier="40")
@@ -116,7 +120,8 @@ with BuildPart() as pipes:
 
 # Attach the flanges to the ends of the pipes
 pipes.part.joints["vertical"].connect_to(socket_flange.joints["pipe"])
-pipes.part.joints["horizontal"].connect_to(lapped_flange.joints["pipe"])
+pipes.part.joints["horizontal"].connect_to(lapped_flange_stub.joints["pipe"])
+lapped_flange_stub.joints["lap"].connect_to(lapped_flange.joints["lap"])
 socket_flange.joints["face"].connect_to(blind_flange.joints["face"])
 pipes.part.joints["trunk-outlet"].connect_to(trunk_outlet_flange.joints["pipe"])
 pipes.part.joints["trunk-inlet"].connect_to(trunk_inlet_flange.joints["pipe"])
@@ -128,6 +133,7 @@ show(
     blind_flange,
     socket_flange,
     lapped_flange,
+    lapped_flange_stub,
     names=[
         "pipes",
         "trunk_outlet_flange",
@@ -135,6 +141,8 @@ show(
         "blind_flange",
         "socket_flange",
         "lapped_flange",
+        "lapped_flange_stub",
     ],
+    alphas=[1, 1, 1, 1, 1, 0.3, 1],
     render_joints=False,
 )

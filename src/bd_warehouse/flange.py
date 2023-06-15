@@ -149,6 +149,7 @@ from math import degrees, atan2
 from typing import Literal, Union
 from build123d import *
 from build123d import tuplify
+from bd_warehouse.pipe import Identifier, Material, Pipe
 
 
 def is_safe(value: str) -> bool:
@@ -325,11 +326,26 @@ Nps = Literal[
 ]
 
 # fmt: on
-FaceType = Literal["Flat", "Raised", "Lap", "Ring", "Tongue", "Groove"]
+FaceType = Literal["Flat", "Raised", "Ring", "Tongue", "Groove", "Male", "Female"]
 FlangeClass = Literal[150, 300, 400, 600, 900, 1500, 2500]
 
 
 class Flange(BasePartObject):
+    """Flange
+
+    Base class for all the derived flange classes.
+
+    Args:
+        flange_section (Union[Face, Sketch]): 2D cross section
+        bcd (float): bolt center diameter
+        bolt_hole_count (int): number of bolt holes
+        bolt_hole_diameter (float): bolt hole size
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional):
+            object alignment. Defaults to ( Align.CENTER, Align.CENTER, Align.MIN, ).
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+    """
+
     _applies_to = [BuildPart._tag]
 
     def __init__(
@@ -346,20 +362,6 @@ class Flange(BasePartObject):
         ),
         mode: Mode = Mode.ADD,
     ):
-        """Flange
-
-        Base class for all the derived flange classes.
-
-        Args:
-            flange_section (Union[Face, Sketch]): 2D cross section
-            bcd (float): bolt center diameter
-            bolt_hole_count (int): number of bolt holes
-            bolt_hole_diameter (float): bolt hole size
-            rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
-            align (Union[Align, tuple[Align, Align, Align]], optional):
-                object alignment. Defaults to ( Align.CENTER, Align.CENTER, Align.MIN, ).
-            mode (Mode, optional): combination mode. Defaults to Mode.ADD.
-        """
         with BuildPart() as flange_builder:
             with BuildSketch(Plane.XZ):
                 add(flange_section)
@@ -459,7 +461,10 @@ class Flange(BasePartObject):
 
     @staticmethod
     def get_face_section_data(
-        nps: Nps, flange_class: FlangeClass, face_type: FaceType
+        nps: Nps,
+        flange_class: FlangeClass,
+        face_type: FaceType,
+        face_thickness: float = None,
     ) -> tuple[Union[Sketch, None], float]:
         """get_face_section_data
 
@@ -485,7 +490,9 @@ class Flange(BasePartObject):
             raise ValueError("Unsupported flange class")
         P, E, F, R, K = ring_data[1:6]
 
-        if face_type is None:
+        if face_thickness is not None:
+            E = face_thickness
+        elif face_type is None:
             E = None
         elif face_type == "Flat":
             E = 0
@@ -516,6 +523,85 @@ class Flange(BasePartObject):
             height = face_section.bounding_box().max.Y
 
         return (face_section, height)
+
+
+class BlindFlange(Flange):
+    """BlindFlange
+
+    Blind Flange: A blind flange is a solid disk with no bore and
+    is used to close off the end of a pipe or vessel. It is commonly used
+    to isolate or terminate piping systems.
+
+    Args:
+        nps (Nps): nominal pipe size
+        flange_class (FlangeClass): class
+        face_type (FaceType, optional): face options. Defaults to "Raised".
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional):
+            object alignment. Defaults to ( Align.CENTER, Align.CENTER, Align.MIN, ).
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+    Joints:
+        "face" (Rigid): attachment point on the flange face for other flanges
+
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        nps: Nps,
+        flange_class: FlangeClass,
+        face_type: FaceType = "Raised",
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[Align, tuple[Align, Align, Align]] = (
+            Align.CENTER,
+            Align.CENTER,
+            Align.MIN,
+        ),
+        mode: Mode = Mode.ADD,
+    ):
+        self.nps = nps
+        self.flange_class = flange_class
+        self.face_type = face_type
+
+        # Validate inputs
+        Flange.inputs_are_valid(nps, flange_class, face_type)
+
+        # Get the flange parameters
+        flange_data, bolt_data = Flange.get_flange_data(nps, flange_class, face_type)
+        O, tf, B = (flange_data[i] for i in [0, 1, 9])
+        W, d_imp, n = bolt_data[1], bolt_data[2], bolt_data[3]
+        d = imperial_str_to_float(d_imp)
+
+        # Get the face profile if any
+        face_profile, face_thickness = Flange.get_face_section_data(
+            nps, flange_class, face_type
+        )
+
+        self.od = O  #: Outside diameter
+        self.thickness = tf + face_thickness  #: Overall thickness
+
+        # Create the profile
+        with BuildSketch(Plane.XZ) as flange_profile:
+            with Locations((0, face_thickness)):
+                Rectangle(O, tf, align=(Align.CENTER, Align.MIN))
+            fillet(flange_profile.vertices().group_by(Axis.Y)[-1], tf / 4)
+            if face_profile is not None:
+                add(face_profile)
+            Rectangle(
+                B,
+                face_thickness,
+                align=(Align.CENTER, Align.MIN),
+                mode=Mode.SUBTRACT,
+            )
+
+        super().__init__(
+            flange_profile.sketch, W, n, d, rotation, tuplify(align, 3), mode
+        )
+
+        # Add the joints
+        RigidJoint("face", self, Location(Plane.YX))
 
 
 class LappedFlange(Flange):
@@ -627,38 +713,38 @@ class LappedFlange(Flange):
             flange_profile.sketch, W, n, d, rotation, tuplify(align, 3), mode
         )
 
-        # Add the joints
-        RigidJoint("pipe", self, Location(Plane.YX))
-        RigidJoint("face", self, Location(Plane.XY))
+        # Add the joint
+        RigidJoint("lap", self, Location(Plane.XY))
 
 
-class BlindFlange(Flange):
-    """BlindFlange
+class LappedFlangeStub(BasePartObject):
+    """LappedFlangeStub
 
-    Blind Flange: A blind flange is a solid disk with no bore and
-    is used to close off the end of a pipe or vessel. It is commonly used
-    to isolate or terminate piping systems.
+    The stub component of a Lapped Flange. The stub is welded to the
+    pipe allowing the Lapped Flange to rotate freely around the stub.
 
     Args:
-        nps (Nps): nominal pipe size
-        flange_class (FlangeClass): class
+        nps (Nps): stub pipe size
+        material (Material): pipe material
+        pipe_identifier (Identifier): pipe identifier or schedule
+        stub_length (float): end to end length
         face_type (FaceType, optional): face options. Defaults to "Raised".
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
         align (Union[Align, tuple[Align, Align, Align]], optional):
             object alignment. Defaults to ( Align.CENTER, Align.CENTER, Align.MIN, ).
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
-
-    Joints:
-        "face" (Rigid): attachment point on the flange face for other flanges
-
     """
 
     _applies_to = [BuildPart._tag]
 
+    weld_radius = 5 * MM
+
     def __init__(
         self,
         nps: Nps,
-        flange_class: FlangeClass,
+        material: Material,
+        pipe_identifier: Identifier,
+        stub_length: float,
         face_type: FaceType = "Raised",
         rotation: RotationLike = (0, 0, 0),
         align: Union[Align, tuple[Align, Align, Align]] = (
@@ -669,46 +755,46 @@ class BlindFlange(Flange):
         mode: Mode = Mode.ADD,
     ):
         self.nps = nps
-        self.flange_class = flange_class
-        self.face_type = face_type
 
-        # Validate inputs
-        Flange.inputs_are_valid(nps, flange_class, face_type)
+        stub_pipe = Pipe(
+            nps,
+            material,
+            pipe_identifier,
+            path=Edge.make_line((0, 0, 0), (0, 0, stub_length)),
+        )
+        # Re B16.5 6.4.3.2
+        t = 7 * MM if face_type == "Male" else stub_pipe.thickness
 
-        # Get the flange parameters
-        flange_data, bolt_data = Flange.get_flange_data(nps, flange_class, face_type)
-        O, tf, B = (flange_data[i] for i in [0, 1, 9])
-        W, d_imp, n = bolt_data[1], bolt_data[2], bolt_data[3]
-        d = imperial_str_to_float(d_imp)
-
-        # Get the face profile if any
+        # Get the face profile - note that flange class of 150 isn't used
         face_profile, face_thickness = Flange.get_face_section_data(
-            nps, flange_class, face_type
+            nps, 150, face_type, face_thickness=t
         )
 
-        self.od = O  #: Outside diameter
-        self.thickness = tf + face_thickness  #: Overall thickness
-
-        # Create the profile
-        with BuildSketch(Plane.XZ) as flange_profile:
-            with Locations((0, face_thickness)):
-                Rectangle(O, tf, align=(Align.CENTER, Align.MIN))
-            fillet(flange_profile.vertices().group_by(Axis.Y)[-1], tf / 4)
-            if face_profile is not None:
+        with BuildPart() as stub:
+            with BuildSketch(Plane.XZ):
                 add(face_profile)
-            Rectangle(
-                B,
-                face_thickness,
-                align=(Align.CENTER, Align.MIN),
-                mode=Mode.SUBTRACT,
+                Rectangle(
+                    stub_pipe.id,
+                    face_thickness,
+                    align=(Align.CENTER, Align.MIN),
+                    mode=Mode.SUBTRACT,
+                )
+                split(bisect_by=Plane.YZ)
+            revolve()
+            add(stub_pipe)
+            self.stub_edges = stub.edges(Select.NEW)
+            fillet(stub.edges(Select.NEW), LappedFlangeStub.weld_radius)
+            chamfer(
+                stub.edges().group_by(Axis.Z)[-1].sort_by(SortBy.RADIUS)[-1],
+                stub_pipe.thickness * 0.75,
             )
 
-        super().__init__(
-            flange_profile.sketch, W, n, d, rotation, tuplify(align, 3), mode
-        )
+        super().__init__(stub.part, rotation, tuplify(align, 3), mode)
 
         # Add the joints
-        RigidJoint("face", self, Location(Plane.YX))
+        RigidJoint("pipe", self, Location(Plane.YX.offset(-stub_length)))
+        RigidJoint("face", self, Location(Plane.XY))
+        RigidJoint("lap", self, Location(Plane.XY.offset(face_thickness)))
 
 
 class SlipOnFlange(Flange):
