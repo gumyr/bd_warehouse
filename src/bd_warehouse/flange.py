@@ -406,7 +406,7 @@ class Flange(BasePartObject):
             raise ValueError(
                 f"Invalid flange_class value - the valid values are: {FlangeClass.__args__}"
             )
-        if face_type not in FaceType.__args__:
+        if face_type is not None and face_type not in FaceType.__args__:
             raise ValueError(
                 f"Invalid face_type value - the valid values are: {FaceType.__args__}"
             )
@@ -436,7 +436,9 @@ class Flange(BasePartObject):
         if flange_class == 150:
             flange_data = flange_data_class_150[nps]
             bolt_data = drilling_class_150[nps]
-            if face_type == "Raised":
+            if face_type is None:
+                face_data = []
+            elif face_type == "Raised":
                 E = 2 * MM if flange_class <= 300 else 7 * MM
                 face_data = [E]
             elif face_type == "Ring":
@@ -483,7 +485,9 @@ class Flange(BasePartObject):
             raise ValueError("Unsupported flange class")
         P, E, F, R, K = ring_data[1:6]
 
-        if face_type == "Flat":
+        if face_type is None:
+            E = None
+        elif face_type == "Flat":
             E = 0
         elif face_type == "Raised":
             E = 2 * MM if flange_class <= 300 else 7 * MM
@@ -492,7 +496,7 @@ class Flange(BasePartObject):
         else:
             raise ValueError(f"face_type {face_type} not supported")
 
-        if face_type == "Flat":
+        if face_type is None or face_type == "Flat":
             face_section = None
         else:
             with BuildSketch() as face_builder:
@@ -512,6 +516,120 @@ class Flange(BasePartObject):
             height = face_section.bounding_box().max.Y
 
         return (face_section, height)
+
+
+class LappedFlange(Flange):
+    """LappedFlange
+
+    Lap Joint: The flange faces have a flat surface, and a separate lap
+    joint stub end is used between the flanges. It allows easy alignment and
+    rotation of the flanges during assembly.
+
+    A lapped flange, also known as a lap joint flange, is a type of flange
+    connection that consists of two components: a stub end and a lapped flange. The
+    lapped flange has a flat face, while the stub end is a short piece of pipe with
+    a welded-on collar.
+
+    The lapped flange connection works by sliding the stub end into the lapped
+    flange, with the flange face of the stub end resting against the back face of
+    the lapped flange. The two components are then bolted together, securing the
+    joint.
+
+    The key feature of a lapped flange connection is that the actual sealing is
+    achieved by a separate gasket placed between the back face of the lapped flange
+    and the flange face of the stub end. The gasket provides the sealing action,
+    while the bolting maintains the necessary pressure to compress the gasket and
+    create a leak-tight connection.
+
+    The lapped flange connection offers several advantages, including easy
+    alignment during installation, rotational flexibility, and the ability to
+    easily disconnect and reconnect the joint without disturbing the alignment. It
+    is commonly used in low-pressure and non-critical applications where frequent
+    assembly and disassembly are required.
+
+    However, it is important to note that lapped flange connections are not
+    suitable for high-pressure or high-temperature applications that require a
+    higher level of sealing integrity. In such cases, alternative flange types,
+    such as raised face or ring type joint flanges, are typically used.
+
+    Args:
+        nps (Nps): nominal pipe size
+        flange_class (FlangeClass): class
+        face_type (FaceType, optional): face options. Defaults to "Raised".
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional):
+            object alignment. Defaults to ( Align.CENTER, Align.CENTER, Align.MIN, ).
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+    Joints:
+        "pipe" (Rigid): attachment point for pipe attached to flange
+        "face" (Rigid): attachment point on the flange face for other flanges
+
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        nps: Nps,
+        flange_class: FlangeClass,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[Align, tuple[Align, Align, Align]] = (
+            Align.CENTER,
+            Align.CENTER,
+            Align.MIN,
+        ),
+        mode: Mode = Mode.ADD,
+    ):
+        self.nps = nps
+        self.flange_class = flange_class
+
+        # Validate inputs
+        Flange.inputs_are_valid(nps, flange_class, None)
+
+        # Get the flange parameters
+        flange_data, bolt_data = Flange.get_flange_data(nps, flange_class, None)
+        O, tf, X, Y, B, r = (flange_data[i] for i in [0, 1, 3, 6, 10, 12])
+        W, d_imp, n = bolt_data[1], bolt_data[2], bolt_data[3]
+        d = imperial_str_to_float(d_imp)
+
+        # Get the face profile if any
+        face_profile, face_thickness = Flange.get_face_section_data(
+            nps, flange_class, None
+        )
+
+        self.od = O  #: Outside diameter
+        self.id = B  #: Inside diameter
+        self.thickness = Y + face_thickness  #: Overall thickness
+
+        # Create the profile
+        with BuildSketch(Plane.XZ) as flange_profile:
+            with Locations((0, face_thickness)):
+                Rectangle(X, Y, align=(Align.CENTER, Align.MIN))
+                Rectangle(O, tf, align=(Align.CENTER, Align.MIN))
+            vertices = [
+                v
+                for v in flange_profile.vertices().group_by(Axis.Y)[-1]
+                + flange_profile.vertices().group_by(Axis.Y)[-2]
+            ]
+            fillet(vertices, (Y - tf) / 4)
+            Rectangle(
+                B,
+                Y + face_thickness,
+                align=(Align.CENTER, Align.MIN),
+                mode=Mode.SUBTRACT,
+            )
+            fillet(
+                flange_profile.vertices().group_by(Axis.Y)[0].sort_by(Axis.X)[1:3], r
+            )
+
+        super().__init__(
+            flange_profile.sketch, W, n, d, rotation, tuplify(align, 3), mode
+        )
+
+        # Add the joints
+        RigidJoint("pipe", self, Location(Plane.YX))
+        RigidJoint("face", self, Location(Plane.XY))
 
 
 class BlindFlange(Flange):
@@ -575,11 +693,6 @@ class BlindFlange(Flange):
         with BuildSketch(Plane.XZ) as flange_profile:
             with Locations((0, face_thickness)):
                 Rectangle(O, tf, align=(Align.CENTER, Align.MIN))
-            vertices = [
-                v
-                for v in flange_profile.vertices().group_by(Axis.Y)[-1]
-                + flange_profile.vertices().group_by(Axis.Y)[-2]
-            ]
             fillet(flange_profile.vertices().group_by(Axis.Y)[-1], tf / 4)
             if face_profile is not None:
                 add(face_profile)
