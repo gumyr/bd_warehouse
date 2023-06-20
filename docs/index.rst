@@ -65,6 +65,7 @@ Table Of Contents
     installation.rst
     pipe.rst
     flange.rst
+    thread.rst
 
 ..    bearing.rst
 ..    chain.rst
@@ -72,7 +73,6 @@ Table Of Contents
 ..    finger_jointed_boxes.rst
 ..    fastener.rst
 ..    sprocket.rst
-..    thread.rst
 
 ==================
 Indices and tables
