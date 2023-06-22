@@ -5,12 +5,13 @@ Parametric Threads
 name: thread.py
 by:   Gumyr
 date: November 11th 2021
+      June 19th 2023 - ported to bd_warehouse
 
 desc: This python/cadquery code is a parameterized thread generator.
 
 license:
 
-    Copyright 2021 Gumyr
+    Copyright 2023 Gumyr
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -32,9 +33,6 @@ from typing import Literal, Optional, Tuple, Union
 from math import sin, cos, tan, radians, pi
 from build123d import *
 from build123d.topology import tuplify
-
-# import cadquery as cq
-# from cadquery import Solid, Compound
 from OCP.TopoDS import TopoDS_Shape
 
 # from functools import cached_property, cache
@@ -139,11 +137,7 @@ class Thread(BasePartObject):
         ] = ("raw", "raw"),
         simple: bool = False,
         rotation: RotationLike = (0, 0, 0),
-        align: Union[Align, tuple[Align, Align, Align]] = (
-            Align.CENTER,
-            Align.CENTER,
-            Align.MIN,
-        ),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
     ):
         """Store the parameters and create the thread object"""
@@ -216,7 +210,7 @@ class Thread(BasePartObject):
         else:
             # Initialize with a valid shape then nullify
             super().__init__(
-                solid=Solid.make_Box(1, 1, 1),
+                solid=Solid.make_box(1, 1, 1),
                 rotation=rotation,
                 align=tuplify(align, 3),
                 mode=mode,
@@ -274,15 +268,15 @@ class Thread(BasePartObject):
                         0,
                         cylindrical_thread_length + cylindrical_thread_displacement,
                     )
-                ).rotate((0, 0, 0), (0, 0, 1), cylindrical_thread_angle)
+                ).rotate(Axis.Z, cylindrical_thread_angle)
                 for f in fade_faces
             ]
         if number_faded_ends == 2:
-            thread_shell = Shell.make_Shell(
+            thread_shell = Shell.make_shell(
                 thread_faces + fade_faces_bottom + fade_faces_top
             )
         elif self.end_finishes[0] == "fade":
-            thread_shell = Shell.make_Shell(
+            thread_shell = Shell.make_shell(
                 thread_faces + fade_faces_bottom + [end_faces[1]]
             )
         else:
@@ -295,21 +289,13 @@ class Thread(BasePartObject):
         """Square off the ends of the thread"""
 
         squared = bd_object
-        if self.end_finishes.count("square") != 0:
-            # Note: box_size must be > max(apex,root) radius or the core doesn't cut correctly
-            half_box_size = 2 * max(self.apex_radius, self.root_radius)
-            box_size = 2 * half_box_size
-            cutter = Solid.make_box(
-                length=box_size,
-                width=box_size,
-                height=self.length,
-                plane=Plane((-half_box_size, -half_box_size, -self.length)),
+        if self.end_finishes[0] == "square":
+            squared = split(squared, bisect_by=Plane.XY, keep=Keep.TOP)
+        if self.end_finishes[1] == "square":
+            squared = split(
+                squared, bisect_by=Plane.XY.offset(self.length), keep=Keep.BOTTOM
             )
-            for i in range(2):
-                if self.end_finishes[i] == "square":
-                    squared = bd_object.cut(
-                        cutter.translate(Vector(0, 0, 2 * i * self.length))
-                    )
+
         return squared
 
     def chamfer_ends(self, bd_object: Solid):
@@ -317,21 +303,32 @@ class Thread(BasePartObject):
 
         chamfered = bd_object
         if self.end_finishes.count("chamfer") != 0:
-            cutter = Solid.make_cylinder(
-                self.root_radius, self.length
-            ) - Solid.make_cylinder(self.apex_radius, self.length)
-            face_selectors = ["<Z", ">Z"]
-            edge_radius_selector = 1 if self.apex_radius > self.root_radius else 0
-            for i in range(2):
-                if self.end_finishes[i] == "chamfer":
-                    cutter = cutter.chamfer(
-                        self.tooth_height * 0.5,
-                        self.tooth_height * 0.75,
-                        cutter.edges()
-                        .filter_by(GeomType.CIRCLE)
-                        .sort_by(Axis.Z)[i : i + 1],
+            with BuildPart() as chamfer_builder:
+                end_to_vertex_map = {
+                    (True, True): (0, 2),
+                    (False, True): (1, 2),
+                    (True, False): (0, 1),
+                }
+                vertex_indices = end_to_vertex_map[
+                    (
+                        self.end_finishes[0] == "chamfer",
+                        self.end_finishes[1] == "chamfer",
                     )
-            chamfered = bd_object.intersect(cutter)
+                ]
+                side = -1 if self.apex_radius > self.root_radius else 0
+                thickness = abs(self.apex_radius - self.root_radius)
+                with BuildSketch(Plane.XZ) as profile:
+                    with Locations((min(self.apex_radius, self.root_radius), 0)):
+                        Rectangle(thickness, self.length, align=Align.MIN)
+                        v = profile.vertices().group_by(Axis.X)[side][
+                            vertex_indices[0] : vertex_indices[1]
+                        ]
+                        chamfer(v, length=thickness / 2)
+                revolve()
+                add(bd_object, mode=Mode.INTERSECT)
+
+            chamfered = chamfer_builder.part
+
         return chamfered
 
     def make_thread_faces(
@@ -437,7 +434,8 @@ class Thread(BasePartObject):
         return thread_solid
 
 
-class IsoThread(Solid):
+class IsoThread(BasePartObject):
+    # class IsoThread(Solid):
     """ISO Standard Thread
 
     Both external and internal ISO standard 60° threads as shown in
@@ -472,6 +470,10 @@ class IsoThread(Solid):
 
             Defaults to ("fade", "square").
         simple: Stop at thread calculation, don't create thread. Defaults to False.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional):
+            object alignment. Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
 
     Attributes:
         thread_angle (int): 60 degrees
@@ -494,12 +496,6 @@ class IsoThread(Solid):
         """The radius of the root of the thread"""
         return (self.major_diameter - 2 * (5 / 8) * self.h_parameter) / 2
 
-    @property
-    def bd_object(self):
-        """A cadquery Solid thread as defined by class attributes"""
-        warn("bd_object will be deprecated.", DeprecationWarning, stacklevel=2)
-        return Solid(self.wrapped)
-
     def __init__(
         self,
         major_diameter: float,
@@ -512,6 +508,9 @@ class IsoThread(Solid):
             Literal["raw", "square", "fade", "chamfer"],
         ] = ("fade", "square"),
         simple: bool = False,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
         self.major_diameter = major_diameter
         self.pitch = pitch
@@ -543,15 +542,27 @@ class IsoThread(Solid):
             hand=self.hand,
             simple=simple,
         )
+
         if simple:
             # Initialize with a valid shape then nullify
-            super().__init__(Solid.make_box(1, 1, 1).wrapped)
+            super().__init__(
+                solid=Solid.make_box(1, 1, 1),
+                rotation=rotation,
+                align=tuplify(align, 3),
+                mode=mode,
+            )
             self.wrapped = TopoDS_Shape()
+
         else:
-            super().__init__(bd_object.wrapped)
+            super().__init__(
+                solid=bd_object,
+                rotation=rotation,
+                align=tuplify(align, 3),
+                mode=mode,
+            )
 
 
-class TrapezoidalThread(ABC, Solid):
+class TrapezoidalThread(ABC, BasePartObject):
     """Trapezoidal Thread Base Class
 
     Trapezoidal Thread base class for Metric and Acme derived classes
@@ -581,6 +592,10 @@ class TrapezoidalThread(ABC, Solid):
                 into a nut
 
             Defaults to ("fade", "fade").
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional):
+            object alignment. Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
 
     Raises:
         ValueError: hand must be one of "right" or "left"
@@ -592,12 +607,6 @@ class TrapezoidalThread(ABC, Solid):
         pitch (float): thread pitch
 
     """
-
-    @property
-    def bd_object(self):
-        """A cadquery Solid thread as defined by class attributes"""
-        warn("bd_object will be deprecated.", DeprecationWarning, stacklevel=2)
-        return Solid(self.wrapped)
 
     @property
     @abstractmethod
@@ -621,6 +630,9 @@ class TrapezoidalThread(ABC, Solid):
             Literal["raw", "square", "fade", "chamfer"],
             Literal["raw", "square", "fade", "chamfer"],
         ] = ("fade", "fade"),
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
         self.size = size
         self.external = external
@@ -655,7 +667,12 @@ class TrapezoidalThread(ABC, Solid):
             end_finishes=self.end_finishes,
             hand=self.hand,
         )
-        super().__init__(bd_object.wrapped)
+        super().__init__(
+            solid=bd_object,
+            rotation=rotation,
+            align=tuplify(align, 3),
+            mode=mode,
+        )
 
 
 class AcmeThread(TrapezoidalThread):
@@ -688,6 +705,10 @@ class AcmeThread(TrapezoidalThread):
                 into a nut
 
             Defaults to ("fade", "fade").
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional):
+            object alignment. Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
 
     Raises:
         ValueError: hand must be one of "right" or "left"
@@ -761,6 +782,10 @@ class MetricTrapezoidalThread(TrapezoidalThread):
                 into a nut
 
             Defaults to ("fade", "fade").
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional):
+            object alignment. Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
 
     Raises:
         ValueError: hand must be one of "right" or "left"
@@ -823,7 +848,7 @@ class MetricTrapezoidalThread(TrapezoidalThread):
         return (diameter, pitch)
 
 
-class PlasticBottleThread(Solid):
+class PlasticBottleThread(BasePartObject):
     """ASTM D2911 Plastic Bottle Thread
 
     The `ASTM D2911 Standard <https://www.astm.org/d2911-10.html>`_ Plastic Bottle Thread.
@@ -845,6 +870,9 @@ class PlasticBottleThread(Solid):
             printers. A value of 0.2mm will reduce the radius of an external thread by 0.2mm (and
             increase the radius of an internal thread) such that the resulting 3D printed part
             matches the target dimensions. Defaults to 0.0.
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
 
     Raises:
         ValueError: hand must be one of "right" or "left"
@@ -948,18 +976,15 @@ class PlasticBottleThread(Solid):
         120: [119.99, 119.10, 5],
     }
 
-    @property
-    def bd_object(self):
-        """A cadquery Solid thread as defined by class attributes"""
-        warn("bd_object will be deprecated.", DeprecationWarning, stacklevel=2)
-        return Solid(self.wrapped)
-
     def __init__(
         self,
         size: str,
         external: bool = True,
         hand: Literal["right", "left"] = "right",
         manufacturing_compensation: float = 0.0,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
         self.size = size
         self.external = external
@@ -1031,4 +1056,9 @@ class PlasticBottleThread(Solid):
             hand=self.hand,
             end_finishes=("fade", "fade"),
         )
-        super().__init__(bd_object.wrapped)
+        super().__init__(
+            solid=bd_object,
+            rotation=rotation,
+            align=tuplify(align, 3),
+            mode=mode,
+        )
