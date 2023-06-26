@@ -26,7 +26,9 @@ license:
     limitations under the License.
 
 """
+import copy
 import re
+import timeit
 from warnings import warn
 from abc import ABC, abstractmethod
 from typing import Literal, Optional, Tuple, Union
@@ -66,7 +68,7 @@ class Thread(BasePartObject):
 
     Args:
         apex_radius: Radius at the narrow tip of the thread.
-        apex_width: Radius at the wide base of the thread.
+        apex_width: Width at the narrow tip of the thread.
         root_radius: Radius at the wide base of the thread.
         root_width: Thread base width.
         pitch: Length of 360° of thread rotation.
@@ -95,29 +97,6 @@ class Thread(BasePartObject):
         ValueError: if end_finishes not in ["raw", "square", "fade", "chamfer"]:
     """
 
-    def fade_helix(
-        self, t: float, apex: bool, vertical_displacement: float
-    ) -> Tuple[float, float, float]:
-        """A helical function used to create the faded tips of threads that spirals
-        self.tooth_height in self.pitch/4"""
-        if self.external:
-            radius = (
-                self.apex_radius - sin(t * pi / 2) * self.tooth_height
-                if apex
-                else self.root_radius
-            )
-        else:
-            radius = (
-                self.apex_radius + sin(t * pi / 2) * self.tooth_height
-                if apex
-                else self.root_radius
-            )
-
-        z_pos = t * self.pitch / 4 + t * vertical_displacement
-        x_pos = radius * cos(t * pi / 2)
-        y_pos = radius * sin(t * pi / 2)
-        return (x_pos, y_pos, z_pos)
-
     _applies_to = [BuildPart._tag]
 
     def __init__(
@@ -144,16 +123,14 @@ class Thread(BasePartObject):
         for finish in end_finishes:
             if finish not in ["raw", "square", "fade", "chamfer"]:
                 raise ValueError(
-                    'end_finishes invalid, must be tuple() of "raw, square, taper, or chamfer"'
+                    'end_finishes invalid, must be tuple() of "raw, square, fade, or chamfer"'
                 )
+        if taper_angle is not None:
+            raise ValueError("taper_angle is not currently supported")
         self.external = apex_radius > root_radius
         self.apex_radius = apex_radius
         self.apex_width = apex_width
-        # Unfortunately, when creating "fade" ends inaccuracies in parametric curve calculations
-        # can result in a gap which causes the OCCT core to fail when combining with other
-        # object (like the core of the thread). To avoid this, subtract (or add) a fudge factor
-        # to the root radius to make it small enough to intersect the given radii.
-        self.root_radius = root_radius - (0.001 if self.external else -0.001)
+        self.root_radius = root_radius
         self.root_width = root_width
         self.pitch = pitch
         self.length = length
@@ -161,277 +138,245 @@ class Thread(BasePartObject):
         self.right_hand = hand == "right"
         self.end_finishes = end_finishes
         self.tooth_height = abs(self.apex_radius - self.root_radius)
-        # self.taper = 360 if taper_angle is None else taper_angle
         self.taper = 0 if taper_angle is None else taper_angle
         self.simple = simple
+        self.thread_loops = None
 
-        if not simple:
-            # Create base cylindrical thread
-            number_faded_ends = self.end_finishes.count("fade")
-            cylindrical_thread_length = self.length + self.pitch * (
-                1 - 1 * number_faded_ends
-            )
-            if self.end_finishes[0] == "fade":
-                cylindrical_thread_displacement = self.pitch / 2
-            else:
-                cylindrical_thread_displacement = -self.pitch / 2
-
-            # Either create a cylindrical thread for further processing
-            # or create a cylindrical thread segment with faded ends
-            if number_faded_ends == 0:
-                bd_object = self.make_thread_solid(cylindrical_thread_length).translate(
-                    (0, 0, cylindrical_thread_displacement)
-                )
-            else:
-                bd_object = self.make_thread_with_faded_ends(
-                    number_faded_ends,
-                    cylindrical_thread_length,
-                    cylindrical_thread_displacement,
-                )
-
-            # Square off ends if requested
-            bd_object = self.square_off_ends(bd_object)
-            # Chamfer ends if requested
-            bd_object = self.chamfer_ends(bd_object)
-            if isinstance(bd_object, Compound) and len(bd_object.solids()) == 1:
-                super().__init__(
-                    solid=bd_object.solids()[0],
-                    rotation=rotation,
-                    align=tuplify(align, 3),
-                    mode=mode,
-                )
-            else:
-                super().__init__(
-                    solid=bd_object,
-                    rotation=rotation,
-                    align=tuplify(align, 3),
-                    mode=mode,
-                )
-        else:
+        if simple:
             # Initialize with a valid shape then nullify
             super().__init__(
-                solid=Solid.make_box(1, 1, 1),
+                part=Solid.make_box(1, 1, 1),
                 rotation=rotation,
                 align=tuplify(align, 3),
                 mode=mode,
             )
             self.wrapped = TopoDS_Shape()
-
-    def make_thread_with_faded_ends(
-        self,
-        number_faded_ends,
-        cylindrical_thread_length,
-        cylindrical_thread_displacement,
-    ):
-        """Build the thread object from cylindrical thread faces and
-        faded ends faces"""
-        (thread_faces, end_faces) = self.make_thread_faces(cylindrical_thread_length)
-
-        # Need to operate on each face below
-        thread_faces = [
-            f.translate((0, 0, cylindrical_thread_displacement)) for f in thread_faces
-        ]
-        end_faces = [
-            f.translate((0, 0, cylindrical_thread_displacement)) for f in end_faces
-        ]
-        cylindrical_thread_angle = (
-            (360 if self.right_hand else -360) * cylindrical_thread_length / self.pitch
-        )
-        (fade_faces, _fade_ends) = self.make_thread_faces(
-            self.pitch / 4, fade_helix=True
-        )
-        if not self.right_hand:
-            fade_faces = [f.mirror(Plane.XZ) for f in fade_faces]
-
-        if self.end_finishes[0] == "fade":
-            # If the thread is asymmetric the bottom fade end needs to be recreated as
-            # no amount of flipping or rotating can generate the shape
-            if self.apex_offset != 0:
-                (fade_faces_bottom, _fade_ends) = self.make_thread_faces(
-                    self.pitch / 4, fade_helix=True, asymmetric_flip=True
-                )
-                if not self.right_hand:
-                    fade_faces_bottom = [f.mirror(Plane.XZ) for f in fade_faces_bottom]
-            else:
-                fade_faces_bottom = fade_faces
-            fade_faces_bottom = [
-                f.mirror(Plane.XZ)
-                .mirror(Plane.XY)
-                .translate(Vector(0, 0, self.pitch / 2))
-                for f in fade_faces_bottom
-            ]
-        if self.end_finishes[1] == "fade":
-            fade_faces_top = [
-                f.translate(
-                    Vector(
-                        0,
-                        0,
-                        cylindrical_thread_length + cylindrical_thread_displacement,
-                    )
-                ).rotate(Axis.Z, cylindrical_thread_angle)
-                for f in fade_faces
-            ]
-        if number_faded_ends == 2:
-            thread_shell = Shell.make_shell(
-                thread_faces + fade_faces_bottom + fade_faces_top
+        else:
+            # Create base cylindrical thread
+            number_faded_ends = self.end_finishes.count("fade")
+            cylindrical_thread_length = self.length + self.pitch * (
+                1 - 1 * number_faded_ends
             )
-        elif self.end_finishes[0] == "fade":
-            thread_shell = Shell.make_shell(
-                thread_faces + fade_faces_bottom + [end_faces[1]]
+            self.thread_loops = cylindrical_thread_length / self.pitch
+            if self.end_finishes[0] == "fade":
+                cylindrical_thread_displacement = self.pitch / 2
+            else:
+                cylindrical_thread_displacement = -self.pitch / 2
+
+            loops = []
+            if self.thread_loops >= 1.0:
+                full_loop = self._make_thread_loop(1.0)
+                full_loop.label = "loop"
+                loops = [copy.copy(full_loop) for _i in range(int(self.thread_loops))]
+            if self.thread_loops % 1 > 0.0:
+                last_loop = self._make_thread_loop(self.thread_loops % 1)
+                last_loop.label = "partial"
+                loops.append(last_loop)
+            loops[0].locate(Location((0, 0, cylindrical_thread_displacement)))
+            for i in range(1, len(loops)):
+                loops[i - 1].joints["1"].connect_to(loops[i].joints["0"])
+
+            bd_object = Compound(label="thread", children=loops)
+
+            # Apply the end finishes
+            # Bottom
+            if self.end_finishes.count("chamfer") != 0:
+                chamfer_shape = self._make_chamfer_shape()
+            if end_finishes[0] == "fade":
+                start_tip = self._make_fade_end(True)
+                start_tip.label = "start_tip"
+                loops[0].joints["0"].connect_to(start_tip.joints["0"])
+                bd_object.children = list(bd_object.children) + [start_tip]
+            elif end_finishes[0] == "square":
+                children = list(bd_object.children)
+                bottom_loop = children.pop(0)
+                label = bottom_loop.label
+                bottom_loop: Solid = split(
+                    bottom_loop, bisect_by=Plane.XY, keep=Keep.TOP
+                )
+                bottom_loop.label = label
+                bd_object.children = [bottom_loop] + children
+            elif end_finishes[0] == "chamfer":
+                children = list(bd_object.children)
+                bottom_loop = children.pop(0)
+                label = bottom_loop.label
+                bottom_loop: Solid = bottom_loop.intersect(chamfer_shape)
+                if bottom_loop.volume == 0:
+                    raise RuntimeError("Thread construction failed")
+                bottom_loop.label = label
+                bd_object.children = [bottom_loop] + children
+
+            # Top
+            if end_finishes[1] == "fade":
+                end_tip = self._make_fade_end(False)
+                end_tip.label = "end_tip"
+                loops[-1].joints["1"].connect_to(end_tip.joints["1"])
+                bd_object.children = list(bd_object.children) + [end_tip]
+            elif end_finishes[1] == "square":
+                children = list(bd_object.children)
+                top_loop = children.pop(-1)
+                label = top_loop.label
+                top_loop: Solid = split(
+                    top_loop, bisect_by=Plane.XY.offset(self.length), keep=Keep.BOTTOM
+                )
+                top_loop.label = label
+                bd_object.children = children + [top_loop]
+            elif end_finishes[1] == "chamfer":
+                children = list(bd_object.children)
+                top_loops = []
+                for _ in range(2):
+                    if not children:
+                        continue
+                    top_loop = children.pop(-1)
+                    label = top_loop.label
+                    top_loop = top_loop.intersect(chamfer_shape)
+                    if top_loop.volume == 0:
+                        raise RuntimeError("Thread construction failed")
+                    top_loop.label = label
+                    top_loops.append(top_loop)
+                bd_object.children = children + top_loops
+
+            super().__init__(
+                part=bd_object,
+                rotation=rotation,
+                align=tuplify(align, 3),
+                mode=mode,
+            )
+
+    def _make_thread_loop(self, loop_height: float) -> Solid:
+        """make_thread_loop
+
+        Args:
+            loop_height (float): 0.0 < height <= 1.0
+
+        Raises:
+            ValueError: Invalid loop height
+
+        Returns:
+            Solid: One full or partial helical loop of thread
+        """
+        if not 0.0 < loop_height <= 1.0:
+            raise ValueError(f"Invalid loop_height ({loop_height})")
+        with BuildPart() as thread_loop:
+            with BuildLine() as thread_path:
+                thread_path_wire = Helix(
+                    pitch=self.pitch,
+                    height=loop_height,
+                    radius=self.root_radius,
+                )
+            for i in range(11):
+                u = i / 10
+                with BuildSketch(
+                    Plane(
+                        thread_path_wire @ u,
+                        x_dir=(0, 0, 1),
+                        z_dir=thread_path_wire % u,
+                    )
+                ) as thread_face:
+                    with BuildLine() as thread_profile:
+                        Polyline(
+                            (self.root_width / 2, 0),
+                            (
+                                self.apex_width / 2 + self.apex_offset,
+                                self.apex_radius - self.root_radius,
+                            ),
+                            (
+                                -self.apex_width / 2 + self.apex_offset,
+                                self.apex_radius - self.root_radius,
+                            ),
+                            (-self.root_width / 2, 0),
+                            close=True,
+                        )
+                    make_face()
+            loft()
+
+        loop = thread_loop.part.solids()[0]
+        for i in range(2):
+            RigidJoint(str(i), loop, thread_path_wire.location_at(i))
+        return loop
+
+    def _make_fade_end(self, bottom: bool) -> Solid:
+        """make_fade_end
+
+        Args:
+            bottom (bool): bottom or top of the thread
+
+        Returns:
+            Solid: The tip of the thread fading to almost nothing
+        """
+        dir = -1 if bottom else 1
+        fade_apex_offset = -self.apex_offset if bottom else self.apex_offset
+        with BuildPart() as fade_tip:
+            with BuildLine() as tip_path:
+                fade_path_wire = Helix(
+                    pitch=self.pitch,
+                    height=dir * self.pitch / 4,
+                    radius=self.root_radius,
+                )
+            for i in range(11):
+                u = i / 10
+                with BuildSketch(
+                    Plane(
+                        fade_path_wire @ u, x_dir=(0, 0, dir), z_dir=fade_path_wire % u
+                    )
+                ):
+                    with BuildLine() as thread_profile:
+                        Polyline(
+                            (self.root_width / 2, 0),
+                            (
+                                self.apex_width / 2 + fade_apex_offset,
+                                self.apex_radius - self.root_radius,
+                            ),
+                            (
+                                -self.apex_width / 2 + fade_apex_offset,
+                                self.apex_radius - self.root_radius,
+                            ),
+                            (-self.root_width / 2, 0),
+                            close=True,
+                        )
+                    make_face()
+                    scale(by=(11 - i) / 11)
+            loft()
+
+        tip = fade_tip.part.solids()[0]
+
+        RigidJoint(
+            "0",
+            tip,
+            fade_path_wire.location_at(0) * Location((0, 0, 0), (1, 0, 0), 180),
+        )
+        RigidJoint("1", tip, fade_path_wire.location_at(0))
+        return tip
+
+    def _make_chamfer_shape(self) -> Solid:
+        """Create the shape that will intersect with the thread to chamfer ends"""
+        inside_radius = min(self.apex_radius, self.root_radius)
+        outside_radius = max(self.apex_radius, self.root_radius) + 0.001
+        if self.external:
+            chamfer_shape = Solid.extrude_linear(
+                Wire.make_circle(outside_radius), (0, 0, self.length)
             )
         else:
-            thread_shell = Shell.make_shell(
-                thread_faces + fade_faces_top + [end_faces[0]]
-            )
-        return Solid.make_solid(thread_shell)
-
-    def square_off_ends(self, bd_object: Solid):
-        """Square off the ends of the thread"""
-
-        squared = bd_object
-        if self.end_finishes[0] == "square":
-            squared = split(squared, bisect_by=Plane.XY, keep=Keep.TOP)
-        if self.end_finishes[1] == "square":
-            squared = split(
-                squared, bisect_by=Plane.XY.offset(self.length), keep=Keep.BOTTOM
+            chamfer_shape = Solid.extrude_linear(
+                Wire.make_circle(2 * outside_radius),
+                (0, 0, self.length),
+                [Wire.make_circle(inside_radius)],
             )
 
-        return squared
-
-    def chamfer_ends(self, bd_object: Solid):
-        """Chamfer the ends of the thread"""
-
-        chamfered = bd_object
-        if self.end_finishes.count("chamfer") != 0:
-            with BuildPart() as chamfer_builder:
-                end_to_vertex_map = {
-                    (True, True): (0, 2),
-                    (False, True): (1, 2),
-                    (True, False): (0, 1),
-                }
-                vertex_indices = end_to_vertex_map[
-                    (
-                        self.end_finishes[0] == "chamfer",
-                        self.end_finishes[1] == "chamfer",
-                    )
-                ]
-                side = -1 if self.apex_radius > self.root_radius else 0
-                thickness = abs(self.apex_radius - self.root_radius)
-                with BuildSketch(Plane.XZ) as profile:
-                    with Locations((min(self.apex_radius, self.root_radius), 0)):
-                        Rectangle(thickness, self.length, align=Align.MIN)
-                        v = profile.vertices().group_by(Axis.X)[side][
-                            vertex_indices[0] : vertex_indices[1]
-                        ]
-                        chamfer(v, length=thickness / 2)
-                revolve()
-                add(bd_object, mode=Mode.INTERSECT)
-
-            chamfered = chamfer_builder.part
-
-        return chamfered
-
-    def make_thread_faces(
-        self, length: float, fade_helix: bool = False, asymmetric_flip: bool = False
-    ) -> Tuple[list[Face]]:
-        """Create the thread object from basic CadQuery objects
-
-        This method creates three types of thread objects:
-        1. cylindrical - i.e. following a simple helix
-        2. tapered - i.e. following a conical helix
-        3. faded - cylindrical but spiralling towards the root in 90°
-
-        After testing many alternatives (sweep, extrude with rotation, etc.) the
-        following algorithm was found to be the fastest and most reliable:
-        a. first create all the edges - helical, linear or parametric
-        b. create either 5 or 6 faces from the edges (faded needs 5)
-        c. create a shell from the faces
-        d. create a solid from the shell
-        """
-        local_apex_offset = -self.apex_offset if asymmetric_flip else self.apex_offset
-        apex_helix_wires = [
-            Wire.make_wire(
-                [
-                    Edge.make_spline(
-                        [
-                            self.fade_helix(t / 400, apex=True, vertical_displacement=0)
-                            for t in range(401)
-                        ]
-                    )
-                ]
-            ).translate((0, 0, i * self.apex_width + local_apex_offset))
-            if fade_helix
-            else Wire.make_helix(
-                pitch=self.pitch,
-                height=length,
-                radius=self.apex_radius,
-                angle=self.taper,
-                lefthand=not self.right_hand,
-            ).translate((0, 0, i * self.apex_width + local_apex_offset))
-            for i in [-0.5, 0.5]
-        ]
-        assert apex_helix_wires[0].is_valid()
-        root_helix_wires = [
-            Wire.make_wire(
-                [
-                    Edge.make_spline(
-                        [
-                            self.fade_helix(
-                                t / 400,
-                                apex=False,
-                                vertical_displacement=-i
-                                * (self.root_width - self.apex_width),
-                            )
-                            for t in range(401)
-                        ]
-                    )
-                ]
-            ).translate((0, 0, i * self.root_width))
-            if fade_helix
-            else Wire.make_helix(
-                pitch=self.pitch,
-                height=length,
-                radius=self.root_radius,
-                angle=self.taper,
-                lefthand=not self.right_hand,
-            ).translate((0, 0, i * self.root_width))
-            for i in [-0.5, 0.5]
-        ]
-        # When creating a cylindrical or tapered thread two end faces are required
-        # to enclose the thread object, while faded thread only has one end face
-        end_caps = [0] if fade_helix else [0, 1]
-        end_cap_wires = [
-            Wire.make_polygon(
-                [
-                    apex_helix_wires[0].position_at(i),
-                    apex_helix_wires[1].position_at(i),
-                    root_helix_wires[1].position_at(i),
-                    root_helix_wires[0].position_at(i),
-                    apex_helix_wires[0].position_at(i),
-                ]
-            )
-            for i in end_caps
-        ]
-        thread_faces = [
-            Face.make_surface_from_curves(apex_helix_wires[0], apex_helix_wires[1]),
-            Face.make_surface_from_curves(apex_helix_wires[1], root_helix_wires[1]),
-            Face.make_surface_from_curves(root_helix_wires[1], root_helix_wires[0]),
-            Face.make_surface_from_curves(root_helix_wires[0], apex_helix_wires[0]),
-        ]
-        end_faces = [Face.make_from_wires(end_cap_wires[i]) for i in end_caps]
-        return (thread_faces, end_faces)
-
-    def make_thread_solid(
-        self,
-        length: float,
-        fade_helix: bool = False,
-    ) -> Solid:
-        """Create a solid object by first creating the faces"""
-        (thread_faces, end_faces) = self.make_thread_faces(length, fade_helix)
-
-        thread_shell = Shell.make_shell(thread_faces + end_faces)
-        thread_solid = Solid.make_solid(thread_shell)
-        return thread_solid
+        thickness = outside_radius - inside_radius
+        for i in range(2):
+            if self.end_finishes[i] == "chamfer":
+                chamfer_shape = chamfer_shape.chamfer(
+                    thickness / 2,
+                    thickness / 2,
+                    chamfer_shape.edges()
+                    .group_by(Axis.Z, reverse=i != 0)[0]
+                    .sort_by(
+                        SortBy.RADIUS,
+                        reverse=self.apex_radius > self.root_radius,
+                    )[0:1],
+                )
+        return chamfer_shape
 
 
 class IsoThread(BasePartObject):
@@ -523,7 +468,7 @@ class IsoThread(BasePartObject):
         for finish in end_finishes:
             if finish not in ["raw", "square", "fade", "chamfer"]:
                 raise ValueError(
-                    'end_finishes invalid, must be tuple() of "raw, square, taper, or chamfer"'
+                    'end_finishes invalid, must be tuple() of "raw, square, fade, or chamfer"'
                 )
         self.end_finishes = end_finishes
         self.simple = simple
@@ -531,22 +476,10 @@ class IsoThread(BasePartObject):
         apex_width = self.pitch / 8 if external else self.pitch / 4
         self.root_radius = self.min_radius if external else self.major_diameter / 2
         root_width = 3 * self.pitch / 4 if external else 7 * self.pitch / 8
-        bd_object = Thread(
-            apex_radius=self.apex_radius,
-            apex_width=apex_width,
-            root_radius=self.root_radius,
-            root_width=root_width,
-            pitch=self.pitch,
-            length=self.length,
-            end_finishes=self.end_finishes,
-            hand=self.hand,
-            simple=simple,
-        )
-
         if simple:
             # Initialize with a valid shape then nullify
             super().__init__(
-                solid=Solid.make_box(1, 1, 1),
+                part=Solid.make_box(1, 1, 1),
                 rotation=rotation,
                 align=tuplify(align, 3),
                 mode=mode,
@@ -554,8 +487,19 @@ class IsoThread(BasePartObject):
             self.wrapped = TopoDS_Shape()
 
         else:
+            bd_object = Thread(
+                apex_radius=self.apex_radius,
+                apex_width=apex_width,
+                root_radius=self.root_radius,
+                root_width=root_width,
+                pitch=self.pitch,
+                length=self.length,
+                end_finishes=self.end_finishes,
+                hand=self.hand,
+                simple=simple,
+            )
             super().__init__(
-                solid=bd_object,
+                part=Compound.make_compound(bd_object.solids()),
                 rotation=rotation,
                 align=tuplify(align, 3),
                 mode=mode,
@@ -616,7 +560,7 @@ class TrapezoidalThread(ABC, BasePartObject):
 
     @classmethod
     @abstractmethod
-    def parse_size(cls, size: str) -> Tuple[float, float]:  # pragma: no cover
+    def _parse_size(cls, size: str) -> Tuple[float, float]:  # pragma: no cover
         """Convert the provided size into a tuple of diameter and pitch"""
         return NotImplementedError
 
@@ -637,7 +581,7 @@ class TrapezoidalThread(ABC, BasePartObject):
         self.size = size
         self.external = external
         self.length = length
-        (self.diameter, self.pitch) = self.parse_size(self.size)
+        (self.diameter, self.pitch) = self._parse_size(self.size)
         shoulder_width = (self.pitch / 2) * tan(radians(self.thread_angle / 2))
         apex_width = (self.pitch / 2) - shoulder_width
         root_width = (self.pitch / 2) + shoulder_width
@@ -668,7 +612,7 @@ class TrapezoidalThread(ABC, BasePartObject):
             hand=self.hand,
         )
         super().__init__(
-            solid=bd_object,
+            part=bd_object,
             rotation=rotation,
             align=tuplify(align, 3),
             mode=mode,
@@ -746,7 +690,7 @@ class AcmeThread(TrapezoidalThread):
         return list(AcmeThread.acme_pitch.keys())
 
     @classmethod
-    def parse_size(cls, size: str) -> Tuple[float, float]:
+    def _parse_size(cls, size: str) -> Tuple[float, float]:
         """Convert the provided size into a tuple of diameter and pitch"""
         if not size in AcmeThread.acme_pitch.keys():
             raise ValueError(
@@ -838,7 +782,7 @@ class MetricTrapezoidalThread(TrapezoidalThread):
         return MetricTrapezoidalThread.standard_sizes
 
     @classmethod
-    def parse_size(cls, size: str) -> Tuple[float, float]:
+    def _parse_size(cls, size: str) -> Tuple[float, float]:
         """Convert the provided size into a tuple of diameter and pitch"""
         if not size in MetricTrapezoidalThread.standard_sizes:
             raise ValueError(
@@ -891,14 +835,14 @@ class PlasticBottleThread(BasePartObject):
     """
 
     # {TPI: [root_width,thread_height]}
-    l_style_thread_dimensions = {
+    _l_style_thread_dimensions = {
         4: [3.18, 1.57],
         5: [3.05, 1.52],
         6: [2.39, 1.19],
         8: [2.13, 1.07],
         12: [1.14, 0.76],
     }
-    m_style_thread_dimensions = {
+    _m_style_thread_dimensions = {
         4: [3.18, 1.57],
         5: [3.05, 1.52],
         6: [2.39, 1.19],
@@ -906,7 +850,7 @@ class PlasticBottleThread(BasePartObject):
         12: [1.29, 0.76],
     }
 
-    thread_angles = {
+    _thread_angles = {
         "L100": [30, 30],
         "M100": [10, 40],
         "L103": [30, 30],
@@ -929,7 +873,7 @@ class PlasticBottleThread(BasePartObject):
 
     # {finish:[min turns,[diameters,...]]}
     # fmt: off
-    finish_data = {
+    _finish_data = {
         100: [1.125,[22,24,28,30,33,35,38]],
         103: [1.125,[26]],
         110: [1.125,[28]],
@@ -943,7 +887,7 @@ class PlasticBottleThread(BasePartObject):
     # fmt: on
 
     # {thread_size:[max,min,TPI]}
-    thread_dimensions = {
+    _thread_dimensions = {
         13: [13.06, 12.75, 12],
         15: [14.76, 14.45, 12],
         18: [17.88, 17.47, 8],
@@ -1000,29 +944,29 @@ class PlasticBottleThread(BasePartObject):
         self.style = size_match.group(1)
         self.diameter = int(size_match.group(2))
         self.finish = int(size_match.group(3))
-        if self.finish not in PlasticBottleThread.finish_data.keys():
+        if self.finish not in PlasticBottleThread._finish_data.keys():
             raise ValueError(
                 f"finish ({self.finish}) invalid, must be one of"
-                f" {list(PlasticBottleThread.finish_data.keys())}"
+                f" {list(PlasticBottleThread._finish_data.keys())}"
             )
-        if not self.diameter in PlasticBottleThread.finish_data[self.finish][1]:
+        if not self.diameter in PlasticBottleThread._finish_data[self.finish][1]:
             raise ValueError(
                 f"diameter ({self.diameter}) invalid, must be one"
-                f" of {PlasticBottleThread.finish_data[self.finish][1]}"
+                f" of {PlasticBottleThread._finish_data[self.finish][1]}"
             )
-        (diameter_max, diameter_min, self.tpi) = PlasticBottleThread.thread_dimensions[
+        (diameter_max, diameter_min, self.tpi) = PlasticBottleThread._thread_dimensions[
             self.diameter
         ]
         if self.style == "L":
             (
                 self.root_width,
                 thread_height,
-            ) = PlasticBottleThread.l_style_thread_dimensions[self.tpi]
+            ) = PlasticBottleThread._l_style_thread_dimensions[self.tpi]
         else:
             (
                 self.root_width,
                 thread_height,
-            ) = PlasticBottleThread.m_style_thread_dimensions[self.tpi]
+            ) = PlasticBottleThread._m_style_thread_dimensions[self.tpi]
         if self.external:
             self.apex_radius = diameter_min / 2 - manufacturing_compensation
             self.root_radius = (
@@ -1033,17 +977,17 @@ class PlasticBottleThread(BasePartObject):
             self.apex_radius = (
                 diameter_max / 2 - thread_height + manufacturing_compensation
             )
-        self.thread_angles = PlasticBottleThread.thread_angles[
+        self._thread_angles = PlasticBottleThread._thread_angles[
             self.style + str(self.finish)
         ]
-        shoulders = [thread_height * tan(radians(a)) for a in self.thread_angles]
+        shoulders = [thread_height * tan(radians(a)) for a in self._thread_angles]
         self.apex_width = self.root_width - sum(shoulders)
         self.apex_offset = shoulders[0] + self.apex_width / 2 - self.root_width / 2
         if not self.external:
             self.apex_offset = -self.apex_offset
         self.pitch = 25.4 * MM / self.tpi
         self.length = (
-            PlasticBottleThread.finish_data[self.finish][0] + 0.75
+            PlasticBottleThread._finish_data[self.finish][0] + 0.75
         ) * self.pitch
         bd_object = Thread(
             apex_radius=self.apex_radius,
@@ -1057,7 +1001,7 @@ class PlasticBottleThread(BasePartObject):
             end_finishes=("fade", "fade"),
         )
         super().__init__(
-            solid=bd_object,
+            part=bd_object,
             rotation=rotation,
             align=tuplify(align, 3),
             mode=mode,

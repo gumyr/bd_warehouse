@@ -25,6 +25,7 @@ license:
     limitations under the License.
 
 """
+import random
 import unittest
 from bd_warehouse.thread import *
 
@@ -65,7 +66,7 @@ class TestIsoThread(unittest.TestCase):
                     thread = IsoThread(
                         major_diameter=6 * MM,
                         pitch=1 * MM,
-                        length=8 * MM,
+                        length=(1 + random.random() * 9) * MM,
                         external=True,
                         end_finishes=(end0, end1),
                         hand="right",
