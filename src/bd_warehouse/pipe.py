@@ -227,7 +227,7 @@ class Pipe(BasePartObject):
                 sweep()
 
         super().__init__(
-            solid=pipe.part, rotation=rotation, align=tuplify(align, 3), mode=mode
+            part=pipe.part, rotation=rotation, align=tuplify(align, 3), mode=mode
         )
         self.material = material
 
