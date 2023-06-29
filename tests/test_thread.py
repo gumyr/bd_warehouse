@@ -62,11 +62,12 @@ class TestIsoThread(unittest.TestCase):
 
         for end0 in TestIsoThread.end_finishes:
             for end1 in TestIsoThread.end_finishes:
-                with self.subTest(end0=end0, end1=end1):
+                length = (1 + random.random() * 9) * MM
+                with self.subTest(end0=end0, end1=end1, length=length):
                     thread = IsoThread(
                         major_diameter=6 * MM,
                         pitch=1 * MM,
-                        length=(1 + random.random() * 9) * MM,
+                        length=length,
                         external=True,
                         end_finishes=(end0, end1),
                         hand="right",

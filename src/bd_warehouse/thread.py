@@ -28,7 +28,7 @@ license:
 """
 import copy
 import re
-import timeit
+from math import copysign
 from warnings import warn
 from abc import ABC, abstractmethod
 from typing import Literal, Optional, Tuple, Union
@@ -74,6 +74,10 @@ class Thread(BasePartObject):
         pitch: Length of 360° of thread rotation.
         length: End to end length of the thread.
         apex_offset: Asymmetric thread apex offset from center. Defaults to 0.0.
+        interference: Amount the thread will overlap with nut or bolt core. Used
+            to help create valid threaded objects where the thread must fuse
+            with another object. For threaded objects built as Compounds, this
+            value could be set to 0.0. Defaults to 0.2.
         hand: Twist direction. Defaults to "right".
         taper_angle: Cone angle for tapered thread. Defaults to None.
         end_finishes: Profile of each end, one of:
@@ -108,6 +112,7 @@ class Thread(BasePartObject):
         pitch: float,
         length: float,
         apex_offset: float = 0.0,
+        interference: float = 0.2,
         hand: Literal["right", "left"] = "right",
         taper_angle: Optional[float] = None,
         end_finishes: Tuple[
@@ -135,6 +140,7 @@ class Thread(BasePartObject):
         self.pitch = pitch
         self.length = length
         self.apex_offset = apex_offset
+        self.interference = interference
         self.right_hand = hand == "right"
         self.end_finishes = end_finishes
         self.tooth_height = abs(self.apex_radius - self.root_radius)
@@ -142,14 +148,26 @@ class Thread(BasePartObject):
         self.simple = simple
         self.thread_loops = None
 
+        # Create the thread profile
+        with BuildSketch(mode=Mode.PRIVATE) as thread_face:
+            height = self.apex_radius - self.root_radius
+            overlap = -interference * copysign(1, height)
+            with BuildLine() as thread_profile:
+                Polyline(
+                    (self.root_width / 2, overlap),
+                    (self.root_width / 2, 0),
+                    (self.apex_width / 2 + self.apex_offset, height),
+                    (-self.apex_width / 2 + self.apex_offset, height),
+                    (-self.root_width / 2, 0),
+                    (-self.root_width / 2, overlap),
+                    close=True,
+                )
+            make_face()
+        self.thread_profile = thread_face.sketch_local.faces()[0]
+
         if simple:
             # Initialize with a valid shape then nullify
-            super().__init__(
-                part=Solid.make_box(1, 1, 1),
-                rotation=rotation,
-                align=tuplify(align, 3),
-                mode=mode,
-            )
+            super().__init__(part=Solid.make_box(1, 1, 1))
             self.wrapped = TopoDS_Shape()
         else:
             # Create base cylindrical thread
@@ -178,62 +196,52 @@ class Thread(BasePartObject):
 
             bd_object = Compound(label="thread", children=loops)
 
-            # Apply the end finishes
+            # Apply the end finishes. Note that it's significantly faster
+            # to just apply the end finish to a single loop then the entire Compound
             # Bottom
             if self.end_finishes.count("chamfer") != 0:
                 chamfer_shape = self._make_chamfer_shape()
             if end_finishes[0] == "fade":
                 start_tip = self._make_fade_end(True)
-                start_tip.label = "start_tip"
+                start_tip.label = "bottom_tip"
                 loops[0].joints["0"].connect_to(start_tip.joints["0"])
                 bd_object.children = list(bd_object.children) + [start_tip]
-            elif end_finishes[0] == "square":
+            elif end_finishes[0] in ["square", "chamfer"]:
                 children = list(bd_object.children)
                 bottom_loop = children.pop(0)
                 label = bottom_loop.label
-                bottom_loop: Solid = split(
-                    bottom_loop, bisect_by=Plane.XY, keep=Keep.TOP
-                )
-                bottom_loop.label = label
-                bd_object.children = [bottom_loop] + children
-            elif end_finishes[0] == "chamfer":
-                children = list(bd_object.children)
-                bottom_loop = children.pop(0)
-                label = bottom_loop.label
-                bottom_loop: Solid = bottom_loop.intersect(chamfer_shape)
-                if bottom_loop.volume == 0:
-                    raise RuntimeError("Thread construction failed")
+                if end_finishes[0] == "square":
+                    bottom_loop = split(bottom_loop, bisect_by=Plane.XY, keep=Keep.TOP)
+                else:
+                    bottom_loop = bottom_loop.intersect(chamfer_shape)
                 bottom_loop.label = label
                 bd_object.children = [bottom_loop] + children
 
             # Top
             if end_finishes[1] == "fade":
                 end_tip = self._make_fade_end(False)
-                end_tip.label = "end_tip"
+                end_tip.label = "top_tip"
                 loops[-1].joints["1"].connect_to(end_tip.joints["1"])
                 bd_object.children = list(bd_object.children) + [end_tip]
-            elif end_finishes[1] == "square":
-                children = list(bd_object.children)
-                top_loop = children.pop(-1)
-                label = top_loop.label
-                top_loop: Solid = split(
-                    top_loop, bisect_by=Plane.XY.offset(self.length), keep=Keep.BOTTOM
-                )
-                top_loop.label = label
-                bd_object.children = children + [top_loop]
-            elif end_finishes[1] == "chamfer":
+            elif end_finishes[1] in ["square", "chamfer"]:
                 children = list(bd_object.children)
                 top_loops = []
-                for _ in range(2):
+                for _ in range(3):
                     if not children:
                         continue
                     top_loop = children.pop(-1)
                     label = top_loop.label
-                    top_loop = top_loop.intersect(chamfer_shape)
-                    if top_loop.volume == 0:
-                        raise RuntimeError("Thread construction failed")
-                    top_loop.label = label
-                    top_loops.append(top_loop)
+                    if end_finishes[1] == "square":
+                        top_loop: Solid = split(
+                            top_loop,
+                            bisect_by=Plane.XY.offset(self.length),
+                            keep=Keep.BOTTOM,
+                        )
+                    else:
+                        top_loop = top_loop.intersect(chamfer_shape)
+                    if top_loop.volume != 0:
+                        top_loop.label = label
+                        top_loops.append(top_loop)
                 bd_object.children = children + top_loops
 
             super().__init__(
@@ -264,30 +272,18 @@ class Thread(BasePartObject):
                     height=loop_height,
                     radius=self.root_radius,
                 )
+
             for i in range(11):
                 u = i / 10
+
                 with BuildSketch(
                     Plane(
                         thread_path_wire @ u,
                         x_dir=(0, 0, 1),
                         z_dir=thread_path_wire % u,
                     )
-                ) as thread_face:
-                    with BuildLine() as thread_profile:
-                        Polyline(
-                            (self.root_width / 2, 0),
-                            (
-                                self.apex_width / 2 + self.apex_offset,
-                                self.apex_radius - self.root_radius,
-                            ),
-                            (
-                                -self.apex_width / 2 + self.apex_offset,
-                                self.apex_radius - self.root_radius,
-                            ),
-                            (-self.root_width / 2, 0),
-                            close=True,
-                        )
-                    make_face()
+                ):
+                    add(self.thread_profile)
             loft()
 
         loop = thread_loop.part.solids()[0]
@@ -305,36 +301,22 @@ class Thread(BasePartObject):
             Solid: The tip of the thread fading to almost nothing
         """
         dir = -1 if bottom else 1
-        fade_apex_offset = -self.apex_offset if bottom else self.apex_offset
+        height = min(self.pitch / 4, self.length / 2)
         with BuildPart() as fade_tip:
-            with BuildLine() as tip_path:
+            with BuildLine():
                 fade_path_wire = Helix(
-                    pitch=self.pitch,
-                    height=dir * self.pitch / 4,
-                    radius=self.root_radius,
+                    pitch=self.pitch, height=dir * height, radius=self.root_radius
                 )
+
             for i in range(11):
                 u = i / 10
                 with BuildSketch(
-                    Plane(
-                        fade_path_wire @ u, x_dir=(0, 0, dir), z_dir=fade_path_wire % u
-                    )
+                    Plane(fade_path_wire @ u, x_dir=(0, 0, 1), z_dir=fade_path_wire % u)
                 ):
-                    with BuildLine() as thread_profile:
-                        Polyline(
-                            (self.root_width / 2, 0),
-                            (
-                                self.apex_width / 2 + fade_apex_offset,
-                                self.apex_radius - self.root_radius,
-                            ),
-                            (
-                                -self.apex_width / 2 + fade_apex_offset,
-                                self.apex_radius - self.root_radius,
-                            ),
-                            (-self.root_width / 2, 0),
-                            close=True,
-                        )
-                    make_face()
+                    if bottom:
+                        add(mirror(self.thread_profile, about=Plane.XZ))
+                    else:
+                        add(self.thread_profile)
                     scale(by=(11 - i) / 11)
             loft()
 
@@ -478,12 +460,7 @@ class IsoThread(BasePartObject):
         root_width = 3 * self.pitch / 4 if external else 7 * self.pitch / 8
         if simple:
             # Initialize with a valid shape then nullify
-            super().__init__(
-                part=Solid.make_box(1, 1, 1),
-                rotation=rotation,
-                align=tuplify(align, 3),
-                mode=mode,
-            )
+            super().__init__(part=Solid.make_box(1, 1, 1))
             self.wrapped = TopoDS_Shape()
 
         else:
