@@ -6,8 +6,6 @@ thread - parametric helical threads
 .. image:: assets/thread_examples.png
 	:alt: thread_examples
 
-afasdf
-
 Helical threads are very common in mechanical designs but can be tricky to
 create in a robust and efficient manner. This sub-package provides classes that
 create three common types of threads:
