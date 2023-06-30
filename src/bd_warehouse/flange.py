@@ -371,7 +371,7 @@ class Flange(BasePartObject):
                 Hole(bolt_hole_diameter / 2)
 
         super().__init__(
-            solid=flange_builder.part,
+            part=flange_builder.part,
             rotation=rotation,
             align=tuplify(align, 3),
             mode=mode,
