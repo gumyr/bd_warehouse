@@ -172,14 +172,12 @@ class Thread(BasePartObject):
         else:
             # Create base cylindrical thread
             number_faded_ends = self.end_finishes.count("fade")
-            cylindrical_thread_length = self.length + self.pitch * (
-                1 - 1 * number_faded_ends
-            )
-            self.thread_loops = cylindrical_thread_length / self.pitch
+            cylindrical_thread_length = length + pitch * (1 - 1 * number_faded_ends)
+            self.thread_loops = cylindrical_thread_length / pitch
             if self.end_finishes[0] == "fade":
-                cylindrical_thread_displacement = self.pitch / 2
+                cylindrical_thread_displacement = pitch / 2
             else:
-                cylindrical_thread_displacement = -self.pitch / 2
+                cylindrical_thread_displacement = -pitch / 2
 
             loops = []
             if self.thread_loops >= 1.0:
@@ -269,7 +267,7 @@ class Thread(BasePartObject):
             with BuildLine() as thread_path:
                 thread_path_wire = Helix(
                     pitch=self.pitch,
-                    height=loop_height,
+                    height=loop_height * self.pitch,
                     radius=self.root_radius,
                 )
 
@@ -396,6 +394,10 @@ class IsoThread(BasePartObject):
                 into a nut
 
             Defaults to ("fade", "square").
+        interference: Amount the thread will overlap with nut or bolt core. Used
+            to help create valid threaded objects where the thread must fuse
+            with another object. For threaded objects built as Compounds, this
+            value could be set to 0.0. Defaults to 0.2.
         simple: Stop at thread calculation, don't create thread. Defaults to False.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
         align (Union[None, Align, tuple[Align, Align, Align]], optional):
@@ -434,6 +436,7 @@ class IsoThread(BasePartObject):
             Literal["raw", "square", "fade", "chamfer"],
             Literal["raw", "square", "fade", "chamfer"],
         ] = ("fade", "square"),
+        interference: float = 0.2,
         simple: bool = False,
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
@@ -453,6 +456,7 @@ class IsoThread(BasePartObject):
                     'end_finishes invalid, must be tuple() of "raw, square, fade, or chamfer"'
                 )
         self.end_finishes = end_finishes
+        self.interference = interference
         self.simple = simple
         self.apex_radius = self.major_diameter / 2 if external else self.min_radius
         apex_width = self.pitch / 8 if external else self.pitch / 4
@@ -475,6 +479,7 @@ class IsoThread(BasePartObject):
                 hand=self.hand,
                 simple=simple,
             )
+            self.thread_profile = bd_object.thread_profile
             super().__init__(
                 part=Compound.make_compound(bd_object.solids()),
                 rotation=rotation,
@@ -513,6 +518,10 @@ class TrapezoidalThread(ABC, BasePartObject):
                 into a nut
 
             Defaults to ("fade", "fade").
+        interference: Amount the thread will overlap with nut or bolt core. Used
+            to help create valid threaded objects where the thread must fuse
+            with another object. For threaded objects built as Compounds, this
+            value could be set to 0.0. Defaults to 0.2.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
         align (Union[None, Align, tuple[Align, Align, Align]], optional):
             object alignment. Defaults to None.
@@ -551,6 +560,7 @@ class TrapezoidalThread(ABC, BasePartObject):
             Literal["raw", "square", "fade", "chamfer"],
             Literal["raw", "square", "fade", "chamfer"],
         ] = ("fade", "fade"),
+        interference: float = 0.2,
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
@@ -575,9 +585,10 @@ class TrapezoidalThread(ABC, BasePartObject):
         for finish in end_finishes:
             if not finish in ["raw", "square", "fade", "chamfer"]:
                 raise ValueError(
-                    'end_finishes invalid, must be tuple() of "raw, square, taper, or chamfer"'
+                    'end_finishes invalid, must be tuple() of "raw, square, fade, or chamfer"'
                 )
         self.end_finishes = end_finishes
+        self.interference = interference
         bd_object = Thread(
             apex_radius=self.apex_radius,
             apex_width=apex_width,
@@ -585,9 +596,11 @@ class TrapezoidalThread(ABC, BasePartObject):
             root_width=root_width,
             pitch=self.pitch,
             length=self.length,
+            interference=interference,
             end_finishes=self.end_finishes,
             hand=self.hand,
         )
+        self.thread_profile = bd_object.thread_profile
         super().__init__(
             part=bd_object,
             rotation=rotation,
@@ -626,6 +639,10 @@ class AcmeThread(TrapezoidalThread):
                 into a nut
 
             Defaults to ("fade", "fade").
+        interference: Amount the thread will overlap with nut or bolt core. Used
+            to help create valid threaded objects where the thread must fuse
+            with another object. For threaded objects built as Compounds, this
+            value could be set to 0.0. Defaults to 0.2.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
         align (Union[None, Align, tuple[Align, Align, Align]], optional):
             object alignment. Defaults to None.
@@ -703,6 +720,10 @@ class MetricTrapezoidalThread(TrapezoidalThread):
                 into a nut
 
             Defaults to ("fade", "fade").
+        interference: Amount the thread will overlap with nut or bolt core. Used
+            to help create valid threaded objects where the thread must fuse
+            with another object. For threaded objects built as Compounds, this
+            value could be set to 0.0. Defaults to 0.2.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
         align (Union[None, Align, tuple[Align, Align, Align]], optional):
             object alignment. Defaults to None.
@@ -787,7 +808,11 @@ class PlasticBottleThread(BasePartObject):
             [L|M][diameter(mm)]SP[100|103|110|200|400|410|415|425|444]
         external (bool, optional): external or internal thread selector. Defaults to True.
         hand (Literal[, optional): twist direction. Defaults to "right".
-        manufacturingCompensation (float, optional): used to compensate for over-extrusion of 3D
+        interference: Amount the thread will overlap with nut or bolt core. Used
+            to help create valid threaded objects where the thread must fuse
+            with another object. For threaded objects built as Compounds, this
+            value could be set to 0.0. Defaults to 0.2.
+        manufacturing_compensation (float, optional): used to compensate for over-extrusion of 3D
             printers. A value of 0.2mm will reduce the radius of an external thread by 0.2mm (and
             increase the radius of an internal thread) such that the resulting 3D printed part
             matches the target dimensions. Defaults to 0.0.
@@ -902,6 +927,7 @@ class PlasticBottleThread(BasePartObject):
         size: str,
         external: bool = True,
         hand: Literal["right", "left"] = "right",
+        interference: float = 0.2,
         manufacturing_compensation: float = 0.0,
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
@@ -912,6 +938,7 @@ class PlasticBottleThread(BasePartObject):
         if hand not in ["right", "left"]:
             raise ValueError(f'hand must be one of "right" or "left" not {hand}')
         self.hand = hand
+        self.interference = interference
         size_match = re.match(r"([LM])(\d+)SP(\d+)", size)
         if not size_match:
             raise ValueError(
@@ -974,9 +1001,12 @@ class PlasticBottleThread(BasePartObject):
             pitch=self.pitch,
             length=self.length,
             apex_offset=self.apex_offset,
+            interference=interference,
             hand=self.hand,
             end_finishes=("fade", "fade"),
         )
+        self.thread_profile = bd_object.thread_profile
+
         super().__init__(
             part=bd_object,
             rotation=rotation,
