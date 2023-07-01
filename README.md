@@ -31,7 +31,7 @@ extend beyond the scope of this text. Furthermore, all these tools are
 open-source, free to use, and customizable, eliminating the need for licenses.
 Empower yourself by taking control of your CAD development tools.
 
-The documentation for **bd_warehouse** can found at [bd_warehouse](https://bd_warehoue.readthedocs.io/en/latest/index.html).
+The documentation for **bd_warehouse** can found at [bd_warehouse](https://bd-warehouse.readthedocs.io/en/latest/index.html).
 
 There is a [***Discord***](https://discord.com/invite/Bj9AQPsCfx) server (shared with CadQuery) where you can ask for help in the build123d channel.
 
