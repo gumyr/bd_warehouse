@@ -333,16 +333,18 @@ class Thread(BasePartObject):
         inside_radius = min(self.apex_radius, self.root_radius)
         outside_radius = max(self.apex_radius, self.root_radius) + 0.001
         if self.external:
-            chamfer_shape = Solid.extrude_linear(
-                Wire.make_circle(outside_radius), (0, 0, self.length)
+            chamfer_shape = Solid.extrude(
+                Face.make_from_wires(Wire.make_circle(outside_radius)),
+                (0, 0, self.length),
             )
         else:
-            chamfer_shape = Solid.extrude_linear(
-                Wire.make_circle(2 * outside_radius),
+            chamfer_shape = Solid.extrude(
+                Face.make_from_wires(
+                    Wire.make_circle(2 * outside_radius),
+                    [Wire.make_circle(inside_radius)],
+                ),
                 (0, 0, self.length),
-                [Wire.make_circle(inside_radius)],
             )
-
         thickness = outside_radius - inside_radius
         for i in range(2):
             if self.end_finishes[i] == "chamfer":
@@ -565,10 +567,10 @@ class TrapezoidalThread(ABC, BasePartObject):
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
     ):
-        self.size = size
+        self.thread_size = size
         self.external = external
         self.length = length
-        (self.diameter, self.pitch) = self._parse_size(self.size)
+        (self.diameter, self.pitch) = self._parse_size(size)
         shoulder_width = (self.pitch / 2) * tan(radians(self.thread_angle / 2))
         apex_width = (self.pitch / 2) - shoulder_width
         root_width = (self.pitch / 2) + shoulder_width
@@ -933,7 +935,7 @@ class PlasticBottleThread(BasePartObject):
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
     ):
-        self.size = size
+        self.thread_size = size
         self.external = external
         if hand not in ["right", "left"]:
             raise ValueError(f'hand must be one of "right" or "left" not {hand}')
