@@ -224,7 +224,7 @@ class Thread(BasePartObject):
             elif end_finishes[1] in ["square", "chamfer"]:
                 children = list(bd_object.children)
                 top_loops = []
-                for _ in range(3):
+                for _ in range(2):
                     if not children:
                         continue
                     top_loop = children.pop(-1)
