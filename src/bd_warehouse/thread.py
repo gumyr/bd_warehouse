@@ -232,12 +232,13 @@ class Thread(BasePartObject):
                     label = top_loop.label
                     # If this loop is entirely ABOVE the cut plane
                     # Skip the operation and do not add it to top_loops
-                    if top_loop.bounding_box().min.Z > self.length:
+                    bbox = top_loop.bounding_box()
+                    if bbox.min.Z > self.length:
                         continue
                     if end_finishes[1] == "square":
                         # If this loop is entirely BELOW the plane
                         # Keep without splitting, stop checking future loops
-                        if top_loop.bounding_box().max.Z < self.length:
+                        if bbox.max.Z < self.length:
                             last_square = True
                         else:
                             top_loop = split(
