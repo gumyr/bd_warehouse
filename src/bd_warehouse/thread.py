@@ -224,22 +224,34 @@ class Thread(BasePartObject):
             elif end_finishes[1] in ["square", "chamfer"]:
                 children = list(bd_object.children)
                 top_loops = []
-                for _ in range(2):
+		        last_square = False
+                for _ in range(3):
                     if not children:
                         continue
                     top_loop = children.pop(-1)
                     label = top_loop.label
+                    # If this loop is entirely ABOVE the cut plane
+                    # Skip the operation and do not add it to top_loops
+                    if top_loop.bounding_box().min.Z > self.length:
+                        continue
                     if end_finishes[1] == "square":
-                        top_loop: Solid = split(
-                            top_loop,
-                            bisect_by=Plane.XY.offset(self.length),
-                            keep=Keep.BOTTOM,
-                        )
+                        # If this loop is entirely BELOW the plane
+			            # Keep without splitting, stop checking future loops
+                        if top_loop.bounding_box().max.Z < self.length:
+                            last_square = True
+                        else:
+                            top_loop = split(
+                                top_loop,
+                                bisect_by=Plane.XY.offset(self.length),
+                                keep=Keep.BOTTOM,
+                            )
                     else:
                         top_loop = top_loop.intersect(chamfer_shape)
                     if top_loop.volume != 0:
                         top_loop.label = label
                         top_loops.append(top_loop)
+                    if last_square:
+                        break
                 bd_object.children = children + top_loops
 
             super().__init__(
