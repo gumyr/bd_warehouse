@@ -338,6 +338,9 @@ class Thread(BasePartObject):
                 (0, 0, self.length),
             )
         else:
+            """Decreasing inside_radius fixes the broken/missing first row chamfer
+	    0.01 visually cleans up the threads more than 0.005 or 0.001 on threads up to M100"""
+            inside_radius -= 0.01 
             chamfer_shape = Solid.extrude(
                 Face.make_from_wires(
                     Wire.make_circle(2 * outside_radius),
