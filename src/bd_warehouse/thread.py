@@ -224,7 +224,7 @@ class Thread(BasePartObject):
             elif end_finishes[1] in ["square", "chamfer"]:
                 children = list(bd_object.children)
                 top_loops = []
-		        last_square = False
+                last_square = False
                 for _ in range(3):
                     if not children:
                         continue
@@ -236,7 +236,7 @@ class Thread(BasePartObject):
                         continue
                     if end_finishes[1] == "square":
                         # If this loop is entirely BELOW the plane
-			            # Keep without splitting, stop checking future loops
+			# Keep without splitting, stop checking future loops
                         if top_loop.bounding_box().max.Z < self.length:
                             last_square = True
                         else:
