@@ -162,6 +162,8 @@ class Thread(BasePartObject):
                     (-self.root_width / 2, overlap),
                     close=True,
                 )
+                if not self.right_hand:
+                    mirror(about=Plane.XZ, mode=Mode.REPLACE)
             make_face()
         self.thread_profile = thread_face.sketch_local.faces()[0]
 
@@ -282,6 +284,7 @@ class Thread(BasePartObject):
                     pitch=self.pitch,
                     height=loop_height * self.pitch,
                     radius=self.root_radius,
+                    lefthand=not self.right_hand,
                 )
 
             for i in range(11):
@@ -316,7 +319,10 @@ class Thread(BasePartObject):
         with BuildPart() as fade_tip:
             with BuildLine():
                 fade_path_wire = Helix(
-                    pitch=self.pitch, height=dir * height, radius=self.root_radius
+                    pitch=self.pitch,
+                    height=dir * height,
+                    radius=self.root_radius,
+                    lefthand=not self.right_hand,
                 )
 
             for i in range(11):
@@ -352,8 +358,9 @@ class Thread(BasePartObject):
             )
         else:
             """Decreasing inside_radius fixes the broken/missing first row chamfer
-	    0.01 visually cleans up the threads more than 0.005 or 0.001 on threads up to M100"""
-            inside_radius -= 0.01 
+            0.01 visually cleans up the threads more than 0.005 or 0.001 on threads up to M100
+            """
+            inside_radius -= 0.01
             chamfer_shape = Solid.extrude(
                 Face.make_from_wires(
                     Wire.make_circle(2 * outside_radius),

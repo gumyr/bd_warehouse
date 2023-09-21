@@ -36,7 +36,7 @@ from bd_warehouse.thread import (
     PlasticBottleThread,
 )
 
-# from ocp_vscode import show_object
+from ocp_vscode import show_object
 
 
 # Raw Thread internal
