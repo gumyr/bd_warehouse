@@ -327,13 +327,13 @@ class Thread(BasePartObject):
 
             for i in range(11):
                 u = i / 10
+                z_dir = (fade_path_wire % u)
+                if bottom:
+                    z_dir = (fade_path_wire % u).reverse()
                 with BuildSketch(
-                    Plane(fade_path_wire @ u, x_dir=(0, 0, 1), z_dir=fade_path_wire % u)
+                    Plane(fade_path_wire @ u, x_dir=(0, 0, 1), z_dir=z_dir)
                 ):
-                    if bottom:
-                        add(mirror(self.thread_profile, about=Plane.XZ))
-                    else:
-                        add(self.thread_profile)
+                    add(self.thread_profile)
                     scale(by=(11 - i) / 11)
             loft()
 
