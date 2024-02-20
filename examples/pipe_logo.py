@@ -1,9 +1,9 @@
 from build123d import *
 from bd_warehouse.pipe import Pipe
-from ocp_vscode import show, set_port, set_defaults
+from ocp_vscode import show, set_port, set_defaults, Camera
 
 set_port(3939)
-set_defaults(reset_camera=False, ortho=True)
+set_defaults(reset_camera=Camera.CENTER, ortho=True)
 
 stainless_pipe = Pipe(
     nps="2 1/2",
