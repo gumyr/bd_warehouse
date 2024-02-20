@@ -27,17 +27,16 @@ license:
 """
 
 import timeit
-from build123d import *
+
 from bd_warehouse.thread import (
-    Thread,
     AcmeThread,
     IsoThread,
     MetricTrapezoidalThread,
     PlasticBottleThread,
+    Thread,
 )
-
-from ocp_vscode import show_object
-
+from build123d import *
+from ocp_vscode import show
 
 # Raw Thread internal
 starttime = timeit.default_timer()
@@ -53,7 +52,6 @@ internal = Thread(
 )
 elapsed_time = timeit.default_timer() - starttime
 print(f"Internal Thread time: {elapsed_time:.3f}s")
-show_object(internal.locate(Location((-10, -10, 0))))
 
 # Raw Thread external
 starttime = timeit.default_timer()
@@ -69,7 +67,6 @@ external = Thread(
 )
 elapsed_time = timeit.default_timer() - starttime
 print(f"External Thread time: {elapsed_time:.3f}s")
-show_object(external.locate(Location((10, -10, 0))))
 
 # IsoThread internal in the form of a nut
 starttime = timeit.default_timer()
@@ -91,7 +88,6 @@ nut = iso_internal.fuse(iso_internal_nut.part)
 elapsed_time = timeit.default_timer() - starttime
 print(f"Nut elapsed time: {elapsed_time:.3f}s")
 print(f"{nut.is_valid()=}")
-show_object(nut.locate(Location((-10, 10, 0))))
 
 # IsoThread external in the form of a screw
 starttime = timeit.default_timer()
@@ -111,12 +107,10 @@ external_core = Cylinder(
 iso_external_screw = iso_external.fuse(external_core)
 elapsed_time = timeit.default_timer() - starttime
 print(f"Iso External Screw elapsed time: {elapsed_time:.3f}s")
-show_object(iso_external_screw.locate(Location((10, 10, 0))))
 
 # Acme Screw
 starttime = timeit.default_timer()
 acme = AcmeThread(size="1/4", length=1 * IN)
-show_object(acme.thread_profile)
 
 acme_screw = acme + Cylinder(
     acme.root_radius, acme.length, align=(Align.CENTER, Align.CENTER, Align.MIN)
@@ -124,7 +118,6 @@ acme_screw = acme + Cylinder(
 elapsed_time = timeit.default_timer() - starttime
 print(f"Acme external elapsed time: {elapsed_time:.3f}s")
 print(f"{acme_screw.is_valid()=}")
-show_object(acme_screw.locate(Location((20, 0, 0))))
 
 # Metric Trapezoidal Thread
 starttime = timeit.default_timer()
@@ -136,7 +129,6 @@ metric_screw = metric + Cylinder(
 elapsed_time = timeit.default_timer() - starttime
 print(f"Metric external elapsed time: {elapsed_time:.3f}s")
 print(f"{metric_screw.is_valid()=}")
-show_object(metric_screw.locate(Location((-20, 0, 0))))
 
 # Plastic Thread
 starttime = timeit.default_timer()
@@ -149,5 +141,15 @@ print(f"{plastic_external.is_valid()=}")
 print(f"{plastic_internal.is_valid()=}")
 print(f"Plastic external & internal elapsed time: {elapsed_time:.3f}s")
 
-show_object(plastic_internal.locate(Location((0, -40))))
-show_object(plastic_external.locate(Location((0, 40))))
+
+show(
+    internal.locate(Location((-10, -10, 0))),
+    external.locate(Location((10, -10, 0))),
+    nut.locate(Location((-10, 10, 0))),
+    iso_external_screw.locate(Location((10, 10, 0))),
+    acme_screw.locate(Location((20, 0, 0))),
+    metric_screw.locate(Location((-20, 0, 0))),
+    plastic_internal.locate(Location((0, -40))),
+    plastic_external.locate(Location((0, 40))),
+    timeit=False,
+)
