@@ -7,7 +7,7 @@ by:   Gumyr
 date: November 11th 2021
       June 19th 2023 - ported to bd_warehouse
 
-desc: This python/cadquery code is a parameterized thread generator.
+desc: A parameterized thread generator.
 
 license:
 
@@ -26,21 +26,31 @@ license:
     limitations under the License.
 
 """
+
+# pylint has trouble with the OCP imports
+# pylint: disable=no-name-in-module, import-error
+# pylint: disable=too-many-lines
+
 import copy
 import re
-from math import copysign
-from warnings import warn
 from abc import ABC, abstractmethod
+from math import copysign, radians, tan
 from typing import Literal, Optional, Tuple, Union
-from math import sin, cos, tan, radians, pi
-from build123d import *
-from build123d.topology import tuplify
+
+from build123d.build_common import IN, MM
+from build123d.build_enums import Align, Keep, Mode, SortBy
+from build123d.build_line import BuildLine
+from build123d.build_part import BuildPart
+from build123d.build_sketch import BuildSketch
+from build123d.geometry import Axis, Location, Plane, RotationLike
+from build123d.joints import RigidJoint
+from build123d.objects_curve import Helix, Polyline
+from build123d.objects_part import BasePartObject
+from build123d.operations_generic import add, mirror, scale, split
+from build123d.operations_part import loft
+from build123d.operations_sketch import make_face
+from build123d.topology import Compound, Face, Solid, Wire, tuplify
 from OCP.TopoDS import TopoDS_Shape
-
-# from functools import cached_property, cache
-
-MM = 1
-IN = 25.4 * MM
 
 
 def is_safe(value: str) -> bool:
@@ -152,7 +162,7 @@ class Thread(BasePartObject):
         with BuildSketch(mode=Mode.PRIVATE) as thread_face:
             height = self.apex_radius - self.root_radius
             overlap = -interference * copysign(1, height)
-            with BuildLine() as thread_profile:
+            with BuildLine():  # thread profile
                 Polyline(
                     (self.root_width / 2, overlap),
                     (self.root_width / 2, 0),
@@ -279,7 +289,7 @@ class Thread(BasePartObject):
         if not 0.0 < loop_height <= 1.0:
             raise ValueError(f"Invalid loop_height ({loop_height})")
         with BuildPart() as thread_loop:
-            with BuildLine() as thread_path:
+            with BuildLine():  # thread path
                 thread_path_wire = Helix(
                     pitch=self.pitch,
                     height=loop_height * self.pitch,
@@ -288,13 +298,12 @@ class Thread(BasePartObject):
                 )
 
             for i in range(11):
-                u = i / 10
-
+                u_value = i / 10
                 with BuildSketch(
                     Plane(
-                        thread_path_wire @ u,
+                        thread_path_wire @ u_value,
                         x_dir=(0, 0, 1),
-                        z_dir=thread_path_wire % u,
+                        z_dir=thread_path_wire % u_value,
                     )
                 ):
                     add(self.thread_profile)
@@ -326,12 +335,12 @@ class Thread(BasePartObject):
                 )
 
             for i in range(11):
-                u = i / 10
-                z_dir = fade_path_wire % u
+                u_value = i / 10
+                z_dir = fade_path_wire % u_value
                 if bottom:
                     z_dir = z_dir.reverse()
                 with BuildSketch(
-                    Plane(fade_path_wire @ u, x_dir=(0, 0, 1), z_dir=z_dir)
+                    Plane(fade_path_wire @ u_value, x_dir=(0, 0, 1), z_dir=z_dir)
                 ):
                     add(self.thread_profile)
                     scale(by=(11 - i) / 11)
@@ -357,9 +366,9 @@ class Thread(BasePartObject):
                 (0, 0, self.length),
             )
         else:
-            """Decreasing inside_radius fixes the broken/missing first row chamfer
-            0.01 visually cleans up the threads more than 0.005 or 0.001 on threads up to M100
-            """
+            # Decreasing inside_radius fixes the broken/missing first row chamfer
+            # 0.01 visually cleans up the threads more than 0.005 or 0.001 on threads up
+            # to M100
             inside_radius -= 0.01
             chamfer_shape = Solid.extrude(
                 Face.make_from_wires(
@@ -711,7 +720,7 @@ class AcmeThread(TrapezoidalThread):
     @classmethod
     def _parse_size(cls, size: str) -> Tuple[float, float]:
         """Convert the provided size into a tuple of diameter and pitch"""
-        if not size in AcmeThread.acme_pitch.keys():
+        if not size in AcmeThread.acme_pitch:
             raise ValueError(
                 f"size invalid, must be one of {AcmeThread.acme_pitch.keys()}"
             )
@@ -973,7 +982,7 @@ class PlasticBottleThread(BasePartObject):
         self.style = size_match.group(1)
         self.diameter = int(size_match.group(2))
         self.finish = int(size_match.group(3))
-        if self.finish not in PlasticBottleThread._finish_data.keys():
+        if self.finish not in PlasticBottleThread._finish_data:
             raise ValueError(
                 f"finish ({self.finish}) invalid, must be one of"
                 f" {list(PlasticBottleThread._finish_data.keys())}"
