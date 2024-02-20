@@ -327,9 +327,9 @@ class Thread(BasePartObject):
 
             for i in range(11):
                 u = i / 10
-                z_dir = (fade_path_wire % u)
+                z_dir = fade_path_wire % u
                 if bottom:
-                    z_dir = (fade_path_wire % u).reverse()
+                    z_dir = z_dir.reverse()
                 with BuildSketch(
                     Plane(fade_path_wire @ u, x_dir=(0, 0, 1), z_dir=z_dir)
                 ):
