@@ -79,6 +79,7 @@ license:
     See the License for the specific language governing permissions and
     limitations under the License.
 """
+
 from math import sin, cos, tan, acos, radians
 from typing import Union
 from build123d import *
@@ -147,7 +148,7 @@ class InvoluteToothProfile(BaseLineObject):
             else []
         )
 
-        tooth = Wire.make_wire(tooth.edges().sort_by(Axis.Y) + close)
+        tooth = Wire(tooth.edges().sort_by(Axis.Y) + close)
 
         super().__init__(tooth, mode=mode)
 
@@ -172,7 +173,7 @@ class SpurGearPlan(BaseSketchObject):
         )
         gear_teeth = PolarLocations(0, tooth_count) * gear_tooth
         gear_wire = Wire.make_wire([e for tooth in gear_teeth for e in tooth.edges()])
-        gear_face = Face.make_from_wires(gear_wire)
+        gear_face = -Face.make_from_wires(gear_wire)
         super().__init__(gear_face, rotation, align, mode)
 
 
