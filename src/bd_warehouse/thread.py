@@ -33,7 +33,6 @@ license:
 
 import copy
 import re
-from abc import ABC, abstractmethod
 from math import copysign, radians, tan
 from typing import Literal, Optional, Tuple, Union
 
@@ -522,17 +521,21 @@ class IsoThread(BasePartObject):
             )
 
 
-class TrapezoidalThread(ABC, BasePartObject):
+class TrapezoidalThread(BasePartObject):
     """Trapezoidal Thread Base Class
-
-    Trapezoidal Thread base class for Metric and Acme derived classes
 
     Trapezoidal thread forms are screw thread profiles with trapezoidal outlines. They are
     the most common forms used for leadscrews (power screws). They offer high strength
     and ease of manufacture. They are typically found where large loads are required, as
     in a vise or the leadscrew of a lathe.
 
+    Trapezoidal Thread is a base class for Metric and Acme derived classes, or can be used
+    to create a trapezoidal thread with arbitrary properties.
+
     Args:
+        thread_angle (int): thread angle in degrees
+        diameter (float): thread diameter
+        pitch (float): thread pitch
         size (str): specified by derived class
         length (float): thread length
         external (bool, optional): external or internal thread selector. Defaults to True.
@@ -572,21 +575,11 @@ class TrapezoidalThread(ABC, BasePartObject):
 
     """
 
-    @property
-    @abstractmethod
-    def thread_angle(self) -> float:  # pragma: no cover
-        """The thread angle in degrees"""
-        return NotImplementedError
-
-    @classmethod
-    @abstractmethod
-    def _parse_size(cls, size: str) -> Tuple[float, float]:  # pragma: no cover
-        """Convert the provided size into a tuple of diameter and pitch"""
-        return NotImplementedError
-
     def __init__(
         self,
-        size: str,
+        diameter: float,
+        pitch: float,
+        thread_angle: float,
         length: float,
         external: bool = True,
         hand: Literal["right", "left"] = "right",
@@ -599,10 +592,12 @@ class TrapezoidalThread(ABC, BasePartObject):
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
     ):
-        self.thread_size = size
+        self.thread_size = diameter
         self.external = external
         self.length = length
-        (self.diameter, self.pitch) = self._parse_size(size)
+        self.diameter = diameter
+        self.thread_angle = thread_angle
+        self.pitch = pitch
         shoulder_width = (self.pitch / 2) * tan(radians(self.thread_angle / 2))
         apex_width = (self.pitch / 2) - shoulder_width
         root_width = (self.pitch / 2) + shoulder_width
@@ -717,16 +712,36 @@ class AcmeThread(TrapezoidalThread):
         """Return a list of the thread sizes"""
         return list(AcmeThread.acme_pitch.keys())
 
-    @classmethod
-    def _parse_size(cls, size: str) -> Tuple[float, float]:
-        """Convert the provided size into a tuple of diameter and pitch"""
-        if not size in AcmeThread.acme_pitch:
-            raise ValueError(
-                f"size invalid, must be one of {AcmeThread.acme_pitch.keys()}"
-            )
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        external: bool = True,
+        hand: Literal["right", "left"] = "right",
+        end_finishes: tuple[
+            Literal["raw", "square", "fade", "chamfer"],
+            Literal["raw", "square", "fade", "chamfer"],
+        ] = ("fade", "fade"),
+        interference: float = 0.2,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
         diameter = imperial_str_to_float(size)
         pitch = AcmeThread.acme_pitch[size]
-        return (diameter, pitch)
+        super().__init__(
+            diameter,
+            pitch,
+            self.thread_angle,
+            length,
+            external,
+            hand,
+            end_finishes,
+            interference,
+            rotation,
+            align,
+            mode,
+        )
 
 
 class MetricTrapezoidalThread(TrapezoidalThread):
@@ -813,15 +828,39 @@ class MetricTrapezoidalThread(TrapezoidalThread):
         """Return a list of the thread sizes"""
         return MetricTrapezoidalThread.standard_sizes
 
-    @classmethod
-    def _parse_size(cls, size: str) -> Tuple[float, float]:
-        """Convert the provided size into a tuple of diameter and pitch"""
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        external: bool = True,
+        hand: Literal["right", "left"] = "right",
+        end_finishes: tuple[
+            Literal["raw", "square", "fade", "chamfer"],
+            Literal["raw", "square", "fade", "chamfer"],
+        ] = ("fade", "fade"),
+        interference: float = 0.2,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
         if not size in MetricTrapezoidalThread.standard_sizes:
             raise ValueError(
                 f"size invalid, must be one of {MetricTrapezoidalThread.standard_sizes}"
             )
         (diameter, pitch) = (float(part) for part in size.split("x"))
-        return (diameter, pitch)
+        super().__init__(
+            diameter,
+            pitch,
+            self.thread_angle,
+            length,
+            external,
+            hand,
+            end_finishes,
+            interference,
+            rotation,
+            align,
+            mode,
+        )
 
 
 class PlasticBottleThread(BasePartObject):
