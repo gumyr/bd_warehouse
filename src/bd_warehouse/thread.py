@@ -530,7 +530,7 @@ class TrapezoidalThread(BasePartObject):
     in a vise or the leadscrew of a lathe.
 
     Trapezoidal Thread is a base class for Metric and Acme derived classes, or can be used
-    to create a trpezoidal thread with arbitrary properties.
+    to create a trapezoidal thread with arbitrary properties.
 
     Args:
         thread_angle (int): thread angle in degrees
