@@ -41,8 +41,8 @@ import bd_warehouse
 import importlib_resources
 from bd_warehouse.thread import IsoThread, imperial_str_to_float, is_safe
 from build123d.build_common import IN, MM, PolarLocations
-from build123d.build_enums import Align, SortBy
-from build123d.geometry import Axis, Plane, Pos, Vector
+from build123d.build_enums import Align, Mode, SortBy
+from build123d.geometry import Axis, Plane, Pos, RotationLike, Vector
 from build123d.objects_curve import (
     JernArc,
     Line,
@@ -51,12 +51,22 @@ from build123d.objects_curve import (
     RadiusArc,
     Spline,
 )
-from build123d.objects_part import Cylinder
+from build123d.objects_part import BasePartObject, Cylinder
 from build123d.objects_sketch import Polygon, Rectangle, RegularPolygon, Trapezoid
 from build123d.operations_generic import fillet, mirror, split
 from build123d.operations_part import extrude, revolve
 from build123d.operations_sketch import make_face
-from build123d.topology import Compound, Curve, Edge, Face, Shell, Sketch, Solid, Wire
+from build123d.topology import (
+    Compound,
+    Curve,
+    Edge,
+    Face,
+    Part,
+    Shell,
+    Sketch,
+    Solid,
+    Wire,
+)
 
 # ISO standards use single variable dimension labels which are used extensively
 # pylint: disable=invalid-name
@@ -341,7 +351,7 @@ def method_exists(cls, method: str) -> bool:
     return hasattr(cls, method) and callable(getattr(cls, method))
 
 
-class Nut(ABC, Solid):
+class Nut(ABC, BasePartObject):
     """Parametric Nut
 
     Base Class used to create standard threaded nuts
@@ -491,6 +501,9 @@ class Nut(ABC, Solid):
         fastener_type: str,
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
         self.nut_size = size.strip()
         size_parts = self.nut_size.split("-")
@@ -537,9 +550,9 @@ class Nut(ABC, Solid):
 
         # Unwrap the Compound if possible
         if isinstance(bd_object, Compound) and len(bd_object.solids()) == 1:
-            super().__init__(bd_object.solid().wrapped)
+            super().__init__(bd_object.solid(), rotation, align, mode)
         else:
-            super().__init__(bd_object.wrapped)
+            super().__init__(bd_object, rotation, align, mode)
 
     def make_nut(self) -> Union[Compound, Solid]:
         """Create a screw head from the 2D shapes defined in the derived class"""
@@ -640,8 +653,11 @@ class DomedCapNut(Nut):
         fastener_type: Literal["din1587"] = "din1587",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, fastener_type, hand, simple)
+        super().__init__(size, fastener_type, hand, simple, rotation, align, mode)
 
     def nut_profile(self) -> Face:
         """Create 2D profile of hex nuts with double chamfers"""
@@ -774,9 +790,11 @@ class HeatSetNut(Nut):
         fastener_type: Literal["McMaster-Carr", "Hilitchi"] = "McMaster-Carr",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        self.simple = simple
-        super().__init__(size, fastener_type, hand, simple)
+        super().__init__(size, fastener_type, hand, simple, rotation, align, mode)
 
     @staticmethod
     def knurled_cylinder_faces(
@@ -1055,8 +1073,11 @@ class HexNut(Nut):
         fastener_type: Literal["iso4032", "iso4033", "iso4035"] = "iso4032",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, fastener_type, hand, simple)
+        super().__init__(size, fastener_type, hand, simple, rotation, align, mode)
 
     nut_profile = Nut.default_nut_profile
     nut_plan = Nut.default_nut_plan
@@ -1082,8 +1103,11 @@ class HexNutWithFlange(Nut):
         fastener_type: Literal["din1665"] = "din1665",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, fastener_type, hand, simple)
+        super().__init__(size, fastener_type, hand, simple, rotation, align, mode)
 
     nut_profile = Nut.default_nut_profile
     nut_plan = Nut.default_nut_plan
@@ -1142,8 +1166,11 @@ class UnchamferedHexagonNut(Nut):
         fastener_type: Literal["iso4036"] = "iso4036",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, fastener_type, hand, simple)
+        super().__init__(size, fastener_type, hand, simple, rotation, align, mode)
 
     def nut_profile(self):
         """Create 2D profile of hex nuts with double chamfers"""
@@ -1177,8 +1204,11 @@ class SquareNut(Nut):
         fastener_type: Literal["din557"] = "din557",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, fastener_type, hand, simple)
+        super().__init__(size, fastener_type, hand, simple, rotation, align, mode)
 
     def nut_profile(self) -> Face:
         """Create 2D profile of hex nuts with double chamfers"""
@@ -1213,7 +1243,7 @@ class SquareNut(Nut):
         return Plane.XZ * Rectangle(width / 2, m, align=Align.MIN).face()
 
 
-class Screw(ABC, Solid):
+class Screw(ABC, BasePartObject):
     """Parametric Screw
 
     Base class for a set of threaded screws or bolts
@@ -1388,6 +1418,9 @@ class Screw(ABC, Solid):
         hand: Optional[Literal["right", "left"]] = "right",
         simple: Optional[bool] = True,
         socket_clearance: Optional[float] = 6 * MM,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
         self.screw_size = size
         size_parts = size.strip().split("-")
@@ -1466,9 +1499,9 @@ class Screw(ABC, Solid):
 
         # Unwrap the Compound - it always gets generated but is unnecessary
         if isinstance(bd_object, Compound) and len(bd_object.solids()) == 1:
-            super().__init__(bd_object.solid().wrapped)
+            super().__init__(bd_object.solid(), rotation, align, mode)
         else:
-            super().__init__(bd_object.wrapped)
+            super().__init__(bd_object, rotation, align, mode)
 
     def make_head(self) -> Solid:
         """Create a screw head from the 2D shapes defined in the derived class"""
@@ -1601,8 +1634,20 @@ class ButtonHeadScrew(Screw):
         fastener_type: Literal["iso7380_1"] = "iso7380_1",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, length, fastener_type, hand, simple)
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
 
     def head_profile(self) -> Face:
         """Create 2D profile of button head screws"""
@@ -1640,8 +1685,20 @@ class ButtonHeadWithCollarScrew(Screw):
         fastener_type: Literal["iso7380_2"] = "iso7380_2",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, length, fastener_type, hand, simple)
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
 
     def head_profile(self) -> Face:
         """Create 2D profile of button head screws with collar"""
@@ -1692,8 +1749,20 @@ class CheeseHeadScrew(Screw):
         fastener_type: Literal["iso1207", "iso7048", "iso14580"] = "iso7048",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, length, fastener_type, hand, simple)
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
 
     def head_profile(self) -> Face:
         """cheese head screws"""
@@ -1727,11 +1796,25 @@ class CounterSunkScrew(Screw):
         self,
         size: str,
         length: float,
-        fastener_type: Literal["iso2009", "iso7046", "iso10642","iso14581","iso14582"] = "iso10642",
+        fastener_type: Literal[
+            "iso2009", "iso7046", "iso10642", "iso14581", "iso14582"
+        ] = "iso10642",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, length, fastener_type, hand, simple)
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
 
     def length_offset(self):
         """Countersunk screws include the head in the total length"""
@@ -1779,8 +1862,20 @@ class HexHeadScrew(Screw):
         fastener_type: Literal["iso4014", "iso4017"] = "iso4014",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, length, fastener_type, hand, simple)
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
 
     def head_profile(self) -> Face:
         """Create 2D profile of hex head screws"""
@@ -1825,6 +1920,7 @@ class HexHeadWithFlangeScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "hex_head_with_flange_parameters.csv"
     )
+
     def __init__(
         self,
         size: str,
@@ -1832,9 +1928,20 @@ class HexHeadWithFlangeScrew(Screw):
         fastener_type: Literal["en1662", "en1665"] = "en1662",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, length, fastener_type, hand, simple)
-
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
 
     head_profile = HexHeadScrew.head_profile
     head_plan = HexHeadScrew.head_plan
@@ -1895,9 +2002,20 @@ class PanHeadScrew(Screw):
         fastener_type: Literal["iso1580", "iso14583", "asme_b_18.6.3"] = "iso14583",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, length, fastener_type, hand, simple)
-
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
 
     def head_profile(self) -> Face:
         """Slotted pan head screws"""
@@ -1939,8 +2057,20 @@ class PanHeadWithCollarScrew(Screw):
         fastener_type: Literal["din967"] = "din967",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, length, fastener_type, hand, simple)
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
 
     def head_profile(self) -> Face:
         """Cross recessed pan head screws with collar"""
@@ -1972,6 +2102,7 @@ class RaisedCheeseHeadScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "raised_cheese_head_parameters.csv"
     )
+
     def __init__(
         self,
         size: str,
@@ -1979,8 +2110,20 @@ class RaisedCheeseHeadScrew(Screw):
         fastener_type: Literal["iso7045"] = "iso7045",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, length, fastener_type, hand, simple)
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
 
     def head_profile(self) -> Face:
         """raised cheese head screws"""
@@ -2013,15 +2156,28 @@ class RaisedCounterSunkOvalHeadScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "raised_countersunk_oval_head_parameters.csv"
     )
+
     def __init__(
         self,
         size: str,
         length: float,
-        fastener_type: Literal["iso2010","iso7047","iso14584"] = "iso14584",
+        fastener_type: Literal["iso2010", "iso7047", "iso14584"] = "iso14584",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, length, fastener_type, hand, simple)
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
 
     def length_offset(self):
         """Raised countersunk oval head screws include the head but not oval
@@ -2093,8 +2249,20 @@ class SetScrew(Screw):
         fastener_type: Literal["iso4026"] = "iso4026",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, length, fastener_type, hand, simple)
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
 
     def custom_make(self):
         """Setscrews are custom builds"""
@@ -2155,8 +2323,20 @@ class SocketHeadCapScrew(Screw):
         fastener_type: Literal["iso4762"] = "iso4762",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, length, fastener_type, hand, simple)
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
 
     def head_profile(self):
         """Socket Head Cap Screws"""
@@ -2172,7 +2352,7 @@ class SocketHeadCapScrew(Screw):
     countersink_profile = Screw.default_countersink_profile
 
 
-class Washer(ABC, Solid):
+class Washer(ABC, BasePartObject):
     """Parametric Washer
 
     Base class used to create standard washers
@@ -2267,6 +2447,9 @@ class Washer(ABC, Solid):
         self,
         size: str,
         fastener_type: str,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
         self.washer_size = size
         self.thread_size = size
@@ -2293,7 +2476,7 @@ class Washer(ABC, Solid):
             ) from e
         bd_object = self.make_washer()
 
-        super().__init__(bd_object.wrapped)
+        super().__init__(bd_object, rotation, align, mode)
 
     def make_washer(self) -> Solid:
         """Create a screw head from the 2D shapes defined in the derived class"""
@@ -2337,8 +2520,11 @@ class PlainWasher(Washer):
         self,
         size: str,
         fastener_type: Literal["iso7089", "iso7091", "iso7093", "iso7094"],
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
     ):
-        super().__init__(size, fastener_type)
+        super().__init__(size, fastener_type, rotation, align, mode)
 
     fastener_data = read_fastener_parameters_from_csv("plain_washer_parameters.csv")
     washer_profile = Washer.default_washer_profile
@@ -2354,8 +2540,15 @@ class ChamferedWasher(Washer):
 
     fastener_data = read_fastener_parameters_from_csv("chamfered_washer_parameters.csv")
 
-    def __init__(self, size: str, fastener_type: Literal["iso7090"] = "iso7090"):
-        super().__init__(size, fastener_type)
+    def __init__(
+        self,
+        size: str,
+        fastener_type: Literal["iso7090"] = "iso7090",
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+        super().__init__(size, fastener_type, rotation, align, mode)
 
     def washer_profile(self) -> Face:
         """Create 2D profile of hex washers with double chamfers"""
@@ -2386,8 +2579,15 @@ class CheeseHeadWasher(Washer):
         "cheese_head_washer_parameters.csv"
     )
 
-    def __init__(self, size: str, fastener_type: Literal["iso7092"] = "iso7092"):
-        super().__init__(size, fastener_type)
+    def __init__(
+        self,
+        size: str,
+        fastener_type: Literal["iso7092"] = "iso7092",
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+        super().__init__(size, fastener_type, rotation, align, mode)
 
     def washer_profile(self) -> Face:
         """Create 2D profile of hex washers with double chamfers"""
