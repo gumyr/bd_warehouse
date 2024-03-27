@@ -485,7 +485,6 @@ class Nut(ABC, Solid):
         """Screw only parameter"""
         return 0
 
-    # @cache
     def __init__(
         self,
         size: str,
@@ -564,7 +563,10 @@ class Nut(ABC, Solid):
         # Add a flange as it exists outside of the head plan
         if method_exists(self.__class__, "flange_profile"):
             flange = revolve(
-                split(self.flange_profile(), Plane.YZ.offset(self.thread_diameter / 2)),
+                split(
+                    self.flange_profile(),
+                    Plane.YZ.offset(self.thread_diameter / 2 + 0.1),
+                ),
                 Axis.Z,
             )
             nut = nut.fuse(flange)
@@ -757,6 +759,16 @@ class HeatSetNut(Nut):
     """
 
     fastener_data = read_fastener_parameters_from_csv("heatset_nut_parameters.csv")
+
+    # def __init__(
+    #     self,
+    #     size: str,
+    #     fastener_type: Literal["McMaster-Carr", "Hilitchi"],
+    #     hand: Literal["right", "left"] = "right",
+    #     simple: bool = True,
+    # ):
+    #     self.simple = simple
+    #     super().__init__(size, fastener_type, hand, simple)
 
     @staticmethod
     def knurled_cylinder_faces(
