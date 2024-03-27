@@ -492,7 +492,6 @@ class Nut(ABC, Solid):
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
     ):
-        """Parse Nut input parameters"""
         self.nut_size = size.strip()
         size_parts = self.nut_size.split("-")
         if 3 > len(size_parts) < 2:
@@ -635,6 +634,15 @@ class DomedCapNut(Nut):
 
     fastener_data = read_fastener_parameters_from_csv("domed_cap_nut_parameters.csv")
 
+    def __init__(
+        self,
+        size: str,
+        fastener_type: Literal["din1587"] = "din1587",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, fastener_type, hand, simple)
+
     def nut_profile(self) -> Face:
         """Create 2D profile of hex nuts with double chamfers"""
         (dk, m, s) = (self.nut_data[p] for p in ["dk", "m", "s"])
@@ -760,15 +768,15 @@ class HeatSetNut(Nut):
 
     fastener_data = read_fastener_parameters_from_csv("heatset_nut_parameters.csv")
 
-    # def __init__(
-    #     self,
-    #     size: str,
-    #     fastener_type: Literal["McMaster-Carr", "Hilitchi"],
-    #     hand: Literal["right", "left"] = "right",
-    #     simple: bool = True,
-    # ):
-    #     self.simple = simple
-    #     super().__init__(size, fastener_type, hand, simple)
+    def __init__(
+        self,
+        size: str,
+        fastener_type: Literal["McMaster-Carr", "Hilitchi"] = "McMaster-Carr",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        self.simple = simple
+        super().__init__(size, fastener_type, hand, simple)
 
     @staticmethod
     def knurled_cylinder_faces(
@@ -1041,6 +1049,15 @@ class HexNut(Nut):
 
     fastener_data = read_fastener_parameters_from_csv("hex_nut_parameters.csv")
 
+    def __init__(
+        self,
+        size: str,
+        fastener_type: Literal["iso4032", "iso4033", "iso4035"] = "iso4032",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, fastener_type, hand, simple)
+
     nut_profile = Nut.default_nut_profile
     nut_plan = Nut.default_nut_plan
     countersink_profile = Nut.default_countersink_profile
@@ -1058,6 +1075,15 @@ class HexNutWithFlange(Nut):
     fastener_data = read_fastener_parameters_from_csv(
         "hex_nut_with_flange_parameters.csv"
     )
+
+    def __init__(
+        self,
+        size: str,
+        fastener_type: Literal["din1665"] = "din1665",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, fastener_type, hand, simple)
 
     nut_profile = Nut.default_nut_profile
     nut_plan = Nut.default_nut_plan
@@ -1110,6 +1136,15 @@ class UnchamferedHexagonNut(Nut):
         "unchamfered_hex_nut_parameters.csv"
     )
 
+    def __init__(
+        self,
+        size: str,
+        fastener_type: Literal["iso4036"] = "iso4036",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, fastener_type, hand, simple)
+
     def nut_profile(self):
         """Create 2D profile of hex nuts with double chamfers"""
         (m, s) = (self.nut_data[p] for p in ["m", "s"])
@@ -1135,6 +1170,15 @@ class SquareNut(Nut):
     """
 
     fastener_data = read_fastener_parameters_from_csv("square_nut_parameters.csv")
+
+    def __init__(
+        self,
+        size: str,
+        fastener_type: Literal["din557"] = "din557",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, fastener_type, hand, simple)
 
     def nut_profile(self) -> Face:
         """Create 2D profile of hex nuts with double chamfers"""
@@ -1345,7 +1389,6 @@ class Screw(ABC, Solid):
         simple: Optional[bool] = True,
         socket_clearance: Optional[float] = 6 * MM,
     ):
-        """Parse Screw input parameters"""
         self.screw_size = size
         size_parts = size.strip().split("-")
         if not len(size_parts) == 2:
@@ -1551,6 +1594,16 @@ class ButtonHeadScrew(Screw):
 
     fastener_data = read_fastener_parameters_from_csv("button_head_parameters.csv")
 
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["iso7380_1"] = "iso7380_1",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, length, fastener_type, hand, simple)
+
     def head_profile(self) -> Face:
         """Create 2D profile of button head screws"""
         (dk, dl, k, rf) = (self.screw_data[p] for p in ["dk", "dl", "k", "rf"])
@@ -1579,6 +1632,16 @@ class ButtonHeadWithCollarScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "button_head_with_collar_parameters.csv"
     )
+
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["iso7380_2"] = "iso7380_2",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, length, fastener_type, hand, simple)
 
     def head_profile(self) -> Face:
         """Create 2D profile of button head screws with collar"""
@@ -1622,6 +1685,16 @@ class CheeseHeadScrew(Screw):
 
     fastener_data = read_fastener_parameters_from_csv("cheese_head_parameters.csv")
 
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["iso1207", "iso7048", "iso14580"] = "iso7048",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, length, fastener_type, hand, simple)
+
     def head_profile(self) -> Face:
         """cheese head screws"""
         (k, dk) = (self.screw_data[p] for p in ["k", "dk"])
@@ -1649,6 +1722,16 @@ class CounterSunkScrew(Screw):
     """
 
     fastener_data = read_fastener_parameters_from_csv("countersunk_head_parameters.csv")
+
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["iso2009", "iso7046", "iso10642","iso14581","iso14582"] = "iso10642",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, length, fastener_type, hand, simple)
 
     def length_offset(self):
         """Countersunk screws include the head in the total length"""
@@ -1688,6 +1771,16 @@ class HexHeadScrew(Screw):
     """
 
     fastener_data = read_fastener_parameters_from_csv("hex_head_parameters.csv")
+
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["iso4014", "iso4017"] = "iso4014",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, length, fastener_type, hand, simple)
 
     def head_profile(self) -> Face:
         """Create 2D profile of hex head screws"""
@@ -1732,6 +1825,16 @@ class HexHeadWithFlangeScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "hex_head_with_flange_parameters.csv"
     )
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["en1662", "en1665"] = "en1662",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, length, fastener_type, hand, simple)
+
 
     head_profile = HexHeadScrew.head_profile
     head_plan = HexHeadScrew.head_plan
@@ -1785,6 +1888,17 @@ class PanHeadScrew(Screw):
 
     fastener_data = read_fastener_parameters_from_csv("pan_head_parameters.csv")
 
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["iso1580", "iso14583", "asme_b_18.6.3"] = "iso14583",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, length, fastener_type, hand, simple)
+
+
     def head_profile(self) -> Face:
         """Slotted pan head screws"""
         (k, dk) = (self.screw_data[p] for p in ["k", "dk"])
@@ -1818,6 +1932,16 @@ class PanHeadWithCollarScrew(Screw):
         "pan_head_with_collar_parameters.csv"
     )
 
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["din967"] = "din967",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, length, fastener_type, hand, simple)
+
     def head_profile(self) -> Face:
         """Cross recessed pan head screws with collar"""
         (rf, k, dk, c) = (self.screw_data[p] for p in ["rf", "k", "dk", "c"])
@@ -1848,6 +1972,15 @@ class RaisedCheeseHeadScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "raised_cheese_head_parameters.csv"
     )
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["iso7045"] = "iso7045",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, length, fastener_type, hand, simple)
 
     def head_profile(self) -> Face:
         """raised cheese head screws"""
@@ -1880,6 +2013,15 @@ class RaisedCounterSunkOvalHeadScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "raised_countersunk_oval_head_parameters.csv"
     )
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["iso2010","iso7047","iso14584"] = "iso14584",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, length, fastener_type, hand, simple)
 
     def length_offset(self):
         """Raised countersunk oval head screws include the head but not oval
@@ -1944,6 +2086,16 @@ class SetScrew(Screw):
 
     fastener_data = read_fastener_parameters_from_csv("setscrew_parameters.csv")
 
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["iso4026"] = "iso4026",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, length, fastener_type, hand, simple)
+
     def custom_make(self):
         """Setscrews are custom builds"""
         return self.make_setscrew()
@@ -1995,6 +2147,16 @@ class SocketHeadCapScrew(Screw):
     """
 
     fastener_data = read_fastener_parameters_from_csv("socket_head_cap_parameters.csv")
+
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["iso4762"] = "iso4762",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+    ):
+        super().__init__(size, length, fastener_type, hand, simple)
 
     def head_profile(self):
         """Socket Head Cap Screws"""
