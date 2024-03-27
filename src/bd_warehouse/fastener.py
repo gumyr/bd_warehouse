@@ -53,7 +53,7 @@ from build123d.objects_curve import (
 )
 from build123d.objects_part import Cylinder
 from build123d.objects_sketch import Polygon, Rectangle, RegularPolygon, Trapezoid
-from build123d.operations_generic import fillet, split
+from build123d.operations_generic import fillet, mirror, split
 from build123d.operations_part import extrude, revolve
 from build123d.operations_sketch import make_face
 from build123d.topology import Compound, Curve, Edge, Face, Shell, Sketch, Solid, Wire
@@ -582,6 +582,7 @@ class Nut(ABC, Solid):
             )
             nut = nut.fuse(thread)
 
+        # return thread
         return nut
 
     def default_nut_profile(self) -> Face:
@@ -1427,8 +1428,9 @@ class Screw(ABC, Solid):
             # pylint: disable=no-member
             profile = self.head_profile()
             profile_bbox = profile.bounding_box()
-            max_head_height = profile_bbox.max.Z
+            max_head_height = profile_bbox.size.Z
             max_head_radius = profile_bbox.max.X
+            min_head_height = profile_bbox.min.Z
 
             # Create the basic head shape
             head = revolve(profile)
@@ -1440,8 +1442,11 @@ class Screw(ABC, Solid):
             # As the slot cuts across the entire head it must go outside of the top
             # face. By creating an overly large head plan the slot can be safely
             # contained within and it doesn't clip the revolved profile.
-            # head_plan = cq.Workplane("XY").circle(max_head_radius)
-            head_plan = Face.make_rect(3 * max_head_radius, 3 * max_head_radius)
+            head_plan = Face.make_rect(
+                3 * max_head_radius,
+                3 * max_head_radius,
+                Plane.XY.offset(min_head_height),
+            )
 
         # Potentially modify the head to conform to the shape of head_plan
         # (e.g. hex) and/or to add an engagement recess
@@ -1456,10 +1461,10 @@ class Screw(ABC, Solid):
             head_blank = extrude(head_plan, max_head_height, (0, 0, 1)) - recess
             head = head.intersect(head_blank)
         elif has_plan:
-            head_blank = extrude(head_plan, max_head_height, (0, 0, 1))
+            head_blank = extrude(head_plan, max_head_height)
             head = head.intersect(head_blank)
 
-        # # Add a flange as it exists outside of the head plan
+        # Add a flange as it exists outside of the head plan
         if has_flange:
             # pylint: disable=no-member
             head = head.fuse(revolve(self.flange_profile()))
@@ -1640,7 +1645,10 @@ class CounterSunkScrew(Screw):
     def head_profile(self) -> Face:
         """Create 2D profile of countersunk screw heads"""
         (a, k, dk) = (self.screw_data[p] for p in ["a", "k", "dk"])
-        profile: Sketch = Plane.XZ * Trapezoid(dk, k, 90 - a / 2, rotation=180)
+        profile: Sketch = Plane.XZ * mirror(
+            Trapezoid(dk, k, 90 - a / 2, align=(Align.CENTER, Align.MAX), rotation=180),
+            Plane.XY,
+        )
         profile = fillet(profile.vertices().group_by(Axis.Z)[-1], k * 0.075)
         return split(profile, Plane.YZ)
 
@@ -1649,7 +1657,9 @@ class CounterSunkScrew(Screw):
     def countersink_profile(self, fit: Literal["Close", "Normal", "Loose"]) -> Face:
         """Create 2D profile of countersink profile"""
         (a, dk, k) = (self.screw_data[p] for p in ["a", "dk", "k"])
-        profile: Sketch = Plane.XZ * Trapezoid(dk, k, 90 - a / 2, rotation=180)
+        profile: Sketch = Plane.XZ * Trapezoid(
+            dk, k, 90 - a / 2, align=(Align.CENTER, Align.MIN), rotation=180
+        )
         return split(profile, Plane.YZ)
 
 
