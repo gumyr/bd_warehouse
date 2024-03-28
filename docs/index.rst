@@ -63,15 +63,15 @@ Table Of Contents
     :maxdepth: 2
 
     installation.rst
-    pipe.rst
+    fastener.rst
     flange.rst
+    pipe.rst
     thread.rst
 
 ..    bearing.rst
 ..    chain.rst
 ..    drafting.rst
 ..    finger_jointed_boxes.rst
-..    fastener.rst
 ..    sprocket.rst
 
 ==================

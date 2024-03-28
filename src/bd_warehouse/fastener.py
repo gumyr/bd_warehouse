@@ -32,7 +32,10 @@ license:
 
 """
 
+from __future__ import annotations
+
 import csv
+import math
 from abc import ABC, abstractmethod
 from math import cos, pi, radians, sin, sqrt, tan
 from typing import Literal, Optional, Union
@@ -40,9 +43,12 @@ from typing import Literal, Optional, Union
 import bd_warehouse
 import importlib_resources
 from bd_warehouse.thread import IsoThread, imperial_str_to_float, is_safe
-from build123d.build_common import IN, MM, PolarLocations
+from build123d.build_common import IN, MM, PolarLocations, Locations, validate_inputs
 from build123d.build_enums import Align, Mode, SortBy
-from build123d.geometry import Axis, Plane, Pos, RotationLike, Vector
+from build123d.build_line import BuildLine
+from build123d.build_part import BuildPart
+from build123d.build_sketch import BuildSketch
+from build123d.geometry import Axis, Location, Plane, Pos, RotationLike, Vector
 from build123d.objects_curve import (
     JernArc,
     Line,
@@ -52,8 +58,14 @@ from build123d.objects_curve import (
     Spline,
 )
 from build123d.objects_part import BasePartObject, Cylinder
-from build123d.objects_sketch import Polygon, Rectangle, RegularPolygon, Trapezoid
-from build123d.operations_generic import fillet, mirror, split
+from build123d.objects_sketch import (
+    Polygon,
+    Rectangle,
+    RectangleRounded,
+    RegularPolygon,
+    Trapezoid,
+)
+from build123d.operations_generic import add, chamfer, fillet, split
 from build123d.operations_part import extrude, revolve
 from build123d.operations_sketch import make_face
 from build123d.topology import (
@@ -247,8 +259,10 @@ def cross_recess(size: str) -> tuple[Face, float]:
     except KeyError as e:
         raise ValueError(f"{size} is an invalid cross size {widths}") from e
 
-    recess = Sketch() + Rectangle(m, m / 6) + Rectangle(m / 6, m)
-    recess: Sketch = fillet(recess.vertices().group_by(SortBy.DISTANCE)[0], m / 3)
+    with BuildSketch() as recess:
+        Rectangle(m, m / 6)
+        Rectangle(m / 6, m)
+        fillet(recess.vertices().group_by(SortBy.DISTANCE)[0], m / 3)
     return (recess.face(), depths[size])
 
 
@@ -257,7 +271,9 @@ def hex_recess(size: float) -> Face:
 
     size refers to the size across the flats
     """
-    return RegularPolygon(radius=size / 2, side_count=6, major_radius=False).face()
+    with BuildSketch() as plan:
+        RegularPolygon(radius=size / 2, side_count=6, major_radius=False)
+    return plan.face()
 
 
 def hexalobular_recess(size: str) -> tuple[Face, float]:
@@ -298,14 +314,16 @@ def hexalobular_recess(size: str) -> tuple[Face, float]:
         + (center_internal_arc - center_external_arc[1]).normalized() * Re,
     ]
 
-    # Create one sixth of the complete repeating wire
-    one_sixth_outline = (
-        Curve()
-        + RadiusArc((0, A / 2), tangent_points[0], Re)
-        + RadiusArc(*tangent_points, -Ri)
-        + RadiusArc(tangent_points[1], (sqrt_3 * A / 4, A / 4), Re)
-    )
-    plan = make_face(PolarLocations(0, 6) * one_sixth_outline)
+    # Create one sixth of the wire and repeat it
+    with BuildSketch() as plan:
+        with BuildLine(mode=Mode.PRIVATE) as arc:
+            RadiusArc((0, A / 2), tangent_points[0], Re)
+            RadiusArc(*tangent_points, -Ri)
+            RadiusArc(tangent_points[1], (sqrt_3 * A / 4, A / 4), Re)
+        with PolarLocations(0, 6):
+            add(arc.line)
+        make_face()
+
     return (plan.face(), 0.6 * A)
 
 
@@ -382,6 +400,8 @@ class Nut(ABC, BasePartObject):
         nut_diameter (float): maximum diameter of the nut
 
     """
+
+    _applies_to = [BuildPart._tag]
 
     # Read clearance and tap hole dimensions tables
     # Close, Medium, Loose
@@ -505,6 +525,7 @@ class Nut(ABC, BasePartObject):
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
     ):
+        self.hole_locations: list[Location] = []  #: custom holes locations
         self.nut_size = size.strip()
         size_parts = self.nut_size.split("-")
         if 3 > len(size_parts) < 2:
@@ -609,21 +630,24 @@ class Nut(ABC, BasePartObject):
         # Note that when intersecting a revolved shape with a extruded polygon the OCCT
         # core may fail unless the polygon is slightly larger than the circle so
         # all profiles must be reduced by a small fudge factor
-        profile = Plane.XZ * Polygon(
-            (0, 0),
-            (s / 2, 0),
-            (e / 2 - 0.001, cs),
-            (e / 2 - 0.001, m - cs),
-            (s / 2, m),
-            (0, m),
-            (0, 0),
-            align=None,
-        )
-        return profile.face()
+        with BuildSketch(Plane.XZ) as profile:
+            Polygon(
+                (0, 0),
+                (s / 2, 0),
+                (e / 2 - 0.001, cs),
+                (e / 2 - 0.001, m - cs),
+                (s / 2, m),
+                (0, m),
+                (0, 0),
+                align=None,
+            )
+        return profile.sketch.face()
 
     def default_nut_plan(self) -> Face:
         """Create a hexagon solid"""
-        return RegularPolygon(self.nut_data["s"] / 2, 6, major_radius=False)
+        with BuildSketch() as plan:
+            RegularPolygon(self.nut_data["s"] / 2, 6, major_radius=False)
+        return plan.face()
 
     def default_countersink_profile(self, fit) -> Face:
         """A simple rectangle with gets revolved into a cylinder with an
@@ -665,23 +689,25 @@ class DomedCapNut(Nut):
         e = polygon_diagonal(s, 6)
         # Chamfer angle must be between 15 and 30 degrees
         cs = (e - s) * tan(radians(15)) / 2
-        profile = Plane.XZ * make_face(
-            Polyline(
-                (1 * MM, 0),
-                (s / 2, 0),
-                (e / 2, cs),
-                (e / 2, m - cs),
-                (s / 2, m),
-                (dk / 2, m),
-            )
-            + RadiusArc((dk / 2, m), (0, m + dk / 2), -dk / 2)
-            + Line((0, m + dk / 2), (0, m + dk / 2 - 1 * MM))
-            + RadiusArc(
-                (0, m + dk / 2 - 1 * MM), (dk / 2 - 1 * MM, m), (dk / 2 - 1 * MM)
-            )
-            + Polyline((dk / 2 - 1 * MM, m), (1 * MM, m), (1 * MM, 0))
-        )
-        return profile
+        with BuildSketch(Plane.XZ) as profile:
+            with BuildLine():
+                Polyline(
+                    (1 * MM, 0),
+                    (s / 2, 0),
+                    (e / 2, cs),
+                    (e / 2, m - cs),
+                    (s / 2, m),
+                    (dk / 2, m),
+                )
+                RadiusArc((dk / 2, m), (0, m + dk / 2), -dk / 2)
+                Line((0, m + dk / 2), (0, m + dk / 2 - 1 * MM))
+                RadiusArc(
+                    (0, m + dk / 2 - 1 * MM), (dk / 2 - 1 * MM, m), (dk / 2 - 1 * MM)
+                )
+                Polyline((dk / 2 - 1 * MM, m), (1 * MM, m), (1 * MM, 0))
+            make_face()
+
+        return profile.sketch.face()
 
     def countersink_profile(self, fit) -> Face:
         """A simple rectangle with gets revolved into a cylinder with an
@@ -691,8 +717,9 @@ class DomedCapNut(Nut):
         del fit
         (dk, m, s) = (self.nut_data[p] for p in ["dk", "m", "s"])
         width = polygon_diagonal(s, 6) + self.socket_clearance
-        # return cq.Workplane("XZ").rect(width / 2, m + dk / 2, centered=False)
-        return Plane.XZ * Rectangle(width / 2, m + dk / 2, align=Align.MIN).face()
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(width / 2, m + dk / 2, align=Align.MIN)
+        return profile.sketch.face()
 
     nut_plan = Nut.default_nut_plan
 
@@ -1120,14 +1147,14 @@ class HexNutWithFlange(Nut):
             (c / 2) * cos(radians(90 - flange_angle)),
             (c / 2) * sin(radians(90 - flange_angle)),
         ) + Vector((dc - c) / 2, c / 2)
-        p_line = PolarLine(tangent_point, dc / 2 - c / 2, 180 - flange_angle)
-        profile = Plane.XZ * make_face(
-            Line((0, 0), (dc / 2 - c / 2, 0))
-            + RadiusArc((dc / 2 - c / 2, 0), tangent_point, -c / 2)
-            + p_line
-            + Polyline(p_line @ 1, (0, p_line.position_at(1).Y), (0, 0))
-        )
-        return profile
+        with BuildSketch(Plane.XZ) as profile:
+            with BuildLine():
+                l1 = Line((0, 0), (dc / 2 - c / 2, 0))
+                RadiusArc(l1 @ 1, tangent_point, -c / 2)
+                l3 = PolarLine(tangent_point, dc / 2 - c / 2, 180 - flange_angle)
+                Polyline(l3 @ 1, (0, l3.position_at(1).Y), (0, 0))
+            make_face()
+        return profile.sketch.face()
 
     def countersink_profile(self, fit: Literal["Close", "Normal", "Loose"]) -> Face:
         """A simple rectangle with gets revolved into a cylinder with
@@ -1142,7 +1169,9 @@ class HexNutWithFlange(Nut):
         (dc, s, m) = (self.nut_data[p] for p in ["dc", "s", "m"])
         clearance = clearance_hole_diameter - self.thread_diameter
         width = max(dc + clearance, polygon_diagonal(s, 6) + self.socket_clearance)
-        return Plane.XZ * Rectangle(width / 2, m, align=Align.MIN).face()
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(width / 2, m, align=Align.MIN)
+        return profile.sketch.face()
 
     nut_plan = Nut.default_nut_plan
 
@@ -1175,13 +1204,9 @@ class UnchamferedHexagonNut(Nut):
     def nut_profile(self):
         """Create 2D profile of hex nuts with double chamfers"""
         (m, s) = (self.nut_data[p] for p in ["m", "s"])
-        # return cq.Workplane("XZ").rect(
-        #     polygon_diagonal(s, 6) / 2 - 0.001, m, centered=False
-        # )
-        return (
-            Plane.XZ
-            * Rectangle(polygon_diagonal(s, 6) / 2 - 0.001, m, align=Align.MIN).face()
-        )
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(polygon_diagonal(s, 6) / 2 - 0.001, m, align=Align.MIN)
+        return profile.sketch.face()
 
     nut_plan = Nut.default_nut_plan
     countersink_profile = Nut.default_countersink_profile
@@ -1216,16 +1241,17 @@ class SquareNut(Nut):
         e = polygon_diagonal(s, 4)
         # Chamfer angle must be between 15 and 30 degrees
         cs = (e - s) * tan(radians(15)) / 2
-        profile = Plane.XZ * Polygon(
-            (0, 0),
-            (e / 2 - 0.001, 0),
-            (e / 2 - 0.001, m - cs),
-            (s / 2, m),
-            (0, m),
-            (0, 0),
-            align=None,
-        )
-        return profile
+        with BuildSketch(Plane.XZ) as profile:
+            Polygon(
+                (0, 0),
+                (e / 2 - 0.001, 0),
+                (e / 2 - 0.001, m - cs),
+                (s / 2, m),
+                (0, m),
+                (0, 0),
+                align=None,
+            )
+        return profile.sketch.face()
 
     def nut_plan(self) -> Face:
         """Simple square for the plan"""
@@ -1240,7 +1266,9 @@ class SquareNut(Nut):
         del fit
         (m, s) = (self.nut_data[p] for p in ["m", "s"])
         width = polygon_diagonal(s, 4) + self.socket_clearance
-        return Plane.XZ * Rectangle(width / 2, m, align=Align.MIN).face()
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(width / 2, m, align=Align.MIN)
+        return profile.sketch.face()
 
 
 class Screw(ABC, BasePartObject):
@@ -1278,6 +1306,8 @@ class Screw(ABC, BasePartObject):
         head_diameter (float): maximum diameter of the screw head
         head (Solid): build123d Solid screw head as defined by class attributes
     """
+
+    _applies_to = [BuildPart._tag]
 
     # Read clearance and tap hole dimesions tables
     # Close, Medium, Loose
@@ -1368,7 +1398,7 @@ class Screw(ABC, BasePartObject):
     def min_hole_depth(self, counter_sunk: bool = True) -> float:
         """Minimum depth of a hole able to accept the screw"""
         countersink_profile = self.countersink_profile("Loose")
-        head_offset = countersink_profile.vertices(">Z").val().Z
+        head_offset = countersink_profile.vertices().sort_by(Axis.Z)[-1].Z
         if counter_sunk:
             result = self.length + head_offset - self.length_offset()
         else:
@@ -1422,6 +1452,7 @@ class Screw(ABC, BasePartObject):
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
     ):
+        self.hole_locations: list[Location] = []  #: custom holes locations
         self.screw_size = size
         size_parts = size.strip().split("-")
         if not len(size_parts) == 2:
@@ -1612,7 +1643,9 @@ class Screw(ABC, BasePartObject):
                 f"{fit} invalid, must be one of {list(self.clearance_hole_diameters.keys())}"
             ) from e
         width = clearance_hole_diameter - self.thread_diameter + self.screw_data["dk"]
-        return Rectangle(width / 2, self.screw_data["k"], align=Align.MIN).face()
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(width / 2, self.screw_data["k"], align=Align.MIN)
+        return profile.sketch.face()
 
 
 class ButtonHeadScrew(Screw):
@@ -1652,12 +1685,15 @@ class ButtonHeadScrew(Screw):
     def head_profile(self) -> Face:
         """Create 2D profile of button head screws"""
         (dk, dl, k, rf) = (self.screw_data[p] for p in ["dk", "dl", "k", "rf"])
-        profile = Plane.XZ * make_face(
-            Polyline((0, 0), (0, k), (dl / 2, k))
-            + RadiusArc((dl / 2, k), (dl / 2, 0), rf)
-            + Line((dl / 2, 0), (0, 0))
-        )
-        return profile.face()
+
+        with BuildSketch(Plane.XZ) as profile:
+            with BuildLine():
+                Polyline((0, 0), (0, k), (dl / 2, k))
+                RadiusArc((dl / 2, k), (dl / 2, 0), rf)
+                Line((dl / 2, 0), (0, 0))
+            make_face()
+
+        return profile.sketch.face()
 
     head_recess = Screw.default_head_recess
 
@@ -1705,14 +1741,15 @@ class ButtonHeadWithCollarScrew(Screw):
         (dk, dl, dc, k, rf, c) = (
             self.screw_data[p] for p in ["dk", "dl", "dc", "k", "rf", "c"]
         )
-        profile = Plane.XZ * make_face(
-            Polyline((0, 0), (0, k), (dl / 2, k))
-            + RadiusArc((dl / 2, k), (dk / 2, c), rf)
-            + Line((dk / 2, c), (dc / 2 - c / 2, c))
-            + JernArc((dc / 2 - c / 2, c), (1, 0), c / 2, -180)
-            + Line((dc / 2 - c / 2, 0), (0, 0))
-        )
-        return profile.face()
+        with BuildSketch(Plane.XZ) as profile:
+            with BuildLine():
+                Polyline((0, 0), (0, k), (dl / 2, k))
+                RadiusArc((dl / 2, k), (dk / 2, c), rf)
+                Line((dk / 2, c), (dc / 2 - c / 2, c))
+                JernArc((dc / 2 - c / 2, c), (1, 0), c / 2, -180)
+                Line((dc / 2 - c / 2, 0), (0, 0))
+            make_face()
+        return profile.sketch.face()
 
     head_recess = Screw.default_head_recess
 
@@ -1725,7 +1762,9 @@ class ButtonHeadWithCollarScrew(Screw):
                 f"{fit} invalid, must be one of {list(self.clearance_hole_diameters.keys())}"
             ) from e
         width = clearance_hole_diameter - self.thread_diameter + self.screw_data["dc"]
-        return Rectangle(width / 2, self.screw_data["k"], align=Align.MIN).face()
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(width / 2, self.screw_data["k"], align=Align.MIN)
+        return profile.sketch.face()
 
 
 class CheeseHeadScrew(Screw):
@@ -1767,9 +1806,12 @@ class CheeseHeadScrew(Screw):
     def head_profile(self) -> Face:
         """cheese head screws"""
         (k, dk) = (self.screw_data[p] for p in ["k", "dk"])
-        profile = Plane.XZ * Trapezoid(dk, k, 90 - 5, align=(Align.CENTER, Align.MIN))
-        profile = fillet(profile.vertices().group_by(Axis.Z)[-1], k * 0.25).face()
-        return split(profile, Plane.YZ)
+        with BuildSketch(Plane.XZ) as profile:
+            Trapezoid(dk, k, 90 - 5, align=(Align.CENTER, Align.MIN))
+            fillet(profile.vertices().group_by(Axis.Z)[-1], k * 0.25)
+            split(bisect_by=Plane.YZ)
+
+        return profile.sketch.face()
 
     head_recess = Screw.default_head_recess
 
@@ -1823,22 +1865,21 @@ class CounterSunkScrew(Screw):
     def head_profile(self) -> Face:
         """Create 2D profile of countersunk screw heads"""
         (a, k, dk) = (self.screw_data[p] for p in ["a", "k", "dk"])
-        profile: Sketch = Plane.XZ * mirror(
-            Trapezoid(dk, k, 90 - a / 2, align=(Align.CENTER, Align.MAX), rotation=180),
-            Plane.XY,
-        )
-        profile = fillet(profile.vertices().group_by(Axis.Z)[-1], k * 0.075)
-        return split(profile, Plane.YZ)
+        with BuildSketch(Plane.XZ) as profile:
+            Trapezoid(dk, k, 90 - a / 2, align=(Align.CENTER, Align.MAX), rotation=180)
+            fillet(profile.vertices().group_by(Axis.Y)[-1], k * 0.075)
+            split(bisect_by=Plane.YZ)
+        return profile.sketch.face()
 
     head_recess = Screw.default_head_recess
 
     def countersink_profile(self, fit: Literal["Close", "Normal", "Loose"]) -> Face:
         """Create 2D profile of countersink profile"""
         (a, dk, k) = (self.screw_data[p] for p in ["a", "dk", "k"])
-        profile: Sketch = Plane.XZ * Trapezoid(
-            dk, k, 90 - a / 2, align=(Align.CENTER, Align.MIN), rotation=180
-        )
-        return split(profile, Plane.YZ)
+        with BuildSketch(Plane.XZ) as profile:
+            Trapezoid(dk, k, 90 - a / 2, align=(Align.CENTER, Align.MIN), rotation=180)
+            split(bisect_by=Plane.YZ)
+        return profile.sketch.face()
 
 
 class HexHeadScrew(Screw):
@@ -1883,15 +1924,23 @@ class HexHeadScrew(Screw):
         e = polygon_diagonal(s, 6)
         # Chamfer angle must be between 15 and 30 degrees
         cs = (e - s) * tan(radians(15)) / 2
-        profile = Plane.XZ * Polygon(
-            (0, 0), (e / 2, 0), (e / 2, k - cs), (s / 2, k), (0, k), (0, 0), align=None
-        )
-
-        return profile
+        with BuildSketch(Plane.XZ) as profile:
+            Polygon(
+                (0, 0),
+                (e / 2, 0),
+                (e / 2, k - cs),
+                (s / 2, k),
+                (0, k),
+                (0, 0),
+                align=None,
+            )
+        return profile.sketch.face()
 
     def head_plan(self) -> Face:
         """Create a hexagon solid"""
-        return RegularPolygon(self.screw_data["s"] / 2, 6, major_radius=False).face()
+        with BuildSketch() as plan:
+            RegularPolygon(self.screw_data["s"] / 2, 6, major_radius=False)
+        return plan.sketch.face()
 
     def countersink_profile(self, fit: Literal["Close", "Normal", "Loose"]) -> Face:
         """A simple rectangle with gets revolved into a cylinder with an
@@ -1902,7 +1951,9 @@ class HexHeadScrew(Screw):
         (k, s) = (self.screw_data[p] for p in ["k", "s"])
         e = polygon_diagonal(s, 6)
         width = e + self.socket_clearance + e
-        return Plane.XZ * Rectangle(width / 2, k, align=Align.MIN).face()
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(width / 2, k, align=Align.MIN)
+        return profile.sketch.face()
 
 
 class HexHeadWithFlangeScrew(Screw):
@@ -1954,14 +2005,14 @@ class HexHeadWithFlangeScrew(Screw):
             (c / 2) * cos(radians(90 - flange_angle)),
             (c / 2) * sin(radians(90 - flange_angle)),
         ) + Vector((dc - c) / 2, c / 2)
-        p_line = PolarLine(tangent_point, dc / 2 - c / 2, 180 - flange_angle)
-        profile = Plane.XZ * make_face(
-            Line((0, 0), (dc / 2 - c / 2, 0))
-            + RadiusArc((dc / 2 - c / 2, 0), tangent_point, -c / 2)
-            + p_line
-            + Polyline(p_line @ 1, (0, (p_line @ 1).Y), (0, 0))
-        )
-        return profile
+        with BuildSketch(Plane.XZ) as profile:
+            with BuildLine():
+                l1 = Line((0, 0), (dc / 2 - c / 2, 0))
+                RadiusArc(l1 @ 1, tangent_point, -c / 2)
+                l3 = PolarLine(tangent_point, dc / 2 - c / 2, 180 - flange_angle)
+                Polyline(l3 @ 1, (0, (l3 @ 1).Y), (0, 0))
+            make_face()
+        return profile.sketch.face()
 
     def countersink_profile(self, fit: Literal["Close", "Normal", "Loose"]) -> Face:
         """A simple rectangle with gets revolved into a cylinder with
@@ -1978,7 +2029,9 @@ class HexHeadWithFlangeScrew(Screw):
         width = max(
             dc + shaft_clearance, polygon_diagonal(s, 6) + self.socket_clearance
         )
-        return Rectangle(width / 2, k, align=Align.MIN).face()
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(width / 2, k, align=Align.MIN)
+        return profile.sketch.face()
 
 
 class PanHeadScrew(Screw):
@@ -2020,17 +2073,17 @@ class PanHeadScrew(Screw):
     def head_profile(self) -> Face:
         """Slotted pan head screws"""
         (k, dk) = (self.screw_data[p] for p in ["k", "dk"])
-        s_line = Spline(
-            (dk / 2, 0),
-            (dk * 0.25, k),
-            tangents=[(-sin(radians(5)), cos(radians(5))), (-1, 0)],
-        )
-        profile = Plane.XZ * make_face(
-            Line((0, 0), (dk / 2, 0))
-            + s_line
-            + Polyline(s_line @ 1, (0, (s_line @ 1).Y), (0, 0))
-        )
-        return profile
+        with BuildSketch(Plane.XZ) as profile:
+            with BuildLine():
+                l1 = Line((0, 0), (dk / 2, 0))
+                l2 = Spline(
+                    l1 @ 1,
+                    (dk * 0.25, k),
+                    tangents=[(-sin(radians(5)), cos(radians(5))), (-1, 0)],
+                )
+                Polyline(l2 @ 1, (0, (l2 @ 1).Y), (0, 0))
+            make_face()
+        return profile.sketch.face()
 
     head_recess = Screw.default_head_recess
     countersink_profile = Screw.default_countersink_profile
@@ -2077,12 +2130,13 @@ class PanHeadWithCollarScrew(Screw):
         (rf, k, dk, c) = (self.screw_data[p] for p in ["rf", "k", "dk", "c"])
 
         flat = sqrt(k - c) * sqrt(2 * rf - (k - c))
-        profile = Plane.XZ * make_face(
-            Polyline((0, 0), (dk / 2, 0), (dk / 2, c), (flat, c))
-            + RadiusArc((flat, c), (0, k), -rf)
-            + Line((0, k), (0, 0))
-        )
-        return profile.face()
+        with BuildSketch(Plane.XZ) as profile:
+            with BuildLine():
+                Polyline((0, 0), (dk / 2, 0), (dk / 2, c), (flat, c))
+                RadiusArc((flat, c), (0, k), -rf)
+                Line((0, k), (0, 0))
+            make_face()
+        return profile.sketch.face()
 
     head_recess = Screw.default_head_recess
 
@@ -2129,12 +2183,14 @@ class RaisedCheeseHeadScrew(Screw):
         """raised cheese head screws"""
         (dk, k, rf) = (self.screw_data[p] for p in ["dk", "k", "rf"])
         oval_height = rf - sqrt(4 * rf**2 - dk**2) / 2
-        profile = Plane.XZ * make_face(
-            Line((0, 0), (0, k))
-            + RadiusArc((0, k), (dk / 2, k - oval_height), rf)
-            + Polyline((dk / 2, k - oval_height), (dk / 2, 0), (0, 0))
-        )
-        return profile
+        with BuildSketch(Plane.XZ) as profile:
+            with BuildLine():
+                Line((0, 0), (0, k))
+                RadiusArc((0, k), (dk / 2, k - oval_height), rf)
+                Polyline((dk / 2, k - oval_height), (dk / 2, 0), (0, 0))
+            make_face()
+
+        return profile.sketch.face()
 
     head_recess = Screw.default_head_recess
 
@@ -2189,26 +2245,17 @@ class RaisedCounterSunkOvalHeadScrew(Screw):
         (a, k, rf, dk) = (self.screw_data[p] for p in ["a", "k", "rf", "dk"])
         side_length = k / cos(radians(a / 2))
         oval_height = rf - sqrt(4 * rf**2 - dk**2) / 2
-        # profile = (
-        #     cq.Workplane("XZ")
-        #     .vLineTo(k + oval_height)
-        #     .radiusArc((dk / 2, k), rf)
-        #     .polarLine(side_length, -90 - a / 2)
-        #     .close()
-        # )
-        p_line = PolarLine((dk / 2, k), side_length, -90 - a / 2)
-        profile = Plane.XZ * make_face(
-            Line((0, 0), (0, k + oval_height))
-            + RadiusArc((0, k + oval_height), (dk / 2, k), rf)
-            + p_line
-            + Line(p_line @ 1, (0, 0))
-        )
-        profile = fillet(
-            profile.vertices().group_by(Axis.Z)[-1].sort_by(Axis.X)[-1], k * 0.075
-        )
-        # vertices = profile.toPending().edges(">Z").vertices(">X").vals()
-        # return profile.fillet2D(k * 0.075, vertices)
-        return profile.face()
+        with BuildSketch(Plane.XZ) as profile:
+            with BuildLine():
+                l1 = Line((0, 0), (0, k + oval_height))
+                l2 = RadiusArc(l1 @ 1, (dk / 2, k), rf)
+                l3 = PolarLine(l2 @ 1, side_length, -90 - a / 2)
+                Line(l3 @ 1, (0, 0))
+            make_face()
+            fillet(
+                profile.vertices().group_by(Axis.Z)[-1].sort_by(Axis.X)[-1], k * 0.075
+            )
+        return profile.sketch.face()
 
     head_recess = Screw.default_head_recess
 
@@ -2216,18 +2263,14 @@ class RaisedCounterSunkOvalHeadScrew(Screw):
         """A flat bottomed cone"""
         (a, k, dk) = (self.screw_data[p] for p in ["a", "k", "dk"])
         side_length = k / cos(radians(a / 2))
-        p_line = PolarLine((dk / 2, k), side_length, -90 - a / 2)
-        profile = Plane.XZ * make_face(
-            Polyline((0, 0), (0, k), (dk / 2, k)) + p_line + Line(p_line @ 1, (0, 0))
-        )
-        return profile.face()
-        return (
-            cq.Workplane("XZ")
-            .vLineTo(k)
-            .hLineTo(dk / 2)
-            .polarLine(side_length, -90 - a / 2)
-            .close()
-        )
+
+        with BuildSketch(Plane.XZ) as profile:
+            with BuildLine():
+                l1 = Polyline((0, 0), (0, k), (dk / 2, k))
+                l2 = PolarLine(l1 @ 1, side_length, -90 - a / 2)
+                Line(l2 @ 1, (0, 0))
+            make_face()
+        return profile.sketch.face()
 
 
 class SetScrew(Screw):
@@ -2282,18 +2325,22 @@ class SetScrew(Screw):
             hand=self.hand,
             simple=self.simple,
         )
-        core = Cylinder(
-            thread.min_radius,
-            self.length,
-            align=(Align.CENTER, Align.CENTER, Align.MAX),
-        ) - extrude(RegularPolygon(s / 2, 6, major_radius=False), -t)
+        with BuildPart() as core:
+            Cylinder(
+                thread.min_radius,
+                self.length,
+                align=(Align.CENTER, Align.CENTER, Align.MAX),
+            )
+            with BuildSketch():
+                RegularPolygon(s / 2, 6, major_radius=False)
+            extrude(amount=-t, mode=Mode.SUBTRACT)
 
         if self.simple:
-            ret = core
+            ret = core.part
         else:
-            ret = core.fuse(thread.translate((0, 0, -thread.length)))
+            ret = core.part.fuse(thread.moved(Pos(0, 0, -thread.length)))
 
-        return ret
+        return ret.solid()
 
     def make_head(self):
         """There is no head on a setscrew"""
@@ -2341,11 +2388,12 @@ class SocketHeadCapScrew(Screw):
     def head_profile(self):
         """Socket Head Cap Screws"""
         (dk, k) = (self.screw_data[p] for p in ["dk", "k"])
-        profile = Plane.XZ * Rectangle(dk / 2, k, align=Align.MIN)
-        profile = fillet(
-            profile.vertices().group_by(Axis.Z)[-1].sort_by(Axis.X)[-1], k * 0.075
-        )
-        return profile.face()
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(dk / 2, k, align=Align.MIN)
+            fillet(
+                profile.vertices().group_by(Axis.Z)[-1].sort_by(Axis.X)[-1], k * 0.075
+            )
+        return profile.sketch.face()
 
     head_recess = Screw.default_head_recess
 
@@ -2378,6 +2426,8 @@ class Washer(ABC, BasePartObject):
         washer_thickness (float): maximum thickness of the washer
 
     """
+
+    _applies_to = [BuildPart._tag]
 
     # Read clearance and tap hole dimesions tables
     # Close, Normal, Loose
@@ -2488,8 +2538,10 @@ class Washer(ABC, BasePartObject):
     def default_washer_profile(self) -> Face:
         """Create 2D profile of hex washers with double chamfers"""
         (d1, d2, h) = (self.washer_data[p] for p in ["d1", "d2", "h"])
-        profile = Plane.XZ * Pos(d1 / 2, h / 2) * Rectangle((d2 - d1) / 2, h)
-        return profile
+        with BuildSketch(Plane.XZ) as profile:
+            with Locations((d1 / 2, h / 2)):
+                Rectangle((d2 - d1) / 2, h)
+        return profile.sketch.face()
 
     def default_countersink_profile(
         self, fit: Literal["Close", "Normal", "Loose"]
@@ -2503,7 +2555,9 @@ class Washer(ABC, BasePartObject):
             ) from e
         gap = clearance_hole_diameter - self.thread_diameter
         (d2, h) = (self.washer_data[p] for p in ["d2", "h"])
-        return Plane.XZ * Rectangle(d2 / 2 + gap, h, align=Align.MIN)
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(d2 / 2 + gap, h, align=Align.MIN)
+        return profile.sketch.face()
 
 
 class PlainWasher(Washer):
@@ -2553,17 +2607,13 @@ class ChamferedWasher(Washer):
     def washer_profile(self) -> Face:
         """Create 2D profile of hex washers with double chamfers"""
         (d1, d2, h) = (self.washer_data[p] for p in ["d1", "d2", "h"])
-        profile = Plane.XZ * make_face(
-            Polyline(
-                (d1 / 2, 0),
-                (d2 / 2, 0),
-                (d2 / 2, 0.75 * h),
-                (d2 / 2 - h * 0.25, h),
-                (d1 / 2, h),
-                (d1 / 2, 0),
+        with BuildSketch(Plane.XZ) as profile:
+            with Locations((d1 / 2, 0)):
+                Rectangle((d2 - d1) / 2, h, align=Align.MIN)
+            chamfer(
+                profile.vertices().group_by(Axis.Y)[-1].sort_by(Axis.X)[-1], 0.25 * h
             )
-        )
-        return profile.face()
+        return profile.sketch.face()
 
     countersink_profile = Washer.default_countersink_profile
 
@@ -2592,17 +2642,391 @@ class CheeseHeadWasher(Washer):
     def washer_profile(self) -> Face:
         """Create 2D profile of hex washers with double chamfers"""
         (d1, d2, h) = (self.washer_data[p] for p in ["d1", "d2", "h"])
-        profile = Plane.XZ * make_face(
-            Polyline(
-                (d1 / 2 + h / 4, 0),
-                (d2 / 2, 0),
-                (d2 / 2, h),
-                (d1 / 2 + h / 4, h),
-                (d1 / 2, 0.75 * h),
-                (d1 / 2, h / 4),
-                (d1 / 2 + h / 4, 0),
-            )
-        )
-        return profile.face()
+        with BuildSketch(Plane.XZ) as profile:
+            with Locations((d1 / 2, 0)):
+                Rectangle((d2 - d1) / 2, h, align=Align.MIN)
+            chamfer(profile.vertices().group_by(Axis.X)[0], 0.25 * h)
+        return profile.sketch.face()
 
     countersink_profile = Washer.default_countersink_profile
+
+
+#
+# Holes
+#
+def _make_fastener_hole(
+    hole_diameters: dict,
+    fastener: Union[Nut, Screw],
+    countersink_profile: Face,
+    depth: float,
+    fit: Literal["Close", "Normal", "Loose"] = None,
+    material: Literal["Soft", "Hard"] = None,
+    counter_sunk: bool = True,
+    captive_nut: bool = False,
+    threaded_hole: bool = False,
+) -> Part:
+    """Fastener Specific Hole
+
+    Makes a counterbore clearance, tap or threaded hole for the given screw for each item
+    on the stack. The surface of the hole is at the current workplane.
+
+    Args:
+        hole_diameters: either clearance or tap hole diameter specifications
+        fastener: A nut or screw instance
+        countersinkProfile: the 2D side profile of the fastener (not including a screw's shaft)
+        depth: hole depth
+        fit: one of "Close", "Normal", "Loose" which determines clearance hole diameter. Defaults to None.
+        material: on of "Soft", "Hard" which determines tap hole size. Defaults to None.
+        counterSunk: Is the fastener countersunk into the part?. Defaults to True.
+        captiveNut: Countersink with a rectangular, filleted, hole. Defaults to False.
+
+    Raises:
+        ValueError: fit or material not in hole_diameters dictionary
+
+    Returns:
+        the hole to be subtracted from the base object
+    """
+    bore_direction = Vector(0, 0, -1)
+    origin = Vector(0, 0, 0)
+
+    # Setscrews' countersink_profile is None so check if it exists
+    # countersink_profile = fastener.countersink_profile(fit)
+    if captive_nut:
+        clearance = fastener.clearance_hole_diameters[fit] - fastener.thread_diameter
+        head_offset = countersink_profile.vertices().sort_by(Axis.Z)[-1].Z
+        if isinstance(fastener, (DomedCapNut, HexNut, UnchamferedHexagonNut)):
+            fillet_radius = fastener.nut_diameter / 4
+            rect_width = fastener.nut_diameter + clearance
+            rect_height = fastener.nut_diameter * math.sin(math.pi / 3) + clearance
+        elif isinstance(fastener, SquareNut):
+            fillet_radius = fastener.nut_diameter / 8
+            rect_height = fastener.nut_diameter * math.sqrt(2) / 2 + clearance
+            rect_width = rect_height + 2 * fillet_radius + clearance
+
+        with BuildPart() as countersink_cutter_builder:
+            with BuildSketch():
+                RectangleRounded(rect_width, rect_height, fillet_radius)
+            extrude(amount=-head_offset)
+        countersink_cutter = countersink_cutter_builder.part
+
+    elif counter_sunk and not countersink_profile is None:
+        head_offset = countersink_profile.vertices().sort_by(Axis.Z)[-1].Z
+        countersink_cutter = revolve(countersink_profile).moved(Pos(0, 0, -head_offset))
+    else:
+        head_offset = 0
+
+    if threaded_hole:
+        hole_radius = fastener.thread_diameter / 2
+    else:
+        key = fit if material is None else material
+        try:
+            hole_radius = hole_diameters[key] / 2
+        except KeyError as e:
+            raise ValueError(
+                f"{key} invalid, must be one of {list(hole_diameters.keys())}"
+            ) from e
+
+    shank_hole = Solid.make_cylinder(
+        radius=hole_radius, height=depth, plane=Plane(origin, z_dir=bore_direction)
+    )
+    if counter_sunk and not countersink_profile is None:
+        fastener_hole = countersink_cutter.fuse(shank_hole)
+    else:
+        fastener_hole = shank_hole
+
+    cskAngle = 82  # Common tip angle
+    h = hole_radius / math.tan(math.radians(cskAngle / 2.0))
+    drill_tip = Solid.make_cone(
+        hole_radius, 0.0, h, plane=Plane(bore_direction * depth, z_dir=bore_direction)
+    )
+    fastener_hole = fastener_hole.fuse(drill_tip)
+
+    return fastener_hole
+
+
+class ClearanceHole(BasePartObject):
+    """Part Object: ClearanceHole
+
+    Create a hole specific to the given fastener.
+
+    Args:
+        fastener (Union[Nut, Screw]): A nut or screw instance
+        fit (Optional[Literal["Close", "Normal", "Loose"]], optional): Control hole diameter.
+            Defaults to "Normal".
+        depth (float, optional): hole depth - None implies through part. Defaults to None.
+        counter_sunk (bool, optional): Is the fastener countersunk into the part?.
+            Defaults to True.
+        captive_nut (bool, optional): Is rotation of the nut disabled?. Defaults to False.
+        mode (Mode, optional): combination mode. Defaults to Mode.SUBTRACT.
+
+    Raises:
+        ValueError: Use InsertHole for HeatSetNut
+        ValueError: Invalid nut given
+        ValueError: No depth provided
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        fastener: Union[Nut, Screw],
+        fit: Literal["Close", "Normal", "Loose"] = "Normal",
+        depth: float = None,
+        counter_sunk: bool = True,
+        captive_nut: bool = False,
+        mode: Mode = Mode.SUBTRACT,
+    ):
+        context: BuildPart = BuildPart._get_context(self)
+        validate_inputs(context, self)
+
+        if isinstance(fastener, HeatSetNut):
+            raise ValueError(
+                "ClearanceHole doesn't accept fasteners of type HeatSetNut - use insertHole instead"
+            )
+
+        if captive_nut and not isinstance(
+            fastener, (DomedCapNut, HexNut, UnchamferedHexagonNut, SquareNut)
+        ):
+            raise ValueError(
+                "Only DomedCapNut, HexNut, UnchamferedHexagonNut or SquareNut can be captive"
+            )
+
+        if depth is not None:
+            self.hole_depth = 2 * depth
+        elif depth is None and context is not None:
+            self.hole_depth = 2 * context.max_dimension
+        else:
+            raise ValueError("No depth provided")
+
+        hole_part = _make_fastener_hole(
+            hole_diameters=fastener.clearance_hole_diameters,
+            fastener=fastener,
+            countersink_profile=fastener.countersink_profile(fit),
+            depth=self.hole_depth,
+            fit=fit,
+            counter_sunk=counter_sunk,
+            captive_nut=captive_nut,
+        )
+
+        super().__init__(
+            part=hole_part,
+            align=None,
+            rotation=(0, 0, 0),
+            mode=mode,
+        )
+        fastener.hole_locations.extend([h.location for h in self.compounds()])
+
+
+class TapHole(BasePartObject):
+    """Part Object: TapHole
+
+    Create a tap hole specific to the given fastener.
+
+    Args:
+        fastener (Union[Nut, Screw]): A nut or screw instance
+        material (Literal["Soft", "Hard"], optional): Determines tap hole size.
+            Defaults to "Soft".
+        fit (Optional[Literal["Close", "Normal", "Loose"]], optional): Control hole diameter.
+            Defaults to "Normal".
+        depth (float, optional): hole depth - None implies through part. Defaults to None.
+        counter_sunk (bool, optional): Is the fastener countersunk into the part?.
+            Defaults to True.
+        mode (Mode, optional): combination mode. Defaults to Mode.SUBTRACT.
+
+    Raises:
+        ValueError: Use InsertHole for HeatSetNut
+        ValueError: No depth provided
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        fastener: Union[Nut, Screw],
+        material: Literal["Soft", "Hard"] = "Soft",
+        fit: Literal["Close", "Normal", "Loose"] = "Normal",
+        depth: float = None,
+        counter_sunk: bool = True,
+        mode: Mode = Mode.SUBTRACT,
+    ):
+        context: BuildPart = BuildPart._get_context(self)
+        validate_inputs(context, self)
+
+        if isinstance(fastener, HeatSetNut):
+            raise ValueError(
+                "TapHole doesn't accept fasteners of type HeatSetNut - use insertHole instead"
+            )
+
+        if depth is not None:
+            self.hole_depth = 2 * depth
+        elif depth is None and context is not None:
+            self.hole_depth = 2 * context.max_dimension
+        else:
+            raise ValueError("No depth provided")
+
+        hole_part = _make_fastener_hole(
+            hole_diameters=fastener.clearance_hole_diameters,
+            fastener=fastener,
+            countersink_profile=fastener.countersink_profile(fit),
+            depth=self.hole_depth,
+            fit=fit,
+            material=material,
+            counter_sunk=counter_sunk,
+        )
+
+        super().__init__(
+            part=hole_part,
+            align=None,
+            rotation=(0, 0, 0),
+            mode=mode,
+        )
+        fastener.hole_locations.extend([h.location for h in self.compounds()])
+
+
+class ThreadedHole(BasePartObject):
+    """Part Object: ThreadedHole
+
+    Create a threaded hole specific to the given fastener.
+
+    Args:
+        fastener (Union[Nut, Screw]): A nut or screw instance
+        material (Literal["Soft", "Hard"], optional): Determines tap hole size.
+            Defaults to "Soft".
+        fit (Optional[Literal["Close", "Normal", "Loose"]], optional): Control hole diameter.
+            Defaults to "Normal".
+        depth (float, optional): hole depth - None implies through part. Defaults to None.
+        counter_sunk (bool, optional): Is the fastener countersunk into the part?.
+            Defaults to True.
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        mode (Mode, optional): combination mode. Defaults to Mode.SUBTRACT.
+
+    Raises:
+        ValueError: Use InsertHole for HeatSetNut
+        ValueError: No depth provided
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        fastener: Union[Nut, Screw],
+        material: Literal["Soft", "Hard"] = "Soft",
+        fit: Literal["Close", "Normal", "Loose"] = "Normal",
+        depth: float = None,
+        counter_sunk: bool = True,
+        simple: bool = True,
+        mode: Mode = Mode.SUBTRACT,
+    ):
+        context: BuildPart = BuildPart._get_context(self)
+        validate_inputs(context, self)
+
+        if isinstance(fastener, HeatSetNut):
+            raise ValueError(
+                "ThreadedHole doesn't accept fasteners of type HeatSetNut - use insertHole instead"
+            )
+
+        if depth is not None:
+            self.hole_depth = 2 * depth
+        elif depth is None and context is not None:
+            self.hole_depth = 2 * context.max_dimension
+        else:
+            raise ValueError("No depth provided")
+
+        hole_part = _make_fastener_hole(
+            hole_diameters=fastener.clearance_hole_diameters,
+            fastener=fastener,
+            countersink_profile=fastener.countersink_profile(fit),
+            depth=self.hole_depth,
+            fit=fit,
+            material=material,
+            counter_sunk=counter_sunk,
+            threaded_hole=True,
+        )
+
+        super().__init__(
+            part=hole_part,
+            align=None,
+            rotation=(0, 0, 0),
+            mode=mode,
+        )
+        holes = self
+        if not simple:
+            thread = IsoThread(
+                major_diameter=fastener.thread_diameter,
+                pitch=fastener.thread_pitch,
+                length=fastener.nut_data["m"],
+                external=False,
+                end_finishes=("fade", "fade"),
+                hand=fastener.hand,
+            ).locate(hole_part.location)
+
+            super().__init__(
+                part=thread,
+                align=None,
+                rotation=(0, 0, 0),
+                mode=Mode.ADD,
+            )
+            self = Compound(
+                [h + t for h, t in zip(holes.compounds(), self.compounds())]
+            )
+        fastener.hole_locations.extend([h.location for h in self.compounds()])
+
+
+class InsertHole(BasePartObject):
+    """Part Object: InsertHole
+
+    Create a insert hole specific to the given HeatSetNut.
+
+    Args:
+        fastener (Union[Nut, Screw]): A nut or screw instance
+        fit (Optional[Literal["Close", "Normal", "Loose"]], optional): Control hole diameter.
+            Defaults to "Normal".
+        depth (float, optional): hole depth - None implies through part. Defaults to None.
+        manufacturing_compensation (float, optional): used to compensate for over-extrusion
+            of 3D printers. A value of 0.2mm will reduce the radius of an external thread
+            by 0.2mm (and increase the radius of an internal thread) such that the resulting
+            3D printed part matches the target dimensions. Defaults to 0.0.
+        mode (Mode, optional): combination mode. Defaults to Mode.SUBTRACT.
+
+    Raises:
+        ValueError: Use InsertHole for HeatSetNut
+        ValueError: No depth provided
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        fastener: HeatSetNut,
+        fit: Literal["Close", "Normal", "Loose"] = "Normal",
+        depth: float = None,
+        manufacturing_compensation: float = 0.0,
+        mode: Mode = Mode.SUBTRACT,
+    ):
+        context: BuildPart = BuildPart._get_context(self)
+        validate_inputs(context, self)
+
+        if depth is not None:
+            self.hole_depth = 2 * depth
+        elif depth is None and context is not None:
+            self.hole_depth = 2 * context.max_dimension
+        else:
+            raise ValueError("No depth provided")
+
+        hole_part = _make_fastener_hole(
+            hole_diameters=fastener.clearance_hole_diameters,
+            fastener=fastener,
+            countersink_profile=fastener.countersink_profile(
+                manufacturing_compensation
+            ),
+            depth=self.hole_depth,
+            fit=fit,
+        )
+
+        super().__init__(
+            part=hole_part,
+            align=None,
+            rotation=(0, 0, 0),
+            mode=mode,
+        )
+        fastener.hole_locations.extend([h.location for h in self.compounds()])
