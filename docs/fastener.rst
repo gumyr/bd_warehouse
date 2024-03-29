@@ -432,46 +432,6 @@ Which results in:
 
 The space around the nuts is controlled by the ``fit`` parameter.
 
-
-******************
-Fastener Locations
-******************
-There are two methods that assist with the location of fastener holes relative to other
-parts: :meth:`~extensions_doc.Assembly.fastenerLocations` and :meth:`~extensions_doc.Workplane.pushFastenerLocations`.
-
-To aid in the alignment of fasteners :meth:`~extensions_doc.Assembly.fastenerLocations` scans
-the provided Assembly for the given fastener and pushes the Location values onto the build123d
-Workplane stack. This method provides ``fastener.offset`` and ``flip`` options which modify the existing
-fastener locations to allow for a fastener to be positioned on the back side of a structure as
-shown in the `bolt_plates_together.py <https://github.com/gumyr/bd_warehouse/blob/main/examples/bolt_plates_together.py>`_
-example.
-
-.. literalinclude:: ../examples/bolt_plates_together.py
-   :language: python
-
-.. doctest::
-
-	{'HexNutWithFlange(din1665): M6-1': 1, 'HexHeadScrew(iso4014): M6-1x20': 1, 'PlainWasher(iso7093): M6': 1}
-
-.. image:: assets/bolting_plates.png
-
-In more complex situations many Assemblies may be nested together. To cope with this, the Locations
-are relative to the Assembly provided and shown in the
-`align_fastener_holes.py <https://github.com/gumyr/bd_warehouse/blob/main/examples/align_fastener_holes.py>`_
-example.
-
-.. literalinclude:: ../examples/align_fastener_holes.py
-   :language: python
-
-.. doctest::
-
-	((25.0, 5.0, 12.0), (0.0, -0.0, 0.0))
-	((15.0, 5.0, 12.0), (0.0, -0.0, 0.0))
-	((20.0, 12.0, 5.0), (1.5707963267948966, -0.0, 3.141592653589793))
-	{'SocketHeadCapScrew(iso4762): M2-0.4x6': 3}
-
-.. image:: assets/fastenerLocations.png
-
 .. _extending:
 
 **********************************
