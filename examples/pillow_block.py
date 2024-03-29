@@ -29,4 +29,3 @@ pillow_block_assembly = Compound(
     + [copy.copy(screw).moved(l) for l in screw.hole_locations]
 )
 show(pillow_block_assembly)
-# show(pillow_block)

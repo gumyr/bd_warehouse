@@ -472,29 +472,6 @@ example.
 
 .. image:: assets/fastenerLocations.png
 
-*****************
-Bill of Materials
-*****************
-As previously mentioned, when an assembly is passed into the three hole methods the fasteners
-referenced are added to the assembly. A new method has been added to the build123d Assembly
-class - :meth:`~extensions_doc.Assembly.fastenerQuantities` - which scans the assembly and returns a dictionary of either:
-
-* {fastener: count}, or
-* {fastener.info: count}
-
-For example, the values for the previous pillow block example are:
-
-.. doctest::
-
-	>>> print(pillow_block.fastenerQuantities())
-	{'SocketHeadCapScrew(iso4762): M2-0.4x16': 4}
-
-	>>> print(pillow_block.fastenerQuantities(bom=False))
-	{<bd_warehouse.fastener.SocketHeadCapScrew object at 0x7f90560f3a90>: 4}
-
-Note that this method scans the given assembly and all its children for fasteners. To limit the
-scan to just the current Assembly, set the :class:`deep=False` optional parameter).
-
 .. _extending:
 
 **********************************
