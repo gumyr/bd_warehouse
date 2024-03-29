@@ -396,16 +396,6 @@ class Nut(ABC, BasePartObject):
     Each nut instance creates a set of instance variables that provide the CAD object as well as valuable
     parameters, as follows (values intended for internal use are not shown):
 
-    Attributes:
-        tap_drill_sizes (dict): dictionary of drill sizes for tapped holes
-        tap_hole_diameters (dict): dictionary of drill diameters for tapped holes
-        clearance_drill_sizes (dict): dictionary of drill sizes for clearance holes
-        clearance_hole_diameters (dict): dictionary of drill diameters for clearance holes
-        info (str): identifying information
-        nut_class (class): the derived class that created this nut
-        nut_thickness (float): maximum thickness of the nut
-        nut_diameter (float): maximum diameter of the nut
-
     """
 
     _applies_to = [BuildPart._tag]
@@ -533,6 +523,9 @@ class Nut(ABC, BasePartObject):
         mode: Mode = Mode.ADD,
     ):
         self.hole_locations: list[Location] = []  #: custom holes locations
+        self.nut_thickness: float  #: maximum thickness of the nut
+        self.nut_diameter: float  #: maximum diameter of the nut
+
         self.nut_size = size.strip()
         size_parts = self.nut_size.split("-")
         if 3 > len(size_parts) < 2:
@@ -668,12 +661,19 @@ class Nut(ABC, BasePartObject):
 
 
 class DomedCapNut(Nut):
-    """
-    size: str
-    fastener_type: str
-        din1587 Hexagon domed cap nuts
-    hand: Literal["right", "left"] = "right"
-    simple: bool = True
+    """DomedCapNut
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        fastener_type (Literal["din1587"], optional): Defaults to "din1587".
+            din1587 Hexagon domed cap nuts
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
     """
 
     fastener_data = read_fastener_parameters_from_csv("domed_cap_nut_parameters.csv")
@@ -1089,14 +1089,21 @@ class HeatSetNut(Nut):
 
 
 class HexNut(Nut):
-    """
-    size: str
-    fastener_type: str
-        iso4032	Hexagon nuts, Style 1
-        iso4033	Hexagon nuts, Style 2
-        iso4035	Hexagon thin nuts, chamfered
-    hand: Literal["right", "left"] = "right"
-    simple: bool = True
+    """HexNut
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        fastener_type (Literal["iso4032", "iso4033", "iso4035"], optional):
+            Defaults to "iso4032".
+            iso4032	Hexagon nuts, Style 1
+            iso4033	Hexagon nuts, Style 2
+            iso4035	Hexagon thin nuts, chamfered
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv("hex_nut_parameters.csv")
@@ -1119,12 +1126,18 @@ class HexNut(Nut):
 
 
 class HexNutWithFlange(Nut):
-    """
-    size: str
-    fastener_type: str
-        din1665 Hexagon nuts with flange
-    hand: Literal["right", "left"] = "right"
-    simple: bool = True
+    """HexNutWithFlange
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        fastener_type (Literal["din1665"], optional): Defaults to "din1665".
+            din1665 Hexagon nuts with flange
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv(
@@ -1184,12 +1197,17 @@ class HexNutWithFlange(Nut):
 
 
 class UnchamferedHexagonNut(Nut):
-    """
-    size: str
-    fastener_type: str
-        iso4036 Hexagon thin nuts, unchamfered
-    hand: Literal["right", "left"] = "right"
-    simple: bool = True
+    """UnchamferedHexagonNut
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        fastener_type (Literal["iso4036"], optional): Defaults to "iso4036".
+            iso4036 Hexagon thin nuts, unchamfered
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv(
@@ -1220,12 +1238,18 @@ class UnchamferedHexagonNut(Nut):
 
 
 class SquareNut(Nut):
-    """
-    size: str
-    fastener_type: str
-        din557 - Square Nuts
-    hand: Literal["right", "left"] = "right"
-    simple: bool = True
+    """SquareNut
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        fastener_type (Literal["din557"], optional): Defaults to "din557".
+            din557 - Square Nuts
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv("square_nut_parameters.csv")
@@ -1298,20 +1322,6 @@ class Screw(ABC, BasePartObject):
         ValueError: invalid hand, must be one of 'left' or 'right'
         ValueError: invalid size
 
-    Each screw instance creates a set of properties that provide the Solid CAD object as
-    well as valuable parameters, as follows (values intended for internal use are not shown):
-
-    Attributes:
-        tap_drill_sizes (dict): dictionary of drill sizes for tapped holes
-        tap_hole_diameters (dict): dictionary of drill diameters for tapped holes
-        clearance_drill_sizes (dict): dictionary of drill sizes for clearance holes
-        clearance_hole_diameters (dict): dictionary of drill diameters for clearance holes
-        nominal_lengths (list[float]): list of nominal screw lengths
-        info (str): identifying information
-        screw_class (class): the derived class that created this screw
-        head_height (float): maximum height of the screw head
-        head_diameter (float): maximum diameter of the screw head
-        head (Solid): build123d Solid screw head as defined by class attributes
     """
 
     _applies_to = [BuildPart._tag]
@@ -1461,6 +1471,9 @@ class Screw(ABC, BasePartObject):
     ):
         self.hole_locations: list[Location] = []  #: custom holes locations
         self.screw_size = size
+        self.head_height: float  #: maximum height of the screw head
+        self.head_diameter: float  #: maximum diameter of the screw head
+
         size_parts = size.strip().split("-")
         if not len(size_parts) == 2:
             raise ValueError(
@@ -1507,6 +1520,7 @@ class Screw(ABC, BasePartObject):
         self.max_thread_length = self.length - length_offset
         self.thread_length = length - length_offset
         head = self.make_head()
+
         if head is None:  # A fully custom screw
             bd_object = None
             self.head_height = 0
@@ -1656,13 +1670,18 @@ class Screw(ABC, BasePartObject):
 
 
 class ButtonHeadScrew(Screw):
-    """
-    size: str
-    length: float
-    fastener_type: str
-        iso7380_1 - Hexagon socket button head screws
-    hand: Optional[Literal["right", "left"]] = "right"
-    simple: Optional[bool] = True
+    """ButtonHeadScrew
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        length (float): screw length
+        fastener_type (Literal["iso7380_1"], optional): Defaults to "iso7380_1".
+            iso7380_1 - Hexagon socket button head screws
+            hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv("button_head_parameters.csv")
@@ -1708,13 +1727,19 @@ class ButtonHeadScrew(Screw):
 
 
 class ButtonHeadWithCollarScrew(Screw):
-    """
-    size: str
-    length: float
-    fastener_type: str
-        iso7380_2 - Hexagon socket button head screws with collar
-    hand: Optional[Literal["right", "left"]] = "right"
-    simple: Optional[bool] = True
+    """ButtonHeadWithCollarScrew
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        length (float): screw length
+        fastener_type (Literal["iso7380_2"], optional): Defaults to "iso7380_2".
+            iso7380_2 - Hexagon socket button head screws with collar
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv(
@@ -1775,15 +1800,22 @@ class ButtonHeadWithCollarScrew(Screw):
 
 
 class CheeseHeadScrew(Screw):
-    """
-    size: str
-    length: float
-    fastener_type: str
-        iso1207 - Slotted cheese head screws
-        iso7048 - Cross-recessed cheese head screws
-        iso14580 - Hexalobular socket cheese head screws
-    hand: Optional[Literal["right", "left"]] = "right"
-    simple: Optional[bool] = True
+    """CheeseHeadScrew
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        length (float): screw length
+        fastener_type (Literal["iso1207", "iso7048", "iso14580"], optional):
+            Defaults to "iso7048".
+            iso1207 - Slotted cheese head screws
+            iso7048 - Cross-recessed cheese head screws
+            iso14580 - Hexalobular socket cheese head screws
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv("cheese_head_parameters.csv")
@@ -1826,17 +1858,25 @@ class CheeseHeadScrew(Screw):
 
 
 class CounterSunkScrew(Screw):
-    """
-    size: str
-    length: float
-    fastener_type: str
-        iso2009 - Slotted countersunk head screws
-        iso7046 - Cross recessed countersunk flat head screws
-        iso10642 - Hexagon socket countersunk head cap screws
-        iso14581 - Hexalobular socket countersunk flat head screws
-        iso14582 - Hexalobular socket countersunk flat head screws, high head
-    hand: Optional[Literal["right", "left"]] = "right"
-    simple: Optional[bool] = True
+    """CounterSunkScrew
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        length (float): screw length
+        fastener_type (Literal[ "iso2009", "iso7046", "iso10642", "iso14581", "iso14582"], optional):
+            Defaults to "iso10642".
+            iso2009 - Slotted countersunk head screws
+            iso7046 - Cross recessed countersunk flat head screws
+            iso10642 - Hexagon socket countersunk head cap screws
+            iso14581 - Hexalobular socket countersunk flat head screws
+            iso14582 - Hexalobular socket countersunk flat head screws, high head
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
     """
 
     fastener_data = read_fastener_parameters_from_csv("countersunk_head_parameters.csv")
@@ -1890,15 +1930,20 @@ class CounterSunkScrew(Screw):
 
 
 class HexHeadScrew(Screw):
-    """
-    size: str
-    length: float
-    fastener_type: str
-        iso4014 - Hexagon head bolt
-        iso4017 - Hexagon head screws
-    hand: Optional[Literal["right", "left"]] = "right"
-    simple: Optional[bool] = True
-    socket_clearance: Optional[float] = 6 * MM
+    """HexHeadScrew
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        length (float): screw length
+        fastener_type (Literal["iso4014", "iso4017"], optional): Defaults to "iso4014".
+            iso4014 - Hexagon head bolt
+            iso4017 - Hexagon head screws
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv("hex_head_parameters.csv")
@@ -1964,15 +2009,21 @@ class HexHeadScrew(Screw):
 
 
 class HexHeadWithFlangeScrew(Screw):
-    """
-    size: str
-    length: float
-    fastener_type: str
-        en1662 - Hexagon bolts with flange small series
-        en1665 - Hexagon head bolts with flange
-    hand: Optional[Literal["right", "left"]] = "right"
-    simple: Optional[bool] = True
-    socket_clearance: Optional[float] = 6 * MM
+    """HexHeadWithFlangeScrew
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        length (float): screw length
+        fastener_type (Literal["en1662", "en1665"], optional): Defaults to "en1662".
+            en1662 - Hexagon bolts with flange small series
+            en1665 - Hexagon head bolts with flange
+
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv(
@@ -2042,15 +2093,22 @@ class HexHeadWithFlangeScrew(Screw):
 
 
 class PanHeadScrew(Screw):
-    """
-    size: str
-    length: float
-    fastener_type: str
-        iso1580 - Slotted pan head screws
-        iso14583 - Hexalobular socket pan head screws
-        asme_b_18.6.3 - Type 1 Cross Recessed Pan Head Machine Screws
-    hand: Optional[Literal["right", "left"]] = "right"
-    simple: Optional[bool] = True
+    """_summary_
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        length (float): screw length
+        fastener_type (Literal["iso1580", "iso14583", "asme_b_18.6.3"], optional):
+            Defaults to "iso14583".
+            iso1580 - Slotted pan head screws
+            iso14583 - Hexalobular socket pan head screws
+            asme_b_18.6.3 - Type 1 Cross Recessed Pan Head Machine Screws
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv("pan_head_parameters.csv")
@@ -2097,13 +2155,19 @@ class PanHeadScrew(Screw):
 
 
 class PanHeadWithCollarScrew(Screw):
-    """
-    size: str
-    length: float
-    fastener_type: str
-        din967 - Cross recessed pan head screws with collar
-    hand: Optional[Literal["right", "left"]] = "right"
-    simple: Optional[bool] = True
+    """PanHeadWithCollarScrew
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        length (float): screw length
+        fastener_type (Literal["din967"], optional): Defaults to "din967".
+            din967 - Cross recessed pan head screws with collar
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv(
@@ -2151,13 +2215,19 @@ class PanHeadWithCollarScrew(Screw):
 
 
 class RaisedCheeseHeadScrew(Screw):
-    """
-    size: str
-    length: float
-    fastener_type: str
-        iso7045 - Cross recessed raised cheese head screws
-    hand: Optional[Literal["right", "left"]] = "right"
-    simple: Optional[bool] = True
+    """RaisedCheeseHeadScrew
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        length (float): screw length
+        fastener_type (Literal["iso7045"], optional): Defaults to "iso7045".
+            iso7045 - Cross recessed raised cheese head screws
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv(
@@ -2205,15 +2275,22 @@ class RaisedCheeseHeadScrew(Screw):
 
 
 class RaisedCounterSunkOvalHeadScrew(Screw):
-    """
-    size: str
-    length: float
-    fastener_type: str
-        iso2010 - Slotted raised countersunk oval head screws
-        iso7047 - Cross recessed raised countersunk head screws
-        iso14584 - Hexalobular socket raised countersunk head screws
-    hand: Optional[Literal["right", "left"]] = "right"
-    simple: Optional[bool] = True
+    """RaisedCounterSunkOvalHeadScrew
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        length (float): screw length
+        fastener_type (Literal["iso2010", "iso7047", "iso14584"], optional):
+            Defaults to "iso14584".
+            iso2010 - Slotted raised countersunk oval head screws
+            iso7047 - Cross recessed raised countersunk head screws
+            iso14584 - Hexalobular socket raised countersunk head screws
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv(
@@ -2281,13 +2358,18 @@ class RaisedCounterSunkOvalHeadScrew(Screw):
 
 
 class SetScrew(Screw):
-    """
-    size: str
-    length: float
-    fastener_type: str
-        iso4026 - Hexagon socket set screws with flat point
-    hand: Optional[Literal["right", "left"]] = "right"
-    simple: Optional[bool] = True
+    """SetScrew
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        length (float): screw length
+        fastener_type (Literal["iso4026"], optional): Defaults to "iso4026".
+            iso4026 - Hexagon socket set screws with flat point
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv("setscrew_parameters.csv")
@@ -2359,13 +2441,18 @@ class SetScrew(Screw):
 
 
 class SocketHeadCapScrew(Screw):
-    """
-    size: str
-    length: float
-    fastener_type: str
-        iso4762 - Hexagon socket head cap screws
-    hand: Optional[Literal["right", "left"]] = "right"
-    simple: Optional[bool] = True
+    """SocketHeadCapScrew
+
+    Args:
+        size (str): size specification, e.g. "M6-1"
+        length (float): screw length
+        fastener_type (Literal["iso4762"], optional): Defaults to "iso4762".
+            iso4762 - Hexagon socket head cap screws
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv("socket_head_cap_parameters.csv")
@@ -2422,15 +2509,6 @@ class Washer(ABC, BasePartObject):
 
     Each washer instance creates a set of properties that provide the Solid CAD object
     as well as valuable parameters, as follows (values intended for internal use are not shown):
-
-    Attributes:
-        clearance_drill_sizes (dict): dictionary of drill sizes for clearance holes
-        clearance_hole_diameters (dict): dictionary of drill diameters for clearance holes
-        nominal_lengths (list[float]): list of nominal screw lengths
-        info (str): identifying information
-        washer_class (str): display friendly class name
-        washer_diameter (float): maximum diameter of the washer
-        washer_thickness (float): maximum thickness of the washer
 
     """
 
@@ -2511,6 +2589,7 @@ class Washer(ABC, BasePartObject):
         self.washer_size = size
         self.thread_size = size
         self.is_metric = self.thread_size[0] == "M"
+
         # Used only for clearance gap calculations
         if self.is_metric:
             self.thread_diameter = float(size[1:])
@@ -2568,13 +2647,18 @@ class Washer(ABC, BasePartObject):
 
 
 class PlainWasher(Washer):
-    """
-    size: str - e.g. "M6"
-    fastener_type: str - e.g. "iso7089"
-        iso7089 - Plain washers, Form A
-        iso7091 - Plain washers
-        iso7093 - Plain washers — Large series
-        iso7094 - Plain washers - Extra large series
+    """PlainWasher
+
+    Args:
+        size (str): size specification, e.g. "M6"
+        fastener_type (Literal["iso7089", "iso7091", "iso7093", "iso7094"]):
+            iso7089 - Plain washers, Form A
+            iso7091 - Plain washers
+            iso7093 - Plain washers — Large series
+            iso7094 - Plain washers - Extra large series
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     def __init__(
@@ -2593,10 +2677,15 @@ class PlainWasher(Washer):
 
 
 class ChamferedWasher(Washer):
-    """
-    size: str - e.g. "M6"
-    fastener_type: str - e.g. "iso7090"
-        iso7090 - Plain washers, Form B
+    """ChamferedWasher
+
+    Args:
+        size (str): size specification, e.g. "M6"
+        fastener_type (Literal["iso7090"], optional): Defaults to "iso7090".
+            iso7090 - Plain washers, Form B
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv("chamfered_washer_parameters.csv")
@@ -2626,10 +2715,15 @@ class ChamferedWasher(Washer):
 
 
 class CheeseHeadWasher(Washer):
-    """
-    size: str - e.g. "M6"
-    fastener_type: str - e.g. "iso7092"
-        iso7092 - Washers for cheese head screws
+    """CheeseHeadWasher
+
+    Args:
+        size (str): size specification, e.g. "M6"
+        fastener_type (Literal["iso7092"], optional): Defaults to "iso7092".
+            iso7092 - Washers for cheese head screws
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
     fastener_data = read_fastener_parameters_from_csv(
@@ -2718,7 +2812,7 @@ def _make_fastener_hole(
             rect_height = fastener.nut_diameter * math.sqrt(2) / 2 + clearance
             rect_width = rect_height + 2 * fillet_radius + clearance
 
-        with BuildPart() as countersink_cutter_builder:
+        with BuildPart(mode=Mode.PRIVATE) as countersink_cutter_builder:
             with BuildSketch():
                 RectangleRounded(rect_width, rect_height, fillet_radius)
             extrude(amount=-head_offset)
@@ -2726,7 +2820,9 @@ def _make_fastener_hole(
 
     elif counter_sunk and not countersink_profile is None:
         head_offset = countersink_profile.vertices().sort_by(Axis.Z)[-1].Z
-        countersink_cutter = revolve(countersink_profile).moved(Pos(0, 0, -head_offset))
+        countersink_cutter = revolve(countersink_profile, mode=Mode.PRIVATE).moved(
+            Pos(0, 0, -head_offset)
+        )
     else:
         head_offset = 0
 
@@ -2771,7 +2867,13 @@ def _make_fastener_hole(
 class ClearanceHole(BasePartObject):
     """Part Object: ClearanceHole
 
-    Create a hole specific to the given fastener.
+    A clearance hole is a hole that is drilled through one of two (or more) parts to be
+    assembled together with a screw or bolt. The diameter of the clearance hole is larger
+    than the diameter of the screw or bolt so that it can pass through freely without
+    engaging the threads. The purpose of a clearance hole is to ensure that the screw
+    or bolt can be tightened into a threaded hole on another part without being obstructed
+    by the part it passes through. This allows the head of the screw or bolt to clamp
+    the parts together.
 
     Args:
         fastener (Union[Nut, Screw]): A nut or screw instance
@@ -2844,14 +2946,19 @@ class ClearanceHole(BasePartObject):
 class TapHole(BasePartObject):
     """Part Object: TapHole
 
-    Create a tap hole specific to the given fastener.
+    A tap hole is precisely drilled through a component, sized optimally for a subsequent
+    operation where a tap is employed to cut threads into the material. The diameter of
+    this pre-drilled hole is critical and is influenced by the specifications of the
+    fastener that will be threaded into it, as well as the properties of the base
+    material. This preparatory step ensures that the final tapped hole accurately
+    accommodates the intended fastener, providing a secure and reliable fit.
 
     Args:
         fastener (Union[Nut, Screw]): A nut or screw instance
         material (Literal["Soft", "Hard"], optional): Determines tap hole size.
             Defaults to "Soft".
-        fit (Optional[Literal["Close", "Normal", "Loose"]], optional): Control hole diameter.
-            Defaults to "Normal".
+        fit (Optional[Literal["Close", "Normal", "Loose"]], optional): Control hole diameter
+            for a countersunk fastener head. Defaults to "Normal".
         depth (float, optional): hole depth - None implies through part. Defaults to None.
         counter_sunk (bool, optional): Is the fastener countersunk into the part?.
             Defaults to True.
@@ -2910,7 +3017,11 @@ class TapHole(BasePartObject):
 class ThreadedHole(BasePartObject):
     """Part Object: ThreadedHole
 
-    Create a threaded hole specific to the given fastener.
+    A threaded hole refers to a hole that has been provided with internal threads,
+    either through cutting (tapping) or forming, to allow a bolt or screw to be
+    screwed into it. Threaded holes are used in a wide range of applications where
+    secure fastening is required. They can be found in various sizes and thread
+    patterns to match the corresponding screws or bolts.
 
     Args:
         fastener (Union[Nut, Screw]): A nut or screw instance
@@ -2999,7 +3110,12 @@ class ThreadedHole(BasePartObject):
 class InsertHole(BasePartObject):
     """Part Object: InsertHole
 
-    Create a insert hole specific to the given HeatSetNut.
+    An insert hole is precisely sized to accommodate a heat-set nut, which is embedded
+    into the base component. This process creates a robust connection with the base
+    material, offering a durable metal threaded interface for the fastener. Heat-set
+    nuts are particularly favored for use with 3D-printed objects, as they ensure
+    strong and reliable connections between components, enhancing the structural
+    integrity of the assembled parts.
 
     Args:
         fastener (Union[Nut, Screw]): A nut or screw instance

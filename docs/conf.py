@@ -69,8 +69,6 @@ autodoc_typehints = ["signature"]
 # autodoc_typehints = ["both"]
 
 autodoc_default_options = {
-    "members": True,
-    "undoc-members": True,
     "member-order": "alphabetical",
 }
 # Sphinx settings
