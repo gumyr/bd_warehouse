@@ -43,7 +43,14 @@ from typing import Literal, Optional, Union
 import bd_warehouse
 import importlib_resources
 from bd_warehouse.thread import IsoThread, imperial_str_to_float, is_safe
-from build123d.build_common import IN, MM, PolarLocations, Locations, validate_inputs
+from build123d.build_common import (
+    IN,
+    MM,
+    PolarLocations,
+    LocationList,
+    Locations,
+    validate_inputs,
+)
 from build123d.build_enums import Align, Mode, SortBy
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
@@ -2664,27 +2671,35 @@ def _make_fastener_hole(
     counter_sunk: bool = True,
     captive_nut: bool = False,
     threaded_hole: bool = False,
+    update_hole_locations: bool = False,
 ) -> Part:
-    """Fastener Specific Hole
+    """_make_fastener_hole
 
     Makes a counterbore clearance, tap or threaded hole for the given screw for each item
     on the stack. The surface of the hole is at the current workplane.
 
     Args:
-        hole_diameters: either clearance or tap hole diameter specifications
-        fastener: A nut or screw instance
-        countersinkProfile: the 2D side profile of the fastener (not including a screw's shaft)
-        depth: hole depth
-        fit: one of "Close", "Normal", "Loose" which determines clearance hole diameter. Defaults to None.
-        material: on of "Soft", "Hard" which determines tap hole size. Defaults to None.
-        counterSunk: Is the fastener countersunk into the part?. Defaults to True.
-        captiveNut: Countersink with a rectangular, filleted, hole. Defaults to False.
+        hole_diameters (dict): either clearance or tap hole diameter specifications
+        fastener (Union[Nut, Screw]): A nut or screw instance
+        countersink_profile (Face): the 2D side profile of the fastener (not including a
+            screw's shaft)
+        depth (float): hole depth
+        fit (Literal["Close", "Normal", "Loose"], optional): determines clearance hole
+            diameter. Defaults to None.
+        material (Literal["Soft", "Hard"], optional): determines tap hole size.
+            Defaults to None.
+        counter_sunk (bool, optional): Is the fastener countersunk into the part?.
+            Defaults to True.
+        captive_nut (bool, optional): Countersink with a rectangular, filleted, hole..
+            Defaults to False.
+        threaded_hole (bool, optional): Does the hole have threads. Defaults to False.
+        update_hole_locations (bool, optional): If in Builder mode. Defaults to False.
 
     Raises:
         ValueError: fit or material not in hole_diameters dictionary
 
     Returns:
-        the hole to be subtracted from the base object
+        Part: the hole to be subtracted from the base object
     """
     bore_direction = Vector(0, 0, -1)
     origin = Vector(0, 0, 0)
@@ -2734,12 +2749,21 @@ def _make_fastener_hole(
     else:
         fastener_hole = shank_hole
 
-    cskAngle = 82  # Common tip angle
-    h = hole_radius / math.tan(math.radians(cskAngle / 2.0))
+    csk_angle = 82  # Common tip angle
+    h = hole_radius / math.tan(math.radians(csk_angle / 2.0))
     drill_tip = Solid.make_cone(
         hole_radius, 0.0, h, plane=Plane(bore_direction * depth, z_dir=bore_direction)
     )
     fastener_hole = fastener_hole.fuse(drill_tip)
+
+    # Update the hole location list for this fastener
+    if update_hole_locations:
+        fastener.hole_locations.extend(
+            [
+                location * Pos(0, 0, -head_offset)
+                for location in LocationList._get_context().locations
+            ]
+        )
 
     return fastener_hole
 
@@ -2806,6 +2830,7 @@ class ClearanceHole(BasePartObject):
             fit=fit,
             counter_sunk=counter_sunk,
             captive_nut=captive_nut,
+            update_hole_locations=context is not None,
         )
 
         super().__init__(
@@ -2814,7 +2839,6 @@ class ClearanceHole(BasePartObject):
             rotation=(0, 0, 0),
             mode=mode,
         )
-        fastener.hole_locations.extend([h.location for h in self.compounds()])
 
 
 class TapHole(BasePartObject):
@@ -2872,6 +2896,7 @@ class TapHole(BasePartObject):
             fit=fit,
             material=material,
             counter_sunk=counter_sunk,
+            update_hole_locations=context is not None,
         )
 
         super().__init__(
@@ -2880,7 +2905,6 @@ class TapHole(BasePartObject):
             rotation=(0, 0, 0),
             mode=mode,
         )
-        fastener.hole_locations.extend([h.location for h in self.compounds()])
 
 
 class ThreadedHole(BasePartObject):
@@ -2941,6 +2965,7 @@ class ThreadedHole(BasePartObject):
             material=material,
             counter_sunk=counter_sunk,
             threaded_hole=True,
+            update_hole_locations=context is not None,
         )
 
         super().__init__(
@@ -2969,7 +2994,6 @@ class ThreadedHole(BasePartObject):
             self = Compound(
                 [h + t for h, t in zip(holes.compounds(), self.compounds())]
             )
-        fastener.hole_locations.extend([h.location for h in self.compounds()])
 
 
 class InsertHole(BasePartObject):
@@ -3021,6 +3045,7 @@ class InsertHole(BasePartObject):
             ),
             depth=self.hole_depth,
             fit=fit,
+            update_hole_locations=context is not None,
         )
 
         super().__init__(
@@ -3029,4 +3054,3 @@ class InsertHole(BasePartObject):
             rotation=(0, 0, 0),
             mode=mode,
         )
-        fastener.hole_locations.extend([h.location for h in self.compounds()])
