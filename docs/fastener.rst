@@ -400,22 +400,6 @@ The data used in the creation of these holes is available via three instance met
 Note that with imperial sized holes (e.g. 7/16), the drill sizes could be a fractional size (e.g. 25/64)
 or a numbered or lettered size (e.g. U). 
 
-Screw and Hole Alignment
-========================
-If a ``depth`` parameter is provided to the hole methods when placing a screw, the screw will
-be located in the provided assembly such that the tip of the screw to bottom out in the hole.
-This may result in the screw extending above the top surface. For example:
-
-.. literalinclude:: ../examples/screw_at_depth.py
-
-Which results in:
-
-.. image:: assets/screw_at_depth.png
-	:alt: screw_at_depth
-
-If no :class:`depth` is provided, the hole will extend through the part and the screw will be
-aligned with the surface.
-
 Captive Nuts
 ============
 
