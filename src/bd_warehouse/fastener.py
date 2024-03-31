@@ -2853,6 +2853,9 @@ def _make_fastener_hole(
     fastener_hole = fastener_hole.fuse(drill_tip)
 
     # Update the hole location list for this fastener
+    # Countersunk screws shouldn't be lowered into the hole
+    if isinstance(fastener, (CounterSunkScrew, RaisedCounterSunkOvalHeadScrew)):
+        head_offset -= head_offset
     if update_hole_locations:
         fastener.hole_locations.extend(
             [
