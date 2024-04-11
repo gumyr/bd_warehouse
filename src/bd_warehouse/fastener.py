@@ -486,7 +486,7 @@ class Nut(ABC, BasePartObject):
         return type(self).__name__
 
     @classmethod
-    def types(cls) -> list[str]:
+    def types(cls) -> set[str]:
         """Return a set of the nut types"""
         return set(p.split(":")[0] for p in list(cls.fastener_data.values())[0].keys())
 
@@ -615,7 +615,7 @@ class Nut(ABC, BasePartObject):
                 end_finishes=("fade", "fade"),
                 hand=self.hand,
             )
-            nut = nut.fuse(thread)
+            nut = nut.fuse(thread, glue=True)
 
         # return thread
         return nut
@@ -657,7 +657,9 @@ class Nut(ABC, BasePartObject):
         del fit
         (m, s) = (self.nut_data[p] for p in ["m", "s"])
         width = polygon_diagonal(s, 6) + self.socket_clearance
-        return Face.make_rect(width / 2, m)
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(width / 2, m, align=Align.MIN)
+        return profile.sketch.face()
 
 
 class DomedCapNut(Nut):
@@ -1051,7 +1053,7 @@ class HeatSetNut(Nut):
                 end_finishes=("fade", "fade"),
                 hand=self.hand,
             )
-            nut = nut.fuse(thread)
+            nut = nut.fuse(thread, glue=True)
 
         return nut
 
@@ -1082,10 +1084,9 @@ class HeatSetNut(Nut):
             drill_sizes[self.nut_data["drill"].strip()] / 2 + manufacturingCompensation
         )
         # chamfer_size = self.nut_data["s"] / 2 - hole_radius
-        return (
-            Plane.XZ
-            * Rectangle(hole_radius, self.nut_data["m"], align=Align.MIN).face()
-        )
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(hole_radius, self.nut_data["m"], align=Align.MIN).face()
+        return profile.sketch
 
 
 class HexNut(Nut):
@@ -1542,7 +1543,7 @@ class Screw(ABC, BasePartObject):
 
             shank = Solid.make_cylinder(thread.min_radius, self.thread_length)
             if not self.simple:
-                shank = shank.fuse(thread)
+                shank = shank.fuse(thread, glue=True)
 
         if method_exists(self.__class__, "custom_make"):
             bd_object = self.custom_make()
@@ -1638,10 +1639,11 @@ class Screw(ABC, BasePartObject):
             if recess.startswith("PH"):
                 (recess_plan, recess_depth) = cross_recess(recess)
                 recess_taper = 30  # TODO
-                recess_taper = 5
+                recess_taper = 20
             elif recess.startswith("T"):
                 (recess_plan, recess_depth) = hexalobular_recess(recess)
                 recess_taper = 0
+                recess_taper = 5
             elif recess.startswith("R"):
                 (recess_plan, recess_depth) = square_recess(recess)
                 recess_taper = 0
@@ -2586,6 +2588,7 @@ class Washer(ABC, BasePartObject):
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
     ):
+        self.hole_locations: list[Location] = []  #: custom holes locations
         self.washer_size = size
         self.thread_size = size
         self.is_metric = self.thread_size[0] == "M"
@@ -2625,8 +2628,8 @@ class Washer(ABC, BasePartObject):
         """Create 2D profile of hex washers with double chamfers"""
         (d1, d2, h) = (self.washer_data[p] for p in ["d1", "d2", "h"])
         with BuildSketch(Plane.XZ) as profile:
-            with Locations((d1 / 2, h / 2)):
-                Rectangle((d2 - d1) / 2, h)
+            with Locations((d1 / 2, 0)):
+                Rectangle((d2 - d1) / 2, h, align=Align.MIN)
         return profile.sketch.face()
 
     def default_countersink_profile(
@@ -2921,7 +2924,7 @@ class ClearanceHole(BasePartObject):
             )
 
         if depth is not None:
-            self.hole_depth = 2 * depth
+            self.hole_depth = depth
         elif depth is None and context is not None:
             self.hole_depth = 2 * context.max_dimension
         else:
@@ -2992,7 +2995,7 @@ class TapHole(BasePartObject):
             )
 
         if depth is not None:
-            self.hole_depth = 2 * depth
+            self.hole_depth = depth
         elif depth is None and context is not None:
             self.hole_depth = 2 * context.max_dimension
         else:
@@ -3064,7 +3067,7 @@ class ThreadedHole(BasePartObject):
             )
 
         if depth is not None:
-            self.hole_depth = 2 * depth
+            self.hole_depth = depth
         elif depth is None and context is not None:
             self.hole_depth = 2 * context.max_dimension
         else:
@@ -3150,7 +3153,7 @@ class InsertHole(BasePartObject):
         validate_inputs(context, self)
 
         if depth is not None:
-            self.hole_depth = 2 * depth
+            self.hole_depth = depth
         elif depth is None and context is not None:
             self.hole_depth = 2 * context.max_dimension
         else:
