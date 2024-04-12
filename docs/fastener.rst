@@ -8,7 +8,12 @@ create many different types of nuts, screws and washers - as follows:
 
 .. py:module:: fastener
 
-.. image:: assets/fastener_disc.png
+.. raw:: html
+
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <model-viewer poster="_images/carousel.png" src="_static/carousel.glb" alt="bd_warehouse fasteners" auto-rotate camera-controls style="width: 100%; height: 50vh;"></model-viewer>
+
+.. .. image:: assets/fastener_disc.png
 	:alt: fastener_disc
 
 Here is a list of the classes (and fastener types) provided:
