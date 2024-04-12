@@ -1666,6 +1666,7 @@ class Screw(ABC, BasePartObject):
                 f"{fit} invalid, must be one of {list(self.clearance_hole_diameters.keys())}"
             ) from e
         width = clearance_hole_diameter - self.thread_diameter + self.screw_data["dk"]
+
         with BuildSketch(Plane.XZ) as profile:
             Rectangle(width / 2, self.screw_data["k"], align=Align.MIN)
         return profile.sketch.face()
@@ -2408,7 +2409,7 @@ class SetScrew(Screw):
         (s, t) = (self.screw_data[p] for p in ["s", "t"])
 
         thread = IsoThread(
-            major_diameter=self.thread_diameter,
+            major_diameter=self.thread_diameter - 0.1,
             pitch=self.thread_pitch,
             length=self.length,
             external=True,
@@ -2416,22 +2417,23 @@ class SetScrew(Screw):
             hand=self.hand,
             simple=self.simple,
         )
-        with BuildPart() as core:
+        with BuildPart() as screw:
+            # Core
             Cylinder(
                 thread.min_radius,
                 self.length,
                 align=(Align.CENTER, Align.CENTER, Align.MAX),
             )
+            # Recess
             with BuildSketch():
                 RegularPolygon(s / 2, 6, major_radius=False)
             extrude(amount=-t, mode=Mode.SUBTRACT)
 
-        if self.simple:
-            ret = core.part
-        else:
-            ret = core.part.fuse(thread.moved(Pos(0, 0, -thread.length)))
+            if not self.simple:
+                with Locations((0, 0, -self.length)):
+                    add(thread)
 
-        return ret.solid()
+        return screw.part.solid()
 
     def make_head(self):
         """There is no head on a setscrew"""
