@@ -1717,9 +1717,9 @@ class ButtonHeadScrew(Screw):
 
         with BuildSketch(Plane.XZ) as profile:
             with BuildLine():
-                Polyline((0, 0), (0, k), (dl / 2, k))
-                RadiusArc((dl / 2, k), (dl / 2, 0), rf)
-                Line((dl / 2, 0), (0, 0))
+                l1 = Polyline((0, 0), (0, k), (dl / 2, k))
+                l2 = RadiusArc(l1 @ 1, (dk / 2, 0), rf)
+                Line(l2 @ 1, l1 @ 0)
             make_face()
 
         return profile.sketch.face()
