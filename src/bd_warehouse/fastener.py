@@ -2409,7 +2409,7 @@ class SetScrew(Screw):
         (s, t) = (self.screw_data[p] for p in ["s", "t"])
 
         thread = IsoThread(
-            major_diameter=self.thread_diameter - 0.1,
+            major_diameter=self.thread_diameter * 1,
             pitch=self.thread_pitch,
             length=self.length,
             external=True,
@@ -2424,14 +2424,14 @@ class SetScrew(Screw):
                 self.length,
                 align=(Align.CENTER, Align.CENTER, Align.MAX),
             )
+            if not self.simple:
+                with Locations((0, 0, -self.length)):
+                    add(thread)
+
             # Recess
             with BuildSketch():
                 RegularPolygon(s / 2, 6, major_radius=False)
             extrude(amount=-t, mode=Mode.SUBTRACT)
-
-            if not self.simple:
-                with Locations((0, 0, -self.length)):
-                    add(thread)
 
         return screw.part.solid()
 
