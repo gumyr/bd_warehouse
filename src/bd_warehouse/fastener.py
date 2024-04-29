@@ -1523,7 +1523,7 @@ class Screw(ABC, BasePartObject):
         head = self.make_head()
 
         if head is None:  # A fully custom screw
-            bd_object = None
+            screw = None
             self.head_height = 0
             self.head_diameter = 0
         else:
@@ -1539,22 +1539,27 @@ class Screw(ABC, BasePartObject):
                 hand=self.hand,
                 end_finishes=("fade", "raw"),
                 simple=self.simple,
+            ).locate(Pos(Z=-self.length))
+            thread.label = "thread"
+
+            shank = Solid.make_cylinder(
+                thread.min_radius, self.thread_length, Plane.XY.offset(-self.length)
             )
 
-            shank = Solid.make_cylinder(thread.min_radius, self.thread_length)
-            if not self.simple:
-                shank = shank.fuse(thread, glue=True)
-
         if method_exists(self.__class__, "custom_make"):
-            bd_object = self.custom_make()
+            screw = self.custom_make()
         else:
-            bd_object = head.fuse(shank.moved(Pos(0, 0, -self.length)))
+            screw = head.fuse(shank)
 
-        # Unwrap the Compound - it always gets generated but is unnecessary
-        if isinstance(bd_object, Compound) and len(bd_object.solids()) == 1:
-            super().__init__(bd_object.solid(), rotation, align, mode)
-        else:
-            super().__init__(bd_object, rotation, align, mode)
+        # Unwrap the Compound as it's unnecessary
+        if isinstance(screw, Compound) and len(screw.solids()) == 1:
+            screw = screw.solid()
+        screw.label = "core"
+
+        if not self.simple:
+            screw = Part(children=[screw, thread])
+
+        super().__init__(screw, rotation, align, mode)
 
     def make_head(self) -> Solid:
         """Create a screw head from the 2D shapes defined in the derived class"""
