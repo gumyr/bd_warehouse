@@ -1565,6 +1565,9 @@ class Screw(ABC, BasePartObject):
             screw = Part(children=[screw, thread])
 
         super().__init__(screw, rotation, align, mode)
+        self.label = (
+            f"{self.__class__.__name__}({size}, {length:0.2f}, {fastener_type})"
+        )
 
     def make_head(self) -> Solid:
         """Create a screw head from the 2D shapes defined in the derived class"""
