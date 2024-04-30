@@ -1526,30 +1526,35 @@ class Screw(ABC, BasePartObject):
             screw = None
             self.head_height = 0
             self.head_diameter = 0
+            ends = ("fade", "fade")
         else:
             head_bb = head.bounding_box()
             self.head_height = head_bb.max.Z
             self.head_diameter = 2 * max(head_bb.max.X, head_bb.max.Y)
+            ends = ("fade", "raw")
             head = head.translate((0, 0, -self.length_offset()))
-            thread = IsoThread(
-                major_diameter=self.thread_diameter,
-                pitch=self.thread_pitch,
-                length=self.thread_length,
-                external=True,
-                hand=self.hand,
-                end_finishes=("fade", "raw"),
-                simple=self.simple,
-            ).locate(Pos(Z=-self.length))
-            thread.label = "thread"
 
-            shank = Solid.make_cylinder(
-                thread.min_radius, self.thread_length, Plane.XY.offset(-self.length)
-            )
+        thread = IsoThread(
+            major_diameter=self.thread_diameter,
+            pitch=self.thread_pitch,
+            length=self.thread_length,
+            external=True,
+            hand=self.hand,
+            end_finishes=ends,
+            simple=self.simple,
+        ).locate(Pos(Z=-self.length))
+        thread.label = "thread"
+
+        shank = Solid.make_cylinder(
+            thread.min_radius, self.thread_length, Plane.XY.offset(-self.length)
+        )
 
         if method_exists(self.__class__, "custom_make"):
             screw = self.custom_make()
-        else:
+        elif head is not None:
             screw = head.fuse(shank)
+        else:
+            screw = shank
 
         # Unwrap the Compound as it's unnecessary
         if isinstance(screw, Compound) and len(screw.solids()) == 1:
@@ -2429,9 +2434,9 @@ class SetScrew(Screw):
                 self.length,
                 align=(Align.CENTER, Align.CENTER, Align.MAX),
             )
-            if not self.simple:
-                with Locations((0, 0, -self.length)):
-                    add(thread)
+            # if not self.simple:
+            #     with Locations((0, 0, -self.length)):
+            #         add(thread)
 
             # Recess
             with BuildSketch():
@@ -2455,8 +2460,9 @@ class SocketHeadCapScrew(Screw):
     Args:
         size (str): size specification, e.g. "M6-1"
         length (float): screw length
-        fastener_type (Literal["iso4762"], optional): Defaults to "iso4762".
+        fastener_type (Literal["iso4762","asme_b18.3], optional): Defaults to "iso4762".
             iso4762 - Hexagon socket head cap screws
+            asme_b18.3 - Imperial hexagon socket head cap screws
         hand (Literal["right","left"], optional): thread direction. Defaults to "right".
         simple (bool, optional): simplify by not creating thread. Defaults to True.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
@@ -2470,7 +2476,7 @@ class SocketHeadCapScrew(Screw):
         self,
         size: str,
         length: float,
-        fastener_type: Literal["iso4762"] = "iso4762",
+        fastener_type: Literal["iso4762", "asme_b18.3"] = "iso4762",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
         rotation: RotationLike = (0, 0, 0),
@@ -2494,7 +2500,7 @@ class SocketHeadCapScrew(Screw):
         with BuildSketch(Plane.XZ) as profile:
             Rectangle(dk / 2, k, align=Align.MIN)
             fillet(
-                profile.vertices().group_by(Axis.Z)[-1].sort_by(Axis.X)[-1], k * 0.075
+                profile.vertices().group_by(Axis.Y)[-1].sort_by(Axis.X)[-1], k * 0.075
             )
         return profile.sketch.face()
 
