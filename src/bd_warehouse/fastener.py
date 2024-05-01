@@ -574,6 +574,7 @@ class Nut(ABC, BasePartObject):
             super().__init__(bd_object.solid(), rotation, align, mode)
         else:
             super().__init__(bd_object, rotation, align, mode)
+        self.label = f"{self.__class__.__name__}({size}, {fastener_type})"
 
     def make_nut(self) -> Union[Compound, Solid]:
         """Create a screw head from the 2D shapes defined in the derived class"""
@@ -604,6 +605,8 @@ class Nut(ABC, BasePartObject):
             )
             nut = nut.fuse(flange)
 
+        nut.label = "body"
+
         # Add the thread to the nut body
         if not self.simple:
             # Create the thread
@@ -615,9 +618,9 @@ class Nut(ABC, BasePartObject):
                 end_finishes=("fade", "fade"),
                 hand=self.hand,
             )
-            nut = nut.fuse(thread, glue=True)
+            thread.label = "thread"
+            nut = Part(children=[nut, thread])
 
-        # return thread
         return nut
 
     def default_nut_profile(self) -> Face:
@@ -1041,6 +1044,7 @@ class HeatSetNut(Nut):
 
         # Finally create the Solid from the Shell
         nut = Solid(nut_shell)
+        nut.label = "body"
 
         # Add the thread to the nut body
         if not self.simple:
@@ -1053,7 +1057,7 @@ class HeatSetNut(Nut):
                 end_finishes=("fade", "fade"),
                 hand=self.hand,
             )
-            nut = nut.fuse(thread, glue=True)
+            nut = Part(children=[nut, thread])
 
         return nut
 
@@ -1559,7 +1563,7 @@ class Screw(ABC, BasePartObject):
         # Unwrap the Compound as it's unnecessary
         if isinstance(screw, Compound) and len(screw.solids()) == 1:
             screw = screw.solid()
-        screw.label = "core"
+        screw.label = "body"
 
         if not self.simple:
             screw = Part(children=[screw, thread])
