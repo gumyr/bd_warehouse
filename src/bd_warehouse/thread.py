@@ -904,7 +904,7 @@ class PlasticBottleThread(BasePartObject):
         .. code-block:: python
 
             thread = PlasticBottleThread(
-                size="M38SP444", external=False, manufacturingCompensation=0.2 * MM
+                size="M38SP444", external=False, manufacturing_compensation=0.2 * MM
             )
 
     """

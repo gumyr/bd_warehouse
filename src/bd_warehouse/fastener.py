@@ -1069,13 +1069,13 @@ class HeatSetNut(Nut):
         """Not used but required by the abstract base class"""
         pass
 
-    def countersink_profile(self, manufacturingCompensation: float = 0.0) -> Face:
+    def countersink_profile(self, manufacturing_compensation: float = 0.0) -> Face:
         """countersink_profile
 
         Create the profile for a cavity allowing the heatset nut to be countersunk into the plastic.
 
         Args:
-            manufacturingCompensation (float, optional): used to compensate for over-extrusion
+            manufacturing_compensation (float, optional): used to compensate for over-extrusion
                 of 3D printers. A value of 0.2mm will reduce the radius of an external thread
                 by 0.2mm (and increase the radius of an internal thread) such that the resulting
                 3D printed part matches the target dimensions. Defaults to 0.0.
@@ -1085,7 +1085,7 @@ class HeatSetNut(Nut):
         """
         drill_sizes = read_drill_sizes()
         hole_radius = (
-            drill_sizes[self.nut_data["drill"].strip()] / 2 + manufacturingCompensation
+            drill_sizes[self.nut_data["drill"].strip()] / 2 + manufacturing_compensation
         )
         # chamfer_size = self.nut_data["s"] / 2 - hole_radius
         with BuildSketch(Plane.XZ) as profile:
