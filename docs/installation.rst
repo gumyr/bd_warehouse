@@ -69,18 +69,9 @@ If all has gone well, you can open a command line/prompt, and type:
 .. doctest::
 
 	>>> python
-	>>> from bd_warehouse import *
-	>>> print(Solid.make_box(1,2,3).show_topology(limit_class="Face"))
+	>>> from build123d import *
+	>>> from bd_warehouse.fastener import SocketHeadCapScrew
 
-Which should return something similar to:
-
-.. code::
-
-		Solid        at 0x165e75379f0, Center(0.5, 1.0, 1.5)
-		└── Shell    at 0x165eab056f0, Center(0.5, 1.0, 1.5)
-			├── Face at 0x165b35a3570, Center(0.0, 1.0, 1.5)
-			├── Face at 0x165e77957f0, Center(1.0, 1.0, 1.5)
-			├── Face at 0x165b3e730f0, Center(0.5, 0.0, 1.5)
-			├── Face at 0x165e8821570, Center(0.5, 2.0, 1.5)
-			├── Face at 0x165e88218f0, Center(0.5, 1.0, 0.0)
-			└── Face at 0x165eb21ee70, Center(0.5, 1.0, 3.0)
+	>>> screw = SocketHeadCapScrew("M6-1", 10 * MM, "iso4762")
+	>>> screw.head_diameter
+	10.220000000000002
