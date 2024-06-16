@@ -41,7 +41,8 @@ from math import cos, pi, radians, sin, sqrt, tan
 from typing import Literal, Optional, Union
 
 import bd_warehouse
-import importlib_resources
+
+from importlib import resources
 from bd_warehouse.thread import IsoThread, imperial_str_to_float, is_safe
 from build123d.build_common import (
     IN,
@@ -100,7 +101,7 @@ def read_fastener_parameters_from_csv(filename: str) -> dict:
     """Parse a csv parameter file into a dictionary of strings"""
 
     parameters = {}
-    data_resource = importlib_resources.files(bd_warehouse) / f"data/{filename}"
+    data_resource = resources.files(bd_warehouse) / f"data/{filename}"
     with data_resource.open() as csvfile:
         reader = csv.DictReader(csvfile)
         fieldnames = reader.fieldnames
@@ -199,7 +200,7 @@ def isolate_fastener_type(target_fastener: str, fastener_data: dict) -> dict:
 def read_drill_sizes() -> dict:
     """Read the drill size csv file and build a drill_size dictionary (Ah, the imperial system)"""
     drill_sizes = {}
-    data_resource = importlib_resources.files(bd_warehouse) / "data/drill_sizes.csv"
+    data_resource = resources.files(bd_warehouse) / "data/drill_sizes.csv"
 
     with data_resource.open() as csvfile:
         reader = csv.DictReader(csvfile)
@@ -235,9 +236,7 @@ def lookup_nominal_screw_lengths() -> dict:
 
     # Read the nominal screw length csv file and build a dictionary
     nominal_screw_lengths = {}
-    data_resource = (
-        importlib_resources.files(bd_warehouse) / "data/nominal_screw_lengths.csv"
-    )
+    data_resource = resources.files(bd_warehouse) / "data/nominal_screw_lengths.csv"
     with data_resource.open() as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
