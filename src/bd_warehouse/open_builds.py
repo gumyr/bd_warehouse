@@ -329,7 +329,7 @@ class VSlotLinearRail(BasePartObject):
 
 
 class CBeamLinearRail(BasePartObject):
-    """Part Object: OpenBuilds C Beam Linear Rail
+    """Part Object: OpenBuilds C-Beam Linear Rail
 
     Args:
         length (float): rail length
@@ -361,8 +361,97 @@ class CBeamLinearRail(BasePartObject):
         # RigidJoint("test2", self, Location((0, -10, 50), (90, 0, 0)))
 
 
+class CBeamGantryPlateXLarge(BasePartObject):
+    """Part Object: OpenBuilds C-Beam Gantry Plate X-Large
+
+    Achieve unparalleled stability in your builds with the XLarge C-Beam Gantry Plate,
+    designed to accommodate up to six wheels for an extremely stable gantry. This versatile
+    plate is essential for both Belt and Pinion and Lead Screw transmissions. With recessed
+    holes for professional flush mounts and tapped holes for a 90° connection, this plate is
+    ideal for XY configurations, offering multiple mounting options to suit your project needs.
+
+    Features:
+        - Wide stance for enhanced stability
+        - Countersunk holes for a flush finish
+        - Tapped holes for easy 90° connections
+        - Center recess for additional mounting options
+        - Supports multiple mounting configurations
+
+    Specifications:
+        - Size: 125 x 125mm
+        - Thickness: 6mm
+        - Material: 6061 – T5 Aluminum
+        - Finish: Brushed and anodized
+        - Color: Black
+
+    Args:
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+            or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+        with BuildPart() as plate:
+            with BuildSketch(Plane.XY) as plate_skt:
+                RectangleRounded(125, 125, 10)
+                with GridLocations(30, 30, 3, 3):
+                    Circle(2.6, mode=Mode.SUBTRACT)
+                with GridLocations(20, 80.6, 2, 2):
+                    Circle(2.6, mode=Mode.SUBTRACT)
+                with GridLocations(65, 80.6, 2, 2):
+                    Circle(2.6, mode=Mode.SUBTRACT)
+                with GridLocations(60, 20, 2, 2):
+                    Circle(2.6, mode=Mode.SUBTRACT)
+                with GridLocations(60, 100.6, 2, 2):
+                    Circle(2.6, mode=Mode.SUBTRACT)
+                with GridLocations(20, 20, 2, 2):
+                    Circle(2.6, mode=Mode.SUBTRACT)
+            extrude(amount=6)
+
+            # Recess
+            with BuildSketch(Plane.XY.offset(6)):
+                RectangleRounded(35, 35, 2.8)
+            extrude(amount=-1.6, mode=Mode.SUBTRACT)
+
+            # Slots
+            with BuildSketch(Plane.XY.offset(6)):
+                with GridLocations(102.6, 20, 2, 2):
+                    SlotOverall(11.135, 4.568 * 2)
+            extrude(amount=-1.6, mode=Mode.SUBTRACT)
+            with BuildSketch(Plane.XY):
+                with GridLocations(102.6, 20, 2, 2):
+                    SlotOverall(7.1, 2.55 * 2)
+            extrude(amount=6, mode=Mode.SUBTRACT)
+
+            # CounterSink - tapped holes (thread not modelled)
+            with Locations((0, 0, 6)):
+                with GridLocations(100.6, 60, 2, 2):
+                    CounterSinkHole(2.1, 2.7, counter_sink_angle=90)
+
+            # CounterBore
+            with Locations((0, -50.3, 6)):
+                with GridLocations(50.3, 0, 3, 1):
+                    CounterBoreHole(3.6, 6.125, 1.6, 6)
+            with Locations((0, 50.3, 6)):
+                with GridLocations(50.3, 0, 3, 1):
+                    CounterBoreHole(2.55, 4.5675, 1.6, 6)
+
+        super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
+        self.color = Color(0x020202)
+
+
 if __name__ == "__main__":
-    from ocp_vscode import show
+    from ocp_vscode import show, set_defaults, Camera
+
+    # set_defaults(reset_camera=Camera.CENTER)
 
     show(
         pack(
@@ -373,6 +462,7 @@ if __name__ == "__main__":
                 VSlotLinearRail("20x60", 25),
                 VSlotLinearRail("20x80", 25),
                 VSlotLinearRail("40x40", 25),
+                CBeamGantryPlateXLarge(),
             ],
             20,
         )

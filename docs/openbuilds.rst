@@ -21,3 +21,4 @@ Here are classes/parts provided:
 .. autoclass:: CBeamLinearRailProfile
 .. autoclass:: VSlotLinearRail
 .. autoclass:: CBeamLinearRail
+.. autoclass:: CBeamGantryPlateXLarge
