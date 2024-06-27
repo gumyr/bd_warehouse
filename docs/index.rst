@@ -65,6 +65,7 @@ Table Of Contents
     installation.rst
     fastener.rst
     flange.rst
+    openbuilds.rst
     pipe.rst
     thread.rst
 
