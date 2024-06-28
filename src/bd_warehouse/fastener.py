@@ -502,10 +502,11 @@ class Nut(ABC, BasePartObject):
     @property
     def nut_diameter(self):
         """Calculate the maximum diameter of the nut"""
-        radii = [Vector(v).length for v in self.vertices().group_by(Axis.Z)[0]]
-        if len(radii) == 0:
+        bottom_vertices = self.nut_plan().vertices()
+        if len(bottom_vertices) < 3:
             raise Exception(f"Invalid nut: {type(self).__name__},{self.__dict__}")
-        return 2 * max(radii)
+        bottom_arc = Edge.make_three_point_arc(*bottom_vertices[0:3])
+        return 2 * bottom_arc.radius
 
     def length_offset(self):
         """Screw only parameter"""
@@ -821,6 +822,11 @@ class HeatSetNut(Nut):
     """
 
     fastener_data = read_fastener_parameters_from_csv("heatset_nut_parameters.csv")
+
+    @property
+    def nut_diameter(self):
+        """Calculate the maximum diameter of the nut"""
+        return float(self.fastener_data[self.nut_size][self.fastener_type + ":s"])
 
     def __init__(
         self,
