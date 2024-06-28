@@ -470,7 +470,7 @@ class XtremeSolidVWHeel(BasePartObject):
         length (float): rail length
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
         align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
-            or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
+            or max of object. Defaults to Align.CENTER.
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
     """
 
@@ -479,7 +479,7 @@ class XtremeSolidVWHeel(BasePartObject):
     def __init__(
         self,
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        align: Union[None, Align, tuple[Align, Align, Align]] = Align.CENTER,
         mode: Mode = Mode.ADD,
     ):
         with BuildPart() as wheel:
