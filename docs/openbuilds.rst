@@ -22,3 +22,4 @@ Here are classes/parts provided:
 .. autoclass:: VSlotLinearRail
 .. autoclass:: CBeamLinearRail
 .. autoclass:: CBeamGantryPlateXLarge
+.. autoclass:: XtremeSolidVWHeel

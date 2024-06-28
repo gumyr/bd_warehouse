@@ -448,10 +448,58 @@ class CBeamGantryPlateXLarge(BasePartObject):
         self.color = Color(0x020202)
 
 
+class XtremeSolidVWHeel(BasePartObject):
+    """Part Object: OpenBuilds Xtreme Solid V Wheel
+
+    A heavy-duty alternative to Delrin Wheels. Suitable during applications where substantial
+    force and weight are introduced into the system.  Perfect when additional accuracy is
+    needed and less compression than in the Delrin is desired. Flat profile designed to work
+    effortlessly with a belt on a belt and pinion system as well as lead screw and belt driven
+    systems.
+
+    Product Features:
+        - Heavy Duty
+        - Long lasting solid construction
+        - Ultra smooth finish for precise motion
+        - Flat wheel surface for belt travel (belt & pinion option)
+        - Self-Centering and Self- Lubricating
+        - Even distribution of weight
+        - Easily assembled and maintained
+
+    Args:
+        length (float): rail length
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+            or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+        with BuildPart() as wheel:
+            with BuildSketch() as x_section:
+                with Locations((0, 8)):
+                    Rectangle(10.2, 3.95, align=(Align.CENTER, Align.MIN))
+                    Rectangle(1, 2)
+                chamfer(x_section.vertices().group_by(Axis.Y)[-1], 2.15)
+            revolve(axis=Axis.X)
+
+        super().__init__(
+            part=wheel.part, rotation=rotation, align=tuplify(align, 3), mode=mode
+        )
+        self.color = Color(0xE0E0E0)
+
+
 if __name__ == "__main__":
     from ocp_vscode import show, set_defaults, Camera
 
-    # set_defaults(reset_camera=Camera.CENTER)
+    set_defaults(reset_camera=Camera.CENTER)
 
     show(
         pack(
@@ -463,6 +511,7 @@ if __name__ == "__main__":
                 VSlotLinearRail("20x80", 25),
                 VSlotLinearRail("40x40", 25),
                 CBeamGantryPlateXLarge(),
+                XtremeSolidVWHeel(),
             ],
             20,
         )
