@@ -2793,6 +2793,7 @@ def _make_fastener_hole(
     counter_sunk: bool = True,
     captive_nut: bool = False,
     threaded_hole: bool = False,
+    drill_tip: bool = True,
     update_hole_locations: bool = False,
 ) -> Part:
     """_make_fastener_hole
@@ -2873,12 +2874,13 @@ def _make_fastener_hole(
     else:
         fastener_hole = shank_hole
 
-    csk_angle = 82  # Common tip angle
-    h = hole_radius / math.tan(math.radians(csk_angle / 2.0))
-    drill_tip = Solid.make_cone(
-        hole_radius, 0.0, h, plane=Plane(bore_direction * depth, z_dir=bore_direction)
-    )
-    fastener_hole = fastener_hole.fuse(drill_tip)
+    if drill_tip:
+        csk_angle = 82  # Common tip angle
+        h = hole_radius / math.tan(math.radians(csk_angle / 2.0))
+        drill_tip = Solid.make_cone(
+            hole_radius, 0.0, h, plane=Plane(bore_direction * depth, z_dir=bore_direction)
+        )
+        fastener_hole = fastener_hole.fuse(drill_tip)
 
     # Update the hole location list for this fastener
     # Countersunk screws shouldn't be lowered into the hole
@@ -2931,6 +2933,7 @@ class ClearanceHole(BasePartObject):
         depth: float = None,
         counter_sunk: bool = True,
         captive_nut: bool = False,
+        drill_tip: bool = True,
         mode: Mode = Mode.SUBTRACT,
     ):
         context: BuildPart = BuildPart._get_context(self)
@@ -2963,6 +2966,7 @@ class ClearanceHole(BasePartObject):
             fit=fit,
             counter_sunk=counter_sunk,
             captive_nut=captive_nut,
+            drill_tip=drill_tip,
             update_hole_locations=context is not None,
         )
 
@@ -3009,6 +3013,7 @@ class TapHole(BasePartObject):
         fit: Literal["Close", "Normal", "Loose"] = "Normal",
         depth: float = None,
         counter_sunk: bool = True,
+        drill_tip: bool = True,
         mode: Mode = Mode.SUBTRACT,
     ):
         context: BuildPart = BuildPart._get_context(self)
@@ -3034,6 +3039,7 @@ class TapHole(BasePartObject):
             fit=fit,
             material=material,
             counter_sunk=counter_sunk,
+            drill_tip=drill_tip,
             update_hole_locations=context is not None,
         )
 
@@ -3081,6 +3087,7 @@ class ThreadedHole(BasePartObject):
         depth: float = None,
         counter_sunk: bool = True,
         simple: bool = True,
+        drill_tip: bool = True,
         mode: Mode = Mode.SUBTRACT,
     ):
         context: BuildPart = BuildPart._get_context(self)
@@ -3107,6 +3114,7 @@ class ThreadedHole(BasePartObject):
             material=material,
             counter_sunk=counter_sunk,
             threaded_hole=True,
+            drill_tip=drill_tip,
             update_hole_locations=context is not None,
         )
 
@@ -3171,6 +3179,7 @@ class InsertHole(BasePartObject):
         fastener: HeatSetNut,
         fit: Literal["Close", "Normal", "Loose"] = "Normal",
         depth: float = None,
+        drill_tip: bool = True,
         manufacturing_compensation: float = 0.0,
         mode: Mode = Mode.SUBTRACT,
     ):
@@ -3191,6 +3200,7 @@ class InsertHole(BasePartObject):
                 manufacturing_compensation
             ),
             depth=self.hole_depth,
+            drill_tip=drill_tip,
             fit=fit,
             update_hole_locations=context is not None,
         )
