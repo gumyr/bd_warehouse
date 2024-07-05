@@ -38,7 +38,8 @@ import csv
 import math
 from abc import ABC, abstractmethod
 from math import cos, pi, radians, sin, sqrt, tan
-from typing import Literal, Optional, Union
+from tabulate import tabulate
+from typing import Literal, Optional, Union, List
 
 import bd_warehouse
 
@@ -183,6 +184,20 @@ def evaluate_parameter_dict(
     return measurements
 
 
+def replace_dict_keys(data_dict: dict, key_mappings: dict) -> dict:
+    """
+    Replace the keys in data_dict based on the key_mappings dictionary.
+
+    :param data_dict: Dictionary with data
+    :param key_mappings: Dictionary with key name mappings
+    :return: New dictionary with replaced keys
+    """
+    return {
+        key_mappings.get(key, key): value
+        for key, value in data_dict.items()
+    }
+
+
 def isolate_fastener_type(target_fastener: str, fastener_data: dict) -> dict:
     """Split the fastener data 'type:value' strings into dictionary elements"""
     result = {}
@@ -248,6 +263,58 @@ def lookup_nominal_screw_lengths() -> dict:
             nominal_screw_lengths[row["Screw_Type"]] = sizes
 
     return nominal_screw_lengths
+
+
+def get_size_info_by_type(fastener_data: List[dict],
+                          fastener_data_param_names: List[str],
+                          fastener_type: str) -> list:
+    sizes = isolate_fastener_type(
+        fastener_type,
+        fastener_data
+    )
+
+    sizes_info = []
+    for size, size_info in sizes.items():
+        size_info_human = replace_dict_keys(
+            size_info, fastener_data_param_names
+        )
+        size_info_combined = {
+            **{
+                'Size': size,
+            },
+            **size_info_human,
+        }
+        sizes_info.append(size_info_combined)
+
+    return sizes_info
+
+
+def get_size_info_for_all_types(fastener_data: List[dict],
+                                fastener_data_param_names: List[str],
+                                fastener_types: List[str]) -> list:
+    all_sizes_info = []
+    for a_type in fastener_types:
+        sizes_info = get_size_info_by_type(
+            fastener_data,
+            fastener_data_param_names,
+            a_type
+        )
+        for size_info_row in sizes_info:
+            size_info_row_combined = {
+                **{
+                    'Fastener Type': a_type,
+                },
+                **size_info_row,
+            }
+            all_sizes_info.append(size_info_row_combined)
+
+    return all_sizes_info
+
+
+def print_table_list_of_dicts(data) -> None:
+    headers = data[0].keys()
+    rows = [[d[key] for key in headers] for d in data]
+    print(tabulate(rows, headers=headers, tablefmt='grid'))
 
 
 def cross_recess(size: str) -> tuple[Face, float]:
@@ -447,6 +514,34 @@ class Nut(ABC, BasePartObject):
             ) from e
 
     @classmethod
+    def size_info_for_all_types(cls) -> list:
+        return get_size_info_for_all_types(
+            cls.fastener_data,
+            cls.fastener_data_param_names,
+            cls.types()
+        )
+
+    @classmethod
+    def print_size_info_for_all_types(cls) -> None:
+        size_info = cls.size_info_for_all_types()
+
+        print_table_list_of_dicts(size_info)
+
+    @classmethod
+    def size_info_by_type(cls, fastener_type: str) -> list:
+        return get_size_info_by_type(
+            cls.fastener_data,
+            cls.fastener_data_param_names,
+            fastener_type
+        )
+
+    @classmethod
+    def print_size_info_by_type(cls, fastener_type: str) -> None:
+        size_info = cls.size_info_by_type(fastener_type)
+
+        print_table_list_of_dicts(size_info)
+
+    @classmethod
     def select_by_size(cls, size: str) -> dict:
         """Return a dictionary of list of fastener types of this size"""
         return select_by_size_fn(cls, size)
@@ -455,6 +550,11 @@ class Nut(ABC, BasePartObject):
     @abstractmethod
     def fastener_data(cls):  # pragma: no cover
         """Each derived class must provide a fastener_data dictionary"""
+        return NotImplementedError
+
+    @abstractmethod
+    def fastener_data_param_names(cls):  # pragma: no cover
+        """Each derived class must provide a fastener_data_param_names dictionary"""
         return NotImplementedError
 
     @abstractmethod
@@ -478,6 +578,16 @@ class Nut(ABC, BasePartObject):
     def info(self):
         """Return identifying information"""
         return f"{self.nut_class}({self.fastener_type}): {self.thread_size}"
+
+    @property
+    def size_info(self):
+        """Return the size information in a human readable format"""
+        if hasattr(self, 'fastener_data_param_names'):
+            return replace_dict_keys(
+                self.nut_data, self.fastener_data_param_names
+            )
+        else:
+            return self.nut_data
 
     @property
     def nut_class(self):
@@ -682,6 +792,11 @@ class DomedCapNut(Nut):
     """
 
     fastener_data = read_fastener_parameters_from_csv("domed_cap_nut_parameters.csv")
+    fastener_data_param_names = {
+        'dk': 'Head Diameter (dk)',
+        'm': 'Nut Height (m)',
+        's': 'Width Across Flats (s)',
+    }
 
     def __init__(
         self,
@@ -822,6 +937,15 @@ class HeatSetNut(Nut):
     """
 
     fastener_data = read_fastener_parameters_from_csv("heatset_nut_parameters.csv")
+    fastener_data_param_names = {
+        's': 'Outer Diameter (s)',
+        'm': 'Height (s)',
+        'dc': 'Tip Diameter (dc)',
+        'knurls': 'Knurls',
+        'material_thickness': 'Material Thickness',
+        'drill': 'Drill Size',
+        'part': 'Part #'
+    }
 
     @property
     def nut_diameter(self):
@@ -1117,6 +1241,10 @@ class HexNut(Nut):
     """
 
     fastener_data = read_fastener_parameters_from_csv("hex_nut_parameters.csv")
+    fastener_data_param_names = {
+        'm': 'Nut Height (m)',
+        's': 'Width Across Flats (s)',
+    }
 
     def __init__(
         self,
@@ -1153,6 +1281,12 @@ class HexNutWithFlange(Nut):
     fastener_data = read_fastener_parameters_from_csv(
         "hex_nut_with_flange_parameters.csv"
     )
+    fastener_data_param_names = {
+        'c': 'Flange Thickness (c)',
+        'dc': 'Flange Diameter (dc)',
+        'm': 'Nut Height (m)',
+        's': 'Width Across Flats (s)',
+    }
 
     def __init__(
         self,
@@ -1223,6 +1357,10 @@ class UnchamferedHexagonNut(Nut):
     fastener_data = read_fastener_parameters_from_csv(
         "unchamfered_hex_nut_parameters.csv"
     )
+    fastener_data_param_names = {
+        'm': 'Nut Height (m)',
+        's': 'Width Across Flats (s)',
+    }
 
     def __init__(
         self,
@@ -1263,6 +1401,10 @@ class SquareNut(Nut):
     """
 
     fastener_data = read_fastener_parameters_from_csv("square_nut_parameters.csv")
+    fastener_data_param_names = {
+        'm': 'Nut Height (m)',
+        's': 'Width Across Flats (s)',
+    }
 
     def __init__(
         self,
@@ -1393,11 +1535,44 @@ class Screw(ABC, BasePartObject):
         return NotImplementedError
 
     @abstractmethod
+    def fastener_data_param_names(cls):  # pragma: no cover
+        """Each derived class must provide a fastener_data_param_names dictionary"""
+        return NotImplementedError
+
+    @abstractmethod
     def countersink_profile(
         self, fit: Literal["Close", "Normal", "Loose"]
     ) -> Face:  # pragma: no cover
         """Each derived class must provide the profile of a countersink cutter"""
         return NotImplementedError
+
+    @classmethod
+    def size_info_for_all_types(cls) -> list:
+        return get_size_info_for_all_types(
+            cls.fastener_data,
+            cls.fastener_data_param_names,
+            cls.types()
+        )
+
+    @classmethod
+    def print_size_info_for_all_types(cls) -> None:
+        size_info = cls.size_info_for_all_types()
+
+        print_table_list_of_dicts(size_info)
+
+    @classmethod
+    def size_info_by_type(cls, fastener_type: str) -> list:
+        return get_size_info_by_type(
+            cls.fastener_data,
+            cls.fastener_data_param_names,
+            fastener_type
+        )
+
+    @classmethod
+    def print_size_info_by_type(cls, fastener_type: str) -> None:
+        size_info = cls.size_info_by_type(fastener_type)
+
+        print_table_list_of_dicts(size_info)
 
     @classmethod
     def select_by_size(cls, size: str) -> dict[str:float]:
@@ -1461,6 +1636,16 @@ class Screw(ABC, BasePartObject):
     def info(self) -> str:
         """Return identifying information"""
         return f"{self.screw_class}({self.fastener_type}): {self.thread_size}x{self.length}{' left hand thread' if self.hand=='left' else ''}"
+
+    @property
+    def size_info(self):
+        """Return the size information in a human readable format"""
+        if hasattr(self, 'fastener_data_param_names'):
+            return replace_dict_keys(
+                self.screw_data, self.fastener_data_param_names
+            )
+        else:
+            return self.screw_data
 
     @property
     def screw_class(self) -> str:
@@ -1710,6 +1895,17 @@ class ButtonHeadScrew(Screw):
     """
 
     fastener_data = read_fastener_parameters_from_csv("button_head_parameters.csv")
+    fastener_data_param_names = {
+        'dk': 'Head Diameter (dk)',
+        'dl': 'Head Diameter small (dl)',
+        'k': 'Head Hight (k)',
+        'sf': 'Hex Depth (sf)',
+        'rf': 'Head Radius (rf)',
+        's': 'Internal Hexagon Size (s)',
+        't': 'Socket Depth (t)',
+        'short': 'Length (Min)',
+        'long': 'Length (Max)',
+    }
 
     def __init__(
         self,
@@ -1770,6 +1966,18 @@ class ButtonHeadWithCollarScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "button_head_with_collar_parameters.csv"
     )
+    fastener_data_param_names = {
+        'dk': 'Head Diameter (dk)',
+        'dl': 'Head Diameter small (dl)',
+        'dc': 'Outer Diameter (dc)',
+        'k': 'Head Hight (k)',
+        'rf': 'Head Radius (rf)',
+        'c': 'Head Height (c)',
+        's': 'Internal Hexagon Size (s)',
+        't': 'Socket Depth (t)',
+        'short': 'Length (Min)',
+        'long': 'Length (Max)',
+    }
 
     def __init__(
         self,
@@ -1844,6 +2052,14 @@ class CheeseHeadScrew(Screw):
     """
 
     fastener_data = read_fastener_parameters_from_csv("cheese_head_parameters.csv")
+    fastener_data_param_names = {
+        'dk': 'Head Diameter (dk)',
+        'k': 'Head Hight (k)',
+        'n': 'Groove Width (n)',
+        't': 'Groove Depth (t)',
+        'short': 'Length (Min)',
+        'long': 'Length (Max)',
+    }
 
     def __init__(
         self,
@@ -1905,6 +2121,15 @@ class CounterSunkScrew(Screw):
     """
 
     fastener_data = read_fastener_parameters_from_csv("countersunk_head_parameters.csv")
+    fastener_data_param_names = {
+        'a': 'Grip Length (a)',
+        'dk': 'Head Diameter (dk)',
+        'k': 'Head Hight (k)',
+        's': 'Internal Hexagon Size (s)',
+        't': 'Groove Depth (t)',
+        'short': 'Length (Min)',
+        'long': 'Length (Max)',
+    }
 
     def __init__(
         self,
@@ -1972,6 +2197,12 @@ class HexHeadScrew(Screw):
     """
 
     fastener_data = read_fastener_parameters_from_csv("hex_head_parameters.csv")
+    fastener_data_param_names = {
+        'k': 'Head Hight (k)',
+        's': 'Width Across Flats (s)',
+        'short': 'Length (Min)',
+        'long': 'Length (Max)',
+    }
 
     def __init__(
         self,
@@ -2054,6 +2285,14 @@ class HexHeadWithFlangeScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "hex_head_with_flange_parameters.csv"
     )
+    fastener_data_param_names = {
+        'c': 'Flange Thickness (c)',
+        'dc': 'Flange Diameter (dc)',
+        'k': 'Head Hight (k)',
+        's': 'Width Across Flats (s)',
+        'short': 'Length (Min)',
+        'long': 'Length (Max)',
+    }
 
     def __init__(
         self,
@@ -2137,6 +2376,13 @@ class PanHeadScrew(Screw):
     """
 
     fastener_data = read_fastener_parameters_from_csv("pan_head_parameters.csv")
+    fastener_data_param_names = {
+        'dk': 'Outer Diameter (dk)',
+        'k': 'Head Hight (k)',
+        'recess': 'Recess',
+        'short': 'Length (Min)',
+        'long': 'Length (Max)',
+    }
 
     def __init__(
         self,
@@ -2198,6 +2444,15 @@ class PanHeadWithCollarScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "pan_head_with_collar_parameters.csv"
     )
+    fastener_data_param_names = {
+        'dk': 'Outer Diameter (dk)',
+        'k': 'Head Hight (k)',
+        'c': 'Mounting Collar Thickness (c)',
+        'rf': 'Head Radius (rf)',
+        'recess': 'Recess',
+        'short': 'Length (Min)',
+        'long': 'Length (Max)',
+    }
 
     def __init__(
         self,
@@ -2258,6 +2513,14 @@ class RaisedCheeseHeadScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "raised_cheese_head_parameters.csv"
     )
+    fastener_data_param_names = {
+        'dk': 'Outer Diameter (dk)',
+        'k': 'Head Hight (k)',
+        'rf': 'Head Radius (rf)',
+        'recess': 'Recess',
+        'short': 'Length (Min)',
+        'long': 'Length (Max)',
+    }
 
     def __init__(
         self,
@@ -2321,6 +2584,16 @@ class RaisedCounterSunkOvalHeadScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "raised_countersunk_oval_head_parameters.csv"
     )
+    fastener_data_param_names = {
+        'a': 'Grip Length (a)',
+        'dk': 'Outer Diameter (dk)',
+        'k': 'Head Hight (k)',
+        'n': 'Groove Width (n)',
+        'rf': 'Head Radius (rf)',
+        't': 'Socket Depth (t)',
+        'short': 'Length (Min)',
+        'long': 'Length (Max)',
+    }
 
     def __init__(
         self,
@@ -2398,6 +2671,12 @@ class SetScrew(Screw):
     """
 
     fastener_data = read_fastener_parameters_from_csv("setscrew_parameters.csv")
+    fastener_data_param_names = {
+        's': 'Width Across Flats (s)',
+        't': 'Socket Depth (t)',
+        'short': 'Length (Min)',
+        'long': 'Length (Max)',
+    }
 
     def __init__(
         self,
@@ -2483,6 +2762,14 @@ class SocketHeadCapScrew(Screw):
     """
 
     fastener_data = read_fastener_parameters_from_csv("socket_head_cap_parameters.csv")
+    fastener_data_param_names = {
+        'dk': 'Head Diameter (dk)',
+        'k': 'Head Hight (k)',
+        's': 'Internal Hexagon Size (s)',
+        't': 'Socket Depth (t)',
+        'short': 'Length (Min)',
+        'long': 'Length (Max)',
+    }
 
     def __init__(
         self,
@@ -2565,6 +2852,11 @@ class Washer(ABC, BasePartObject):
         return NotImplementedError
 
     @abstractmethod
+    def fastener_data_param_names(cls):  # pragma: no cover
+        """Each derived class must provide a fastener_data_param_names dictionary"""
+        return NotImplementedError
+
+    @abstractmethod
     def washer_profile(self) -> Face:  # pragma: no cover
         """Each derived class must provide the profile of the washer"""
         return NotImplementedError
@@ -2573,6 +2865,16 @@ class Washer(ABC, BasePartObject):
     def info(self):
         """Return identifying information"""
         return f"{self.washer_class}({self.fastener_type}): {self.thread_size}"
+
+    @property
+    def size_info(self):
+        """Return the size information in a human readable format"""
+        if hasattr(self, 'fastener_data_param_names'):
+            return replace_dict_keys(
+                self.washer_data, self.fastener_data_param_names
+            )
+        else:
+            return self.nut_data
 
     @property
     def washer_class(self):
@@ -2593,6 +2895,34 @@ class Washer(ABC, BasePartObject):
     def select_by_size(cls, size: str) -> dict:
         """Return a dictionary of list of fastener types of this size"""
         return select_by_size_fn(cls, size)
+
+    @classmethod
+    def size_info_for_all_types(cls) -> list:
+        return get_size_info_for_all_types(
+            cls.fastener_data,
+            cls.fastener_data_param_names,
+            cls.types()
+        )
+
+    @classmethod
+    def print_size_info_for_all_types(cls) -> None:
+        size_info = cls.size_info_for_all_types()
+
+        print_table_list_of_dicts(size_info)
+
+    @classmethod
+    def size_info_by_type(cls, fastener_type: str) -> list:
+        return get_size_info_by_type(
+            cls.fastener_data,
+            cls.fastener_data_param_names,
+            fastener_type
+        )
+
+    @classmethod
+    def print_size_info_by_type(cls, fastener_type: str) -> None:
+        size_info = cls.size_info_by_type(fastener_type)
+
+        print_table_list_of_dicts(size_info)
 
     @property
     def washer_thickness(self) -> float:
@@ -2700,6 +3030,11 @@ class PlainWasher(Washer):
         super().__init__(size, fastener_type, rotation, align, mode)
 
     fastener_data = read_fastener_parameters_from_csv("plain_washer_parameters.csv")
+    fastener_data_param_names = {
+        'd1': 'Inner Diameter (d1)',
+        'd2': 'Ourer Diameter (d2)',
+        'h': 'Height (h)',
+    }
     washer_profile = Washer.default_washer_profile
     countersink_profile = Washer.default_countersink_profile
 
@@ -2717,6 +3052,11 @@ class ChamferedWasher(Washer):
     """
 
     fastener_data = read_fastener_parameters_from_csv("chamfered_washer_parameters.csv")
+    fastener_data_param_names = {
+        'd1': 'Inner Diameter (d1)',
+        'd2': 'Ourer Diameter (d2)',
+        'h': 'Height (h)',
+    }
 
     def __init__(
         self,
@@ -2757,6 +3097,11 @@ class CheeseHeadWasher(Washer):
     fastener_data = read_fastener_parameters_from_csv(
         "cheese_head_washer_parameters.csv"
     )
+    fastener_data_param_names = {
+        'd1': 'Inner Diameter (d1)',
+        'd2': 'Ourer Diameter (d2)',
+        'h': 'Height (h)',
+    }
 
     def __init__(
         self,
