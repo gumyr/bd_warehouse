@@ -37,6 +37,7 @@ classifiers = [
 
 dependencies = [
     "build123d",
+    "tabulate",
     "typing_extensions >= 4.4.0, <5",
 ]
 
