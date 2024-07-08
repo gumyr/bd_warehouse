@@ -2059,7 +2059,7 @@ class HexHeadWithFlangeScrew(Screw):
         self,
         size: str,
         length: float,
-        fastener_type: Literal["en1662", "en1665"] = "en1662",
+        fastener_type: Literal["din1662", "din1665"] = "din1662",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
         rotation: RotationLike = (0, 0, 0),
