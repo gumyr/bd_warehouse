@@ -126,7 +126,7 @@ class CBeamLinearRail(BasePartObject):
     or even use a hacksaw. From there, you simply use a screw driver to make the
     connections.
 
-        Product Features:
+    Product Features:
         - Lightweight and strong
         - Tee Nut channel
         - Smooth v-groove for linear motion
@@ -175,7 +175,7 @@ class CBeamGantryPlateXLarge(BasePartObject):
     holes for professional flush mounts and tapped holes for a 90° connection, this plate is
     ideal for XY configurations, offering multiple mounting options to suit your project needs.
 
-    Features:
+    Product Features:
         - Wide stance for enhanced stability
         - Countersunk holes for a flush finish
         - Tapped holes for easy 90° connections
