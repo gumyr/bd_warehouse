@@ -66,6 +66,7 @@ Table Of Contents
     bearing.rst
     fastener.rst
     flange.rst
+    gear.rst
     openbuilds.rst
     pipe.rst
     thread.rst
