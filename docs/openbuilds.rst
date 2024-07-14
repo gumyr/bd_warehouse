@@ -17,9 +17,12 @@ For more information, visit `OpenBuilds <https://openbuilds.com/>`_.
 
 Here are classes/parts provided:
 
-.. autoclass:: VSlotLinearRailProfile
-.. autoclass:: CBeamLinearRailProfile
-.. autoclass:: VSlotLinearRail
-.. autoclass:: CBeamLinearRail
+.. note:: All Joints are currently experimental and subject to change
+
 .. autoclass:: CBeamGantryPlateXLarge
+.. autoclass:: CBeamLinearRail
+.. autoclass:: CBeamLinearRailProfile
+.. autoclass:: RouterSpindleMount
+.. autoclass:: VSlotLinearRail
+.. autoclass:: VSlotLinearRailProfile
 .. autoclass:: XtremeSolidVWHeel
