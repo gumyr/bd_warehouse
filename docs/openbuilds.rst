@@ -1,6 +1,6 @@
-########################################
+#########################################
 open_builds - parametric OpenBuilds parts
-########################################
+#########################################
 OpenBuilds is a comprehensive online platform for makers and DIY enthusiasts focused on 
 building custom machines. The site offers a wide range of resources including detailed 
 build guides for CNC machines, 3D printers, laser cutters, and more. Users can share 
