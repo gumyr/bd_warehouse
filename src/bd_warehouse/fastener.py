@@ -2873,7 +2873,7 @@ def _make_fastener_hole(
     else:
         fastener_hole = shank_hole
 
-    csk_angle = 82  # Common tip angle
+    csk_angle = 180 - 82  # 82 is a common tip angle
     h = hole_radius / math.tan(math.radians(csk_angle / 2.0))
     drill_tip = Solid.make_cone(
         hole_radius, 0.0, h, plane=Plane(bore_direction * depth, z_dir=bore_direction)
