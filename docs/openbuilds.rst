@@ -19,6 +19,7 @@ Here are classes/parts provided:
 
 .. note:: All Joints are currently experimental and subject to change
 
+.. autoclass:: CBeamEndMount
 .. autoclass:: CBeamGantryPlateXLarge
 .. autoclass:: CBeamLinearRail
 .. autoclass:: CBeamLinearRailProfile

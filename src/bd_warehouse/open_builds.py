@@ -35,6 +35,63 @@ from bd_warehouse.fastener import SocketHeadCapScrew, ThreadedHole
 CAVITY_RADIUS = 2.3 * MM
 FILLET_RADIUS = 1.5 * MM
 
+m5 = SocketHeadCapScrew("M5-0.8", 20 * MM)  # Used to create threaded holes
+
+
+class CBeamEndMount(BasePartObject):
+    """CBeamEndMount
+
+    Ensure seamless integration of your motor with the C-Beam Linear Rail using the
+    versatile C-Beam End Mount. Designed with pre-threaded holes and a bearing recess
+    for lead screw transmission, this mount also features additional countersunk holes
+    for flush mounting, making it an excellent choice for various projects.
+
+    Product Features:
+        - Pre-tapped holes
+        - Countersunk holes
+        - Bearing recess for lead screw transmission
+
+    Args:
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+            or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = (
+            Align.CENTER,
+            Align.CENTER,
+            Align.MIN,
+        ),
+        mode: Mode = Mode.ADD,
+    ):
+
+        with BuildPart() as plate:
+            Box(80, 50, 12)
+            with Locations(Location((0, 7.4, -6), (0, 1, 0), 180)):
+                CounterBoreHole(5.588, 8.05, 4.5)
+            with Locations((0, 8.9 - 25, 6)):
+                with GridLocations(47.14, 0, 2, 1):
+                    ThreadedHole(m5, counter_sunk=False)
+            with Locations((0, 10 - 25, 6)):
+                with GridLocations(20, 0, 2, 1):
+                    CounterBoreHole(2.6, 4.6, 1.55)
+            with Locations((0, 5, 6)):
+                with GridLocations(60, 0, 2, 1):
+                    CounterBoreHole(2.6, 4.6, 1.55)
+            with Locations(Plane(plate.faces().sort_by(Axis.Y)[-1], x_dir=(1, 0, 0))):
+                with GridLocations(20, 0, 2, 1):
+                    ThreadedHole(m5, counter_sunk=False, depth=14 * MM)
+
+        super().__init__(plate.part, rotation, align, mode)
+        self.label = "CBeamEndMount"
+        self.color = Color(0x020202)
+
 
 class CBeamLinearRailProfile(BaseSketchObject):
     """Sketch Object: OpenBuilds C Beam Linear Rail Profile
@@ -683,9 +740,10 @@ if __name__ == "__main__":
     show(
         pack(
             [
+                CBeamEndMount(),
                 CBeamLinearRail(25),
                 CBeamGantryPlateXLarge(),
-                RouterSpindleMount(),
+                RouterSpindleMount().rotate(Axis.Z, 180),
                 VSlotLinearRail("20x20", 25),
                 VSlotLinearRail("20x40", 25),
                 VSlotLinearRail("20x60", 25),
