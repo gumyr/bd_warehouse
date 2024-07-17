@@ -105,6 +105,10 @@ parameters. All derived bearings inherit the same API as the base Bearing class.
 * ``SingleRowAngularContactBallBearing``: SKT
 * ``SingleRowCylindricalRollerBearing``: SKT
 
+.. autoclass:: SingleRowDeepGrooveBallBearing
+.. autoclass:: SingleRowCappedDeepGrooveBallBearing
+.. autoclass:: SingleRowAngularContactBallBearing
+.. autoclass:: SingleRowCylindricalRollerBearing
 ..
 	* ``SingleRowTaperedRollerBearing``: SKT
 
@@ -113,20 +117,18 @@ websites or from the standard document itself.  SKT provides comprehensive infor
 rolling bearings in their document:
 `Rolling bearings <https://www.skf.com/binaries/pub12/Images/0901d196802809de-Rolling-bearings---17000_1-EN_tcm_12-121486.pdf>`_.
 
-..
-	.. _press fit holes:
+.. _press fit holes:
 
-..
-	***************
-	Press Fit Holes
-	***************
-	When designing parts with CadQuery a common operation is to place holes appropriate to a specific bearing
-	into the part. This operation is optimized with bd_warehouse by the following new Workplane method:
+***************
+Press Fit Holes
+***************
+When designing parts with build123d a common operation is to place holes appropriate to a 
+specific bearing into the part. This operation is optimized with bd_warehouse by the 
+following custom hole object:
 
-..
-	* :meth:`.pressFitHole`
+.. autoclass:: PressFitHole
 
-..
-	Note that this method can place a hole in the part sized and aligned for the bore of the bearing if
-	an axle is intended to pass through the part.  The ``fit`` parameter determines how much larger this
-	hole is than the bearing bore.
+Note that this object can place a hole in the part sized and aligned for the bore of the bearing if
+an axle is intended to pass through the part.  The ``fit`` parameter determines how much larger this
+hole is than the bearing bore. The `hole_locations` attribute of the bearing instance passed
+to ``PressFitHole`` will be updated with the location of the hole to easy assembly creation.

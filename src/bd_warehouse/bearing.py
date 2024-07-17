@@ -31,7 +31,8 @@ license:
 import copy
 from abc import ABC, abstractmethod
 from math import pi, radians, degrees, asin, sin
-from build123d.build_common import Locations, PolarLocations, MM
+from typing import Literal
+from build123d.build_common import Locations, PolarLocations, MM, validate_inputs
 from build123d.build_enums import Align, Mode, SortBy
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
@@ -84,6 +85,7 @@ from bd_warehouse.fastener import (
     isolate_fastener_type,
     lookup_drill_diameters,
     select_by_size_fn,
+    _make_fastener_hole,
 )
 
 
@@ -232,6 +234,7 @@ class Bearing(ABC, BasePartObject):
         self.bearing_type = bearing_type
         self.capped = self.method_exists("cap")
         self.is_metric = self.bearing_size[0] == "M"
+        self.hole_locations: list[Location] = []  #: custom holes locations
 
         try:
             self.bearing_dict = evaluate_parameter_dict(
@@ -304,7 +307,7 @@ class Bearing(ABC, BasePartObject):
     def default_countersink_profile(self, interference: float = 0) -> Face:
         (D, B) = (self.bearing_dict[p] for p in ["D", "B"])
         with BuildSketch(Plane.XZ) as profile:
-            Rectangle(D / 2 - interference, align=Align.MIN)
+            Rectangle(D / 2 - interference, B, align=Align.MIN)
         return profile.sketch.face()
 
     def default_roller(self) -> Solid:
@@ -642,6 +645,72 @@ class SingleRowTaperedRollerBearing(Bearing):
             )
         )
         return cage_face
+
+
+class PressFitHole(BasePartObject):
+    """Press Fit Hole
+
+    A press fit hole for a bearing is a precisely machined cavity designed to hold
+    a bearing securely through interference fit, where the hole's diameter is slightly
+    smaller than the bearing's outer diameter. This fit relies on frictional force to
+    keep the bearing in place without additional fasteners. Key factors include material
+    compatibility, tight tolerance control, and smooth surface finish to ensure a
+    reliable and stable fit. Press fit holes are widely used in high-precision
+    applications like automotive, aerospace, and industrial machinery, offering a
+    robust and maintenance-free solution for securing bearings.
+
+    Args:
+        bearing: A bearing instance
+        interference: The amount the decrease the hole radius from the bearing outer
+            radius. Defaults to 0.
+        fit: one of "Close", "Normal", "Loose" which determines hole diameter for the
+            bore. Defaults to "Normal".
+        depth: hole depth. Defaults to through part.
+        mode (Mode, optional): combination mode. Defaults to Mode.SUBTRACT.
+
+    Raises:
+        ValueError: PressFitHole only accepts bearings of type Bearing
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        bearing: Bearing,
+        interference: float = 0,
+        fit: Literal["Close", "Normal", "Loose"] = "Normal",
+        depth: float = None,
+        mode: Mode = Mode.SUBTRACT,
+    ):
+        context: BuildPart = BuildPart._get_context(self)
+        validate_inputs(context, self)
+
+        if not isinstance(bearing, Bearing):
+            raise ValueError("pressFitHole only accepts bearings")
+
+        if depth is not None:
+            self.hole_depth = depth
+        elif depth is None and context is not None:
+            self.hole_depth = 2 * context.max_dimension
+        else:
+            raise ValueError("No depth provided")
+
+        hole_part = _make_fastener_hole(
+            hole_diameters=bearing.clearance_hole_diameters,
+            fastener=bearing,
+            depth=self.hole_depth,
+            countersink_profile=bearing.countersink_profile(interference),
+            fit=fit,
+            counter_sunk=True,
+            update_hole_locations=context is not None,
+        )
+
+        super().__init__(
+            part=hole_part,
+            align=None,
+            rotation=(0, 0, 0),
+            mode=mode,
+        )
 
 
 if __name__ == "__main__":
