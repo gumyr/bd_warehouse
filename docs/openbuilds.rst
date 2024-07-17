@@ -24,7 +24,9 @@ Here are classes/parts provided:
 .. autoclass:: CBeamGantryPlateXLarge
 .. autoclass:: CBeamLinearRail
 .. autoclass:: CBeamLinearRailProfile
+.. autoclass:: CBeamRiserPlate
 .. autoclass:: RouterSpindleMount
+.. autoclass:: SpacerBlock
 .. autoclass:: VSlotLinearRail
 .. autoclass:: VSlotLinearRailProfile
 .. autoclass:: XtremeSolidVWHeel

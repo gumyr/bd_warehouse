@@ -571,6 +571,56 @@ class RouterSpindleMount(BasePartObject):
             RigidJoint(f"bottom_{label}", self, pos * Pos(0, 0, -thickness))
 
 
+class SpacerBlock(BasePartObject):
+    """Part Object: OpenBuilds Spacer Block
+
+    This Spacer Block allows you to raise the V-Slot Gantry Plate up away from the rail
+    12mm so that you can run transmission components such as a Belt Drive or Threaded Rod
+    underneath the V-Slot Gantry Plate.
+
+    Product Features:
+        - Adds transmission spacing to any V-Slot Liner Actuators
+        - Compatible with multiple OpenBuilds plates
+
+    Specifications:
+        - Size: 86.4 x 20mm
+        - Thickness: 12mm
+        - M5 Tapped Holes to allow mounting to the V-Slot Gantry Plate
+        - 3 Holes that allow for mounting of full size OpenBuilds Wheels
+        - Anodized Aluminum
+        - Color: Black
+
+    Args:
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+            or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+
+        with BuildPart() as plate:
+            with BuildSketch() as bs:
+                RectangleRounded(86.4, 20, 3.36)
+                with GridLocations(30, 0, 3, 1):
+                    Circle(3.6, mode=Mode.SUBTRACT)
+            extrude(amount=12)
+            with Locations((0, 0, 12)):
+                with GridLocations(40, 0, 2, 1):
+                    ThreadedHole(m5, counter_sunk=False, depth=12)
+
+        super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
+        self.color = Color(0x020202)
+        self.label = "CBeamRiserPlate"
+
+
 class _VSlotGroove(BaseSketchObject):
     """Sketch Object: OpenBuilds V Slot Linear Rail Groove
 
@@ -875,6 +925,7 @@ if __name__ == "__main__":
                 CBeamGantryPlateXLarge(),
                 CBeamRiserPlate(),
                 RouterSpindleMount().rotate(Axis.Z, 180),
+                SpacerBlock(),
                 VSlotLinearRail("20x20", 25),
                 VSlotLinearRail("20x40", 25),
                 VSlotLinearRail("20x60", 25),
