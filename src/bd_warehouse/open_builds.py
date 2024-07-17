@@ -271,19 +271,18 @@ class CBeamGantryPlate(BasePartObject):
                 RectangleRounded(29.9, 29.9, 4.92)
             extrude(amount=-1.5, mode=Mode.SUBTRACT)
 
-            with GridLocations(40, 40, 2, 2):
-                Hole(2.1)
-            with GridLocations(60, 60, 2, 2):
-                Hole(2.55)
             with Locations((0, 14.25, 6)):
                 with GridLocations(60, 0, 2, 1):
                     CounterBoreHole(3.6, 6, 1.5)
             with Locations((0, -14.25, 6)):
                 with GridLocations(60, 0, 2, 1):
                     CounterBoreHole(2.55, 4.5, 1.5)
-            with GridLocations(20, 60, 2, 2):
-                Hole(2.1)
-            with GridLocations(60, 0, 2, 1):
+            with Locations((0, 0, 6)):
+                with GridLocations(40, 40, 2, 2):
+                    ThreadedHole(m5, counter_sunk=False, depth=6 * MM)
+                with GridLocations(20, 60, 2, 2):
+                    ThreadedHole(m5, counter_sunk=False, depth=6 * MM)
+            with GridLocations(60, 30, 2, 3):
                 Hole(2.55)
             with GridLocations(20, 20, 3, 2):
                 Hole(2.55)
