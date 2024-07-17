@@ -223,6 +223,80 @@ class CBeamLinearRail(BasePartObject):
         self.label = "CBeamLinearRail"
 
 
+class CBeamGantryPlate(BasePartObject):
+    """Part Object: OpenBuilds C-Beam Gantry Plate
+
+    Achieve a compact gantry cart footprint with the versatile C-Beam Gantry Plate. This
+    plate accommodates up to 4 Mini V Wheels and can be easily configured to station wheels
+    inside the C-Beam Linear Rail track. The plate features recessed and pre-tapped holes
+    for professional flush mounts, making it a reliable component for various mounting
+    configurations.
+
+    Product Features:
+        - Countersunk holes
+        - Pre-tapped holes
+        - Center recess
+        - Multiple mounting configurations
+
+    Specifications:
+        - Size: 77.5 x 77.5mm
+        - Thickness: 6mm
+        - Material: 6061-T5 Aluminum
+        - Finish: Brushed and Anodized
+        - Color: Black
+
+    Args:
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+            or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+
+        with BuildPart() as plate:
+            with BuildSketch():
+                RectangleRounded(38.575 * 2, 38.575 * 2, 4.635)
+                with Locations((-5, 0)):
+                    SlotCenterToCenter(10, 2.55 * 2, mode=Mode.SUBTRACT)
+            extrude(amount=6)
+            with BuildSketch(Plane.XY.offset(6)):
+                RectangleRounded(29.9, 29.9, 4.92)
+            extrude(amount=-1.5, mode=Mode.SUBTRACT)
+
+            with GridLocations(40, 40, 2, 2):
+                Hole(2.1)
+            with GridLocations(60, 60, 2, 2):
+                Hole(2.55)
+            with Locations((0, 14.25, 6)):
+                with GridLocations(60, 0, 2, 1):
+                    CounterBoreHole(3.6, 6, 1.5)
+            with Locations((0, -14.25, 6)):
+                with GridLocations(60, 0, 2, 1):
+                    CounterBoreHole(2.55, 4.5, 1.5)
+            with GridLocations(20, 60, 2, 2):
+                Hole(2.1)
+            with GridLocations(60, 0, 2, 1):
+                Hole(2.55)
+            with GridLocations(20, 20, 3, 2):
+                Hole(2.55)
+            with GridLocations(0, 40, 1, 2):
+                Hole(2.55)
+            with Locations((-10, -10), (-10, 10), (10, 0)):
+                Hole(2.55)
+
+        super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
+        self.color = Color(0x020202)
+        self.label = "CBeamGantryPlate"
+
+
 class CBeamGantryPlateXLarge(BasePartObject):
     """Part Object: OpenBuilds C-Beam Gantry Plate X-Large
 
@@ -742,6 +816,7 @@ if __name__ == "__main__":
             [
                 CBeamEndMount(),
                 CBeamLinearRail(25),
+                CBeamGantryPlate(),
                 CBeamGantryPlateXLarge(),
                 RouterSpindleMount().rotate(Axis.Z, 180),
                 VSlotLinearRail("20x20", 25),
