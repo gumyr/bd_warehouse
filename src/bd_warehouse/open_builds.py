@@ -384,6 +384,62 @@ class CBeamGantryPlateXLarge(BasePartObject):
         self.label = "CBeamGantryPlateXLarge"
 
 
+class CBeamRiserPlate(BasePartObject):
+    """Part Object: OpenBuilds C-Beam Riser Plate
+
+    A key component used to attach C-Beam Gantry Plates to a C-Beam Shield. Pre-threaded
+    holes and center recess allow for flush mounting a top plate. Each set contains 2 riser
+    plates.
+
+    Product Features:
+        - C-Beam and V-Slot 20x80mm compatible
+        - Pre-tapped holes
+        - Center recess
+
+    Specifications:
+        - Size: 77.5 x 14.874mm
+        - Thickness: 8mm
+        - Material: 6061-T5 Aluminum
+        - Finish: Brushed and Anodized
+        - Color: Black
+
+    Args:
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+            or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+
+        with BuildPart() as plate:
+            with BuildSketch() as sk:
+                Rectangle(38.75 * 2, 7.437 * 2)
+                fillet(sk.vertices().group_by(Axis.Y)[0], 1.2)
+                fillet(sk.vertices().group_by(Axis.Y)[-1], 3.5)
+                with Locations((0, -1.323)):
+                    with GridLocations(20, 0, 2, 1):
+                        Circle(2.55, mode=Mode.SUBTRACT)
+            extrude(amount=8)
+            with BuildSketch(Plane((0, -7.427, 8))):
+                RectangleRounded(32.24, 2 * 11.86712, 0.75)
+            extrude(amount=-2.1, mode=Mode.SUBTRACT)
+            with Locations((0, -1.323, 8)):
+                with GridLocations(60, 0, 2, 1):
+                    ThreadedHole(m5, counter_sunk=False, depth=8 * MM)
+
+        super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
+        self.color = Color(0x020202)
+        self.label = "CBeamRiserPlate"
+
+
 class RouterSpindleMount(BasePartObject):
     """RouterSpindleMount
 
@@ -817,6 +873,7 @@ if __name__ == "__main__":
                 CBeamLinearRail(25),
                 CBeamGantryPlate(),
                 CBeamGantryPlateXLarge(),
+                CBeamRiserPlate(),
                 RouterSpindleMount().rotate(Axis.Z, 180),
                 VSlotLinearRail("20x20", 25),
                 VSlotLinearRail("20x40", 25),
