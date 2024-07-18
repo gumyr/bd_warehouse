@@ -38,6 +38,76 @@ FILLET_RADIUS = 1.5 * MM
 m5 = SocketHeadCapScrew("M5-0.8", 20 * MM)  # Used to create threaded holes
 
 
+class AcmeAntiBacklashNutBlock8mm(BasePartObject):
+    """Part Object: OpenBuilds 8mm Acme Anti Backlash Nut Block
+
+    This Anti-Backlash Nut Block for 8mm Lead Screw is a great choice for many build
+    projects requiring lead screw linear motion where high precision and repeatability
+    with zero play or slop is needed.
+
+    Product Features:
+        - Screw and nut for secure and precise backlash adjustment
+        - Recesses screw holes for non obtrusive placement
+        - Can be mounted on plates or V-Slot
+        - Works best with OpenBuilds Lead Screw
+
+    Specifications:
+        - Tr8*8(p2) Metric Acme Tap (compatible with our customized 8mm Metric Acme Lead
+          Screws)
+        - Mounting Hole Spacing: 20mm
+        - Pitch: 2mm
+        - Lead: 8mm
+        - Delrin
+        - Color: Black
+        - These Anti-Backlash Nut Blocks have been customized to work directly with the
+          OpenBuilds system.
+
+    Args:
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+            or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+
+        with BuildPart() as block:
+            with BuildSketch(Plane.XY.offset(-6)) as bs:
+                RectangleRounded(34, 33, 3)
+                with Locations((-9, 6)):
+                    Circle(2.5, mode=Mode.SUBTRACT)
+                    Rectangle(
+                        26, 5, align=(Align.MIN, Align.CENTER), mode=Mode.SUBTRACT
+                    )
+                with Locations((10, -6.5), (-10, -6.5)):
+                    Circle(2.55, mode=Mode.SUBTRACT)
+            extrude(amount=12)
+            with BuildSketch(Plane.XY.offset(6)) as bs:
+                with Locations((10, -6.5), (-10, -6.5)):
+                    Circle(4.5)
+            extrude(amount=-2, mode=Mode.SUBTRACT)
+            with BuildSketch(Plane.XY.offset(-6)) as bs:
+                with Locations((10, -6.5), (-10, -6.5)):
+                    RegularPolygon(4.618802153517, 6, rotation=30)
+            extrude(amount=5, mode=Mode.SUBTRACT)
+            with Locations(Plane.XZ):
+                Hole(4)
+            with Locations(-Plane.XZ.offset(-17)):
+                with Locations((10, 0)):
+                    Hole(2.1, 12, mode=Mode.SUBTRACT)
+
+        super().__init__(block.part, rotation=rotation, align=align, mode=mode)
+        self.color = Color(0x030303)
+        self.label = "AcmeAntiBacklashNutBlock8mm"
+
+
 class CBeamEndMount(BasePartObject):
     """CBeamEndMount
 
@@ -919,6 +989,7 @@ if __name__ == "__main__":
     show(
         pack(
             [
+                AcmeAntiBacklashNutBlock8mm(),
                 CBeamEndMount(),
                 CBeamLinearRail(25),
                 CBeamGantryPlate(),

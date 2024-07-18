@@ -19,6 +19,7 @@ Here are classes/parts provided:
 
 .. note:: All Joints are currently experimental and subject to change
 
+.. autoclass:: AcmeAntiBacklashNutBlock8mm
 .. autoclass:: CBeamEndMount
 .. autoclass:: CBeamGantryPlate
 .. autoclass:: CBeamGantryPlateXLarge
