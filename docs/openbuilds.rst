@@ -20,6 +20,7 @@ Here are classes/parts provided:
 .. note:: All Joints are currently experimental and subject to change
 
 .. autoclass:: AcmeAntiBacklashNutBlock8mm
+.. autoclass:: AluminumSpacer
 .. autoclass:: CBeamEndMount
 .. autoclass:: CBeamGantryPlate
 .. autoclass:: CBeamGantryPlateXLarge
@@ -27,6 +28,7 @@ Here are classes/parts provided:
 .. autoclass:: CBeamLinearRailProfile
 .. autoclass:: CBeamRiserPlate
 .. autoclass:: RouterSpindleMount
+.. autoclass:: ShimWasher
 .. autoclass:: SpacerBlock
 .. autoclass:: VSlotLinearRail
 .. autoclass:: VSlotLinearRailProfile

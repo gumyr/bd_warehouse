@@ -31,6 +31,7 @@ from build123d import *
 from build123d import tuplify
 from typing import Union, Literal
 from bd_warehouse.fastener import SocketHeadCapScrew, ThreadedHole
+from bd_warehouse.bearing import SingleRowCappedDeepGrooveBallBearing
 
 CAVITY_RADIUS = 2.3 * MM
 FILLET_RADIUS = 1.5 * MM
@@ -106,6 +107,88 @@ class AcmeAntiBacklashNutBlock8mm(BasePartObject):
         super().__init__(block.part, rotation=rotation, align=align, mode=mode)
         self.color = Color(0x030303)
         self.label = "AcmeAntiBacklashNutBlock8mm"
+
+
+class AluminumSpacer(BasePartObject):
+    """Part Object: OpenBuilds AluminumSpacer
+
+    Aluminum spacers used throughout our system to ensure precision alignment and spacing
+    between components.
+
+    Product Features:
+        - Rigid to maintain stability during motion
+        - Lightweight, non-magnetic and corrosion resistance
+
+    Specifications:
+        - M5 ID
+        - Various Lengths
+        - 10mm OD
+        - Aluminum
+        - Color: Silver
+
+    Args:
+        length (Literal['3mm', '1/8in', '6mm', '1/4in', '9mm', '10mm', '13.2mm', '20mm', '35mm', '1-1/2in', '40mm']):
+            valid lengths
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+            or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+
+    Raises:
+        ValueError: Invalid shim_type
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        length: Literal[
+            "3mm",
+            "1/8in",
+            "6mm",
+            "1/4in",
+            "9mm",
+            "10mm",
+            "13.2mm",
+            "20mm",
+            "35mm",
+            "1-1/2in",
+            "40mm",
+        ],
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+
+        valid_lengths = {
+            "3mm": 3 * MM,
+            "1/8in": IN / 8,
+            "6mm": 6 * MM,
+            "1/4in": IN / 4,
+            "9mm": 9 * MM,
+            "10mm": 10 * MM,
+            "13.2mm": 13.2 * MM,
+            "20mm": 20 * MM,
+            "35mm": 35 * MM,
+            "1-1/2in": 1.5 * IN,
+            "40mm": 40 * MM,
+        }
+        try:
+            spacer_length = valid_lengths[length]
+        except KeyError:
+            raise ValueError(
+                f"{length} is an invalid length, must be one of {tuple(valid_lengths.keys())}"
+            )
+
+        with BuildPart() as spacer:
+            with BuildSketch():
+                Circle(5)
+                Circle(2.6, mode=Mode.SUBTRACT)
+            extrude(amount=spacer_length)
+
+        super().__init__(spacer.part, rotation=rotation, align=align, mode=mode)
+        self.color = Color(0xC0C0C0)
+        self.label = f"AluminumSpacer-{length}"
 
 
 class CBeamEndMount(BasePartObject):
@@ -519,7 +602,6 @@ class RouterSpindleMount(BasePartObject):
     easy installation and optional attachments like the OpenBuilds LED Light Ring.
 
     Product Features:
-
         - Removable faceplate for quick tool changes
         - Adjustable faceplate to accommodate various router sizes
         - Countersunk holes for a flush finish
@@ -639,6 +721,62 @@ class RouterSpindleMount(BasePartObject):
             RigidJoint(f"top_{label}", self, -pos)
         for label, pos in zip(["a", "b", "c", "d"], top_mount_centers):
             RigidJoint(f"bottom_{label}", self, pos * Pos(0, 0, -thickness))
+
+
+class ShimWasher(BasePartObject):
+    """Part Object: OpenBuilds Shim/Washer
+
+    Product Features:
+        - Reduce wear and prevents binding
+        - Creates a tighter fit among parts
+
+    Args:
+        shim_type (Literal['MiniVWheel', '10x5x1', '12x8x1', 'SlotWasher', 'FlatWasher']):
+            shim / washer
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+            or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+
+    Raises:
+        ValueError: Invalid shim_type
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        shim_type: Literal[
+            "MiniVWheel", "10x5x1", "12x8x1", "SlotWasher", "FlatWasher"
+        ],
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+        # OD, ID, Thickness
+        dimensions = {
+            "MiniVWheel": (8, 5, 1),
+            "10x5x1": (10, 5, 1),
+            "12x8x1": (12, 8, 1),
+            "SlotWasher": (15, 5, 2),
+            "FlatWasher": (0.75 * IN, 0.25 * IN, 0.08 * IN),
+        }
+        try:
+            od, id, thickness = dimensions[shim_type]
+        except KeyError:
+            raise ValueError(
+                f"Invalid shim_type {shim_type} must be one of {tuple(dimensions.keys())}"
+            )
+
+        with BuildPart() as shim:
+            with BuildSketch():
+                Circle(od)
+                Circle(id, mode=Mode.SUBTRACT)
+            extrude(amount=thickness)
+
+        super().__init__(shim.part, rotation=rotation, align=align, mode=mode)
+        self.color = Color(0xC0C0C0)
+        self.label = f"ShimWasher-{shim_type}"
 
 
 class SpacerBlock(BasePartObject):
@@ -990,12 +1128,29 @@ if __name__ == "__main__":
         pack(
             [
                 AcmeAntiBacklashNutBlock8mm(),
+                AluminumSpacer("3mm"),
+                AluminumSpacer("1/8in"),
+                AluminumSpacer("6mm"),
+                AluminumSpacer("1/4in"),
+                AluminumSpacer("9mm"),
+                AluminumSpacer("10mm"),
+                AluminumSpacer("13.2mm"),
+                AluminumSpacer("20mm"),
+                AluminumSpacer("35mm"),
+                AluminumSpacer("1-1/2in"),
+                AluminumSpacer("40mm"),
                 CBeamEndMount(),
                 CBeamLinearRail(25),
                 CBeamGantryPlate(),
                 CBeamGantryPlateXLarge(),
                 CBeamRiserPlate(),
                 RouterSpindleMount().rotate(Axis.Z, 180),
+                ShimWasher("MiniVWheel"),
+                ShimWasher("10x5x1"),
+                ShimWasher("12x8x1"),
+                ShimWasher("SlotWasher"),
+                ShimWasher("FlatWasher"),
+                SingleRowCappedDeepGrooveBallBearing("M5-10-4", "OpenBuilds"),
                 SpacerBlock(),
                 VSlotLinearRail("20x20", 25),
                 VSlotLinearRail("20x40", 25),
