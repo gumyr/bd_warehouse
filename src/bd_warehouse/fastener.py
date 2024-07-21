@@ -56,7 +56,8 @@ from build123d.build_enums import Align, Mode, SortBy
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
-from build123d.geometry import Axis, Location, Plane, Pos, RotationLike, Vector
+from build123d.geometry import Axis, Color, Location, Plane, Pos, RotationLike, Vector
+from build123d.joints import RigidJoint
 from build123d.objects_curve import (
     JernArc,
     Line,
@@ -575,6 +576,9 @@ class Nut(ABC, BasePartObject):
         else:
             super().__init__(bd_object, rotation, align, mode)
         self.label = f"{self.__class__.__name__}({size}, {fastener_type})"
+        self.color = Color(0xC0C0C0)
+        RigidJoint("a", self, Location())
+        RigidJoint("b", self, Pos(Z=self.nut_thickness))
 
     def make_nut(self) -> Union[Compound, Solid]:
         """Create a screw head from the 2D shapes defined in the derived class"""
@@ -1577,6 +1581,8 @@ class Screw(ABC, BasePartObject):
         self.label = (
             f"{self.__class__.__name__}({size}, {length:0.2f}, {fastener_type})"
         )
+        self.color = Color(0xC0C0C0)
+        RigidJoint("a", self, Location())
 
     def make_head(self) -> Solid:
         """Create a screw head from the 2D shapes defined in the derived class"""

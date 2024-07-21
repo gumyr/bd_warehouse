@@ -27,10 +27,12 @@ license:
 
 """
 
+import copy
+import math
 from build123d import *
 from build123d import tuplify
 from typing import Union, Literal
-from bd_warehouse.fastener import SocketHeadCapScrew, ThreadedHole
+from bd_warehouse.fastener import SocketHeadCapScrew, ThreadedHole, HexNut
 from bd_warehouse.bearing import SingleRowCappedDeepGrooveBallBearing
 
 CAVITY_RADIUS = 2.3 * MM
@@ -91,7 +93,7 @@ class AcmeAntiBacklashNutBlock8mm(BasePartObject):
                     Circle(2.55, mode=Mode.SUBTRACT)
             extrude(amount=12)
             with BuildSketch(Plane.XY.offset(6)) as bs:
-                with Locations((10, -6.5), (-10, -6.5)):
+                with Locations((10, -6.5), (-10, -6.5)) as mounts:
                     Circle(4.5)
             extrude(amount=-2, mode=Mode.SUBTRACT)
             with BuildSketch(Plane.XY.offset(-6)) as bs:
@@ -101,12 +103,52 @@ class AcmeAntiBacklashNutBlock8mm(BasePartObject):
             with Locations(Plane.XZ):
                 Hole(4)
             with Locations(-Plane.XZ.offset(-17)):
-                with Locations((10, 0)):
-                    Hole(2.1, 12, mode=Mode.SUBTRACT)
+                with Locations((10, 0)) as screw_hole:
+                    ThreadedHole(m5, depth=10, counter_sunk=False)
 
         super().__init__(block.part, rotation=rotation, align=align, mode=mode)
         self.color = Color(0x030303)
         self.label = "AcmeAntiBacklashNutBlock8mm"
+        for label, loc in zip(["a", "b"], mounts):
+            RigidJoint(label, self, Pos(*(loc.position + Vector(0, 0, 6))))
+        for label, loc in zip(["nut_a", "nut_b"], mounts):
+            RigidJoint(label, self, loc * Location((0, 0, -6), (0, 0, 1), 30))
+        RigidJoint("screw", self, screw_hole.locations[0])
+
+
+class AcmeAntiBacklashNutBlock8mmAssembly(Compound):
+    """Assembly: OpenBuilds 8mm Acme Anti Backlash Nut Block Assembly
+
+    All of the components in anti backlash nut assembly:
+        - AcmeAntiBacklashNutBlock8mm x 1
+        - AluminumSpacer x 2
+        - M5 HexNut x 2
+        - SocketHeadCapScrew x 1
+
+    The RigidJoint "a" or "b" - positioned at the top of the spaces - can be used to
+    connect this assembly to a gantry plate.
+
+    """
+
+    def __init__(self):
+
+        super().__init__()
+        screw = SocketHeadCapScrew("M5-0.8", 13 * MM)
+        nut0 = HexNut("M5-0.8")
+        nut1 = copy.copy(nut0)
+        acme_nut = Rot(Z=-90) * AcmeAntiBacklashNutBlock8mm()
+        s0 = AluminumSpacer("6mm")
+        s1 = copy.copy(s0)
+        acme_nut.joints["a"].connect_to(s0.joints["a"])
+        acme_nut.joints["b"].connect_to(s1.joints["a"])
+        acme_nut.joints["nut_a"].connect_to(nut0.joints["a"])
+        acme_nut.joints["nut_b"].connect_to(nut1.joints["a"])
+        acme_nut.joints["screw"].connect_to(screw.joints["a"])
+
+        self.children = [acme_nut, s0, s1, nut0, nut1, screw]
+        self.label = "AcmeAntiBacklashNutBlock8mmAssembly"
+        RigidJoint("a", self, s0.joints["b"].location * Rot(Z=90))
+        RigidJoint("b", self, s1.joints["b"].location * Rot(Z=90))
 
 
 class AluminumSpacer(BasePartObject):
@@ -189,6 +231,9 @@ class AluminumSpacer(BasePartObject):
         super().__init__(spacer.part, rotation=rotation, align=align, mode=mode)
         self.color = Color(0xC0C0C0)
         self.label = f"AluminumSpacer-{length}"
+        RigidJoint("a", self, Location())
+        RigidJoint("b", self, Pos(Z=spacer_length))
+        RigidJoint("center", self, Pos(Z=spacer_length))
 
 
 class CBeamEndMount(BasePartObject):
@@ -374,6 +419,9 @@ class CBeamLinearRail(BasePartObject):
         # RigidJoint("test1", self, Location((10, 0, 0), (0, 90, 0)))
         # RigidJoint("test2", self, Location((0, -10, 50), (90, 0, 0)))
         self.label = "CBeamLinearRail"
+        LinearJoint(
+            "screw_axis", self, Axis((10, 0, 0), (0, 0, 1)), linear_range=(0, length)
+        )
 
 
 class CBeamGantryPlate(BasePartObject):
@@ -500,7 +548,7 @@ class CBeamGantryPlateXLarge(BasePartObject):
                     Circle(2.6, mode=Mode.SUBTRACT)
                 with GridLocations(60, 100.6, 2, 2):
                     Circle(2.6, mode=Mode.SUBTRACT)
-                with GridLocations(20, 20, 2, 2):
+                with GridLocations(20, 20, 2, 2) as nut_holes:
                     Circle(2.6, mode=Mode.SUBTRACT)
             extrude(amount=6)
 
@@ -526,15 +574,21 @@ class CBeamGantryPlateXLarge(BasePartObject):
 
             # CounterBore
             with Locations((0, -50.3, 6)):
-                with GridLocations(50.3, 0, 3, 1):
+                with GridLocations(50.3, 0, 3, 1) as eccentric_mounts:
                     CounterBoreHole(3.6, 6.125, 1.6, 6)
             with Locations((0, 50.3, 6)):
-                with GridLocations(50.3, 0, 3, 1):
+                with GridLocations(50.3, 0, 3, 1) as fixed_mounts:
                     CounterBoreHole(2.55, 4.5675, 1.6, 6)
 
         super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
         self.color = Color(0x020202)
         self.label = "CBeamGantryPlateXLarge"
+        for label, loc in zip(["a", "b", "c"], eccentric_mounts):
+            RigidJoint(label, self, Pos(*(loc.position - Vector(0, 0, 6))))
+        for label, loc in zip(["d", "e", "f"], fixed_mounts):
+            RigidJoint(label, self, Pos(*(loc.position - Vector(0, 0, 6))))
+        for label, loc in zip(["a", "b", "c", "d"], nut_holes):
+            RigidJoint(f"nut_{label}", self, loc)
 
 
 class CBeamRiserPlate(BasePartObject):
@@ -591,6 +645,94 @@ class CBeamRiserPlate(BasePartObject):
         super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
         self.color = Color(0x020202)
         self.label = "CBeamRiserPlate"
+
+
+class EccentricSpacer(BasePartObject):
+    """Part Object: OpenBuilds Eccentric Spacer
+
+    These Eccentric Spacers are the perfect solution for creating a pre-load from the V-Wheels
+    to the V-Slot Linear Rail.
+
+    Pro-Tip: Eccentric Spacers comes with a divot/text on the outside which allows you to know
+    at all times where the smallest part of the CAM hole is located.
+
+    Product Features:
+        - Up to 1.5mm off center adjustment
+        - Tension wheel to v-slot for a snug, locked on fit
+        - Wide stance for stability
+
+    Specifications:
+        - Version - V7
+        - 6mm or 1/4" CAM Height
+        - 5mm Bore
+        - Rim fits into a 7.12mm Hole
+        - Stainless Steel
+        - Color: Steel
+
+    Args:
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+            or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        cam_height=Literal["6mm", "1/4in"],
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+
+        valid_heights = {
+            "6mm": 6 * MM,
+            "1/4in": IN / 4,
+        }
+        try:
+            cam_length = valid_heights[cam_height]
+        except KeyError:
+            raise ValueError(
+                f"{cam_height} is an invalid cam height, must be one of {tuple(valid_heights.keys())}"
+            )
+
+        # 10mm across the flats
+        hex_radius = (2 / 3) * 10 * MM * math.sin(math.radians(60))
+        with BuildPart() as spacer:
+            with BuildSketch():
+                RegularPolygon(hex_radius, 6)
+            extrude(amount=6)
+            with BuildSketch(Plane.YZ) as chamf:
+                Rectangle(hex_radius, cam_length, align=Align.MIN)
+                chamfer(chamf.vertices().group_by(Axis.Y)[0], 0.6)
+            revolve(mode=Mode.INTERSECT)
+            with Locations((0, 0, cam_length)):
+                Cylinder(
+                    hex_radius + 0.25 * MM,
+                    1 * MM,
+                    align=(Align.CENTER, Align.CENTER, Align.MAX),
+                )
+            with BuildSketch():
+                Circle(3.555)
+            extrude(amount=cam_length + 2.5 * MM)
+            with Locations((0, 0.79 * MM)):  # eccentric hole
+                Hole(2.5)
+            with BuildSketch(spacer.faces().filter_by(Axis.Y).sort_by(Axis.Y)[-1]):
+                Text(cam_height, font_size=1.5 * MM, font_style=FontStyle.BOLD)
+            extrude(amount=-0.1 * MM, mode=Mode.SUBTRACT)
+
+        super().__init__(
+            spacer.part.locate(Pos(0, -0.79 * MM, 0)),
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
+        self.color = Color(0xC0C0C0)
+        self.label = f"EccentricSpacer-{cam_height}"
+        RigidJoint("a", self, Location())
+        RigidJoint("b", self, Pos(Z=2.5 * MM + cam_length))
+        RigidJoint("center", self, Pos(0, -0.79 * MM, cam_length))
 
 
 class RouterSpindleMount(BasePartObject):
@@ -770,13 +912,16 @@ class ShimWasher(BasePartObject):
 
         with BuildPart() as shim:
             with BuildSketch():
-                Circle(od)
-                Circle(id, mode=Mode.SUBTRACT)
+                Circle(od / 2)
+                Circle(id / 2, mode=Mode.SUBTRACT)
             extrude(amount=thickness)
+            fillet(shim.edges().group_by(SortBy.LENGTH)[-1], thickness / 5)
 
         super().__init__(shim.part, rotation=rotation, align=align, mode=mode)
         self.color = Color(0xC0C0C0)
         self.label = f"ShimWasher-{shim_type}"
+        RigidJoint("a", self, Location())
+        RigidJoint("b", self, Pos(Z=thickness))
 
 
 class SpacerBlock(BasePartObject):
@@ -1070,7 +1215,66 @@ class VSlotLinearRail(BasePartObject):
         self.label = f"{rail_size} VSlot Rail"
 
 
-class XtremeSolidVWHeel(BasePartObject):
+class XLargeCBeamGantry(Compound):
+    """XLargeCBeamGantry
+
+    The C-Beam XLarge Gantry Set is ideal for high-performance demands. Tailored to
+    excel in robust Linear Actuator gantries and CNC Machines, it fuses strength,
+    resilience, and unwavering stability.
+
+    Setting this Gantry kit apart are four robust Xtreme V Wheels. They shine under
+    intense force and weight, delivering heightened accuracy and minimal compression
+    for precision-driven tasks.
+
+    Builders across various industries vouch for this Kit's reliability and consistent
+    performance. Purpose-built for the X, Y, and Z axes of our OpenBuilds LEAD CNC Machine,
+    elevate your projects with the proven versatility of the C-Beam XLargeGantry Set.
+
+    Specifications:
+        - Plate dimensions: 125mm x 125mm
+        - Designed to be compatible with C-Beam Linear Rail
+        - Specifically engineered for Lead Screw-driven systems
+
+    Args:
+        wheel_count (Literal[4, 6], optional): number of wheels. Defaults to 4.
+        eccentric_angle (float, optional): angle of the eccentric spaces. Values
+            less than 90 will tighten the wheels to the rail while values greater
+            than 90 will loosen the fit. Defaults to 90.
+
+    Raises:
+        ValueError: Invalid wheel_count
+    """
+
+    def __init__(self, wheel_count: Literal[4, 6] = 4, eccentric_angle: float = 90):
+        if wheel_count not in [4, 6]:
+            raise ValueError(f"wheel_count of {wheel_count} must be either 4 or 6")
+        plate = CBeamGantryPlateXLarge()
+        w0 = XtremeSolidVWheelAssembly(True)
+        w2 = copy.copy(w0)
+        w3 = XtremeSolidVWheelAssembly(False)
+        w5 = copy.copy(w3)
+        wheels = [w0, w2, w3, w5]
+        acme_nut_assembly = AcmeAntiBacklashNutBlock8mmAssembly()
+
+        plate.joints["a"].connect_to(w0.joints["mount"], angle=eccentric_angle)
+        plate.joints["c"].connect_to(w2.joints["mount"], angle=eccentric_angle)
+        plate.joints["d"].connect_to(w3.joints["mount"])
+        plate.joints["f"].connect_to(w5.joints["mount"])
+        if wheel_count == 6:
+            w1 = copy.copy(w0)
+            w4 = copy.copy(w3)
+            wheels.extend([w1, w4])
+            plate.joints["b"].connect_to(w1.joints["mount"], angle=eccentric_angle)
+            plate.joints["e"].connect_to(w4.joints["mount"])
+        plate.joints["nut_a"].connect_to(acme_nut_assembly.joints["a"])
+
+        super().__init__()
+        self.label = "XLargeCBeamGantry"
+        self.children = [plate, acme_nut_assembly] + wheels
+        RigidJoint("nut", self, Location((0, 0, -12.5 * MM), (0, 1, 0), -90))
+
+
+class XtremeSolidVWheel(BasePartObject):
     """Part Object: OpenBuilds Xtreme Solid V Wheel
 
     A heavy-duty alternative to Delrin Wheels. Suitable during applications where substantial
@@ -1105,24 +1309,89 @@ class XtremeSolidVWHeel(BasePartObject):
         mode: Mode = Mode.ADD,
     ):
         with BuildPart() as wheel:
-            with BuildSketch() as x_section:
-                with Locations((0, 8)):
-                    Rectangle(10.2, 3.95, align=(Align.CENTER, Align.MIN))
-                    Rectangle(1, 2)
-                chamfer(x_section.vertices().group_by(Axis.Y)[-1], 2.15)
-            revolve(axis=Axis.X)
+            with BuildSketch(Plane.YZ) as x_section:
+                with Locations((8, 0)):
+                    Rectangle(3.95, 10.2, align=(Align.MIN, Align.CENTER))
+                    Rectangle(2, 1)
+                chamfer(x_section.vertices().group_by(Axis.X)[-1], 2.15)
+            revolve()
 
         super().__init__(
             part=wheel.part, rotation=rotation, align=tuplify(align, 3), mode=mode
         )
-        self.color = Color(0xE0E0E0)
+        # self.color = Color(0xE0E0E0)
+        self.color = Color(0xE0E0D8)
         self.label = "XtremeSolidVWHeel"
+        RigidJoint("a", self, Pos(Z=-11 / 2))
+        RigidJoint("b", self, Pos(Z=+11 / 2))
+
+
+class XtremeSolidVWheelAssembly(Compound):
+    """Assembly: OpenBuilds Xtreme Solid V Wheel Assembly
+
+    All of the components in a Xtreme Solid V Wheel assembly:
+        - Xtreme Solid V WHeel x 1
+        - M5-16-5 bearing x 2
+        - 10x5x1 Shim x 2
+        - Aluminum Spacer or Eccentric Spacer
+        - Hex Nut
+
+    Note that the RevoluteJoint "mount" should be used to attach this wheel assembly
+    to a gantry plate as it enables the eccentric spacer to precisely align the wheel
+    to the rail by changing the joint angle.
+
+    Args:
+        eccentric (bool): Use an eccentric spacer.
+    """
+
+    def __init__(self, eccentric: bool):
+        nut = HexNut("M5-0.8")
+        b0 = SingleRowCappedDeepGrooveBallBearing("M5-16-5")
+        b1 = copy.copy(b0)
+        shim0 = ShimWasher("10x5x1")
+        shim1 = copy.copy(shim0)
+        spacer = EccentricSpacer("6mm") if eccentric else AluminumSpacer("6mm")
+        tire = XtremeSolidVWheel()
+        tire.joints["a"].connect_to(b0.joints["a"])
+        b0.joints["b"].connect_to(shim0.joints["a"])
+        b0.joints["a"].connect_to(nut.joints["b"])
+        tire.joints["b"].connect_to(b1.joints["b"])
+        b1.joints["b"].connect_to(shim1.joints["a"])
+        shim1.joints["b"].connect_to(spacer.joints["a"])
+
+        super().__init__()
+        self.label = "XtremeSolidVWHeelAssembly"
+        self.children = [tire, b0, shim0, shim1, b1, spacer, nut]
+        RevoluteJoint(
+            "mount", self, Axis(spacer.joints["center"].location.position, (0, 0, 1))
+        )
 
 
 if __name__ == "__main__":
     from ocp_vscode import show, set_defaults, Camera
 
     set_defaults(reset_camera=Camera.CENTER)
+
+    # rail = CBeamLinearRail(30 * CM)
+    # gantry = XLargeCBeamGantry(6)
+    # rail.joints["screw_axis"].connect_to(gantry.joints["nut"], position=10 * CM)
+    # print(gantry.show_topology())
+    # show(rail, gantry)
+    # exit()
+
+    # show(
+    #     pack(
+    #         [
+    #             CBeamLinearRailProfile(),
+    #             VSlotLinearRailProfile("20x20"),
+    #             VSlotLinearRailProfile("20x40"),
+    #             VSlotLinearRailProfile("20x60"),
+    #             VSlotLinearRailProfile("20x80"),
+    #             VSlotLinearRailProfile("40x40"),
+    #         ],
+    #         10,
+    #     )
+    # )
 
     show(
         pack(
@@ -1144,6 +1413,8 @@ if __name__ == "__main__":
                 CBeamGantryPlate(),
                 CBeamGantryPlateXLarge(),
                 CBeamRiserPlate(),
+                EccentricSpacer("6mm"),
+                EccentricSpacer("1/4in"),
                 RouterSpindleMount().rotate(Axis.Z, 180),
                 ShimWasher("MiniVWheel"),
                 ShimWasher("10x5x1"),
@@ -1157,8 +1428,22 @@ if __name__ == "__main__":
                 VSlotLinearRail("20x60", 25),
                 VSlotLinearRail("20x80", 25),
                 VSlotLinearRail("40x40", 25),
-                XtremeSolidVWHeel(),
+                XtremeSolidVWheel(),
             ],
             20,
         )
     )
+    exit()
+
+    # show(
+    #     pack(
+    #         [
+    #             AcmeAntiBacklashNutBlock8mmAssembly(),
+    #             XLargeCBeamGantry(4),
+    #             XLargeCBeamGantry(6),
+    #             XtremeSolidVWheelAssembly(True),
+    #             XtremeSolidVWheelAssembly(False),
+    #         ],
+    #         20,
+    #     )
+    # )

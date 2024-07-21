@@ -46,6 +46,7 @@ from build123d.geometry import (
     Rot,
     Vector,
 )
+from build123d.joints import RigidJoint
 from build123d.objects_curve import (
     JernArc,
     Line,
@@ -252,19 +253,25 @@ class Bearing(ABC, BasePartObject):
             1.8 * pi * self.race_center_radius / self.roller_diameter
         )
         super().__init__(self.make_bearing())
-        # super().__init__(Compound(children=[self.outer_race_section()]))
+        bbox = self.bounding_box()
+        RigidJoint("a", self, Pos(Z=bbox.min.Z))
+        RigidJoint("b", self, Pos(Z=bbox.max.Z))
+        self.label = f"{self.__class__.__name__}-{self.bearing_size}"
 
     def make_bearing(self) -> Compound:
         """Create bearing from the shapes defined in the derived class"""
 
         outer_race = revolve(self.default_outer_race_section(), Axis.Z)
         outer_race.color = Color(0xC0C0C0)
+        outer_race.label = "OuterRace"
         inner_race = revolve(self.default_inner_race_section(), Axis.Z)
         inner_race.color = Color(0xC0C0C0)
+        inner_race.label = "InnerRace"
 
         bearing_pieces = [outer_race, inner_race]
         if self.capped:
             cap = self.cap()
+            cap.label = "Cap"
             bearing_pieces.extend(
                 [
                     cap,
@@ -273,13 +280,16 @@ class Bearing(ABC, BasePartObject):
             )
         else:
             roller = self.roller()
+            roller.label = "Roller"
             locs = PolarLocations(self.race_center_radius, self.roller_count).locations
             bearing_pieces.extend(
                 [locs[0] * roller] + [l * copy.copy(roller) for l in locs[1:]]
             )
 
             if self.method_exists("cage"):
-                bearing_pieces.append(self.cage())
+                cage = self.cage()
+                cage.label = "Cage"
+                bearing_pieces.append(cage)
 
         bearing = Compound(children=bearing_pieces)
         bearing.color = Color(0xC0C0C0)
