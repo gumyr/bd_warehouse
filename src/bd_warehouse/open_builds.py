@@ -32,7 +32,12 @@ import math
 from build123d import *
 from build123d import tuplify
 from typing import Union, Literal
-from bd_warehouse.fastener import SocketHeadCapScrew, ThreadedHole, HexNut
+from bd_warehouse.fastener import (
+    ClearanceHole,
+    HexNut,
+    SocketHeadCapScrew,
+    ThreadedHole,
+)
 from bd_warehouse.bearing import SingleRowCappedDeepGrooveBallBearing
 
 CAVITY_RADIUS = 2.3 * MM
@@ -735,6 +740,99 @@ class EccentricSpacer(BasePartObject):
         RigidJoint("center", self, Pos(0, -0.79 * MM, cam_length))
 
 
+class FlexibleCoupler(BasePartObject):
+    """Part Object: OpenBuilds Flexible Coupler
+
+    These Flexible couplings are used to transmit torque from a stepper motor to a lead
+    screw, thus creating the movement in an actuator.
+
+    Specifications:
+        - Length: 25mm (.98")
+        - OD: 20mm (.79")
+        - Shaft: 5mm x 8mm or 1/4"
+        - Aluminum
+        - Color: Silver
+
+    Args:
+        shaft_diameter (Literal["8mm", "1/4in"]): load shaft diameter
+    rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+    align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
+    mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+
+    Raises:
+        ValueError: Invalid shaft diameter
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        shaft_diameter: Literal["8mm", "1/4in"],
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+        valid_diameters = {
+            "8mm": 8 * MM,
+            "1/4in": IN / 4,
+        }
+        try:
+            d2 = valid_diameters[shaft_diameter]
+        except KeyError:
+            raise ValueError(
+                f"{shaft_diameter} is an invalid shaft diameter, must be one of {tuple(valid_diameters.keys())}"
+            )
+
+        d1 = 5 * MM  # NEMA 17
+
+        with BuildPart() as coupler:
+            Cylinder(10, 25, align=(Align.CENTER, Align.CENTER, Align.MAX))
+            with Locations(coupler.faces().sort_by(Axis.Z)[-1]):
+                Hole(d1 / 2, 25 * MM / 2)
+                Box(
+                    10,
+                    0.9,
+                    8.3,
+                    align=(Align.MIN, Align.CENTER, Align.MAX),
+                    mode=Mode.SUBTRACT,
+                )
+            with Locations(coupler.faces().sort_by(Axis.Z)[0]):
+                Hole(d2 / 2, 25 * MM / 2)
+                Box(
+                    11,
+                    0.9,
+                    8.3,
+                    align=(Align.MIN, Align.CENTER, Align.MAX),
+                    mode=Mode.SUBTRACT,
+                )
+            chamfer(coupler.edges().filter_by(GeomType.CIRCLE), 0.3 * MM)
+            with Locations(
+                Location((5, 9.2, -4), (1, 0, 0), -90),
+                Location((5, 9.2, -21), (1, 0, 0), -90),
+            ):
+                Cylinder(6 / 2, 6, mode=Mode.SUBTRACT)
+                Hole(1.7)
+            with BuildLine():
+                spiral = Helix(2, 2, 11, center=(0, 0, -18.2))
+            with BuildSketch(spiral ^ 0) as x_section:
+                Rectangle(10, 0.7, align=(Align.MIN, Align.MIN))
+            spiral_cut = sweep(is_frenet=True, mode=Mode.PRIVATE).rotate(Axis.Z, 90)
+            for i in range(0, 10, 2):
+                add(spiral_cut.moved(Pos(Z=i)), mode=Mode.SUBTRACT)
+
+            super().__init__(
+                coupler.part.rotate(Axis.X, 180),
+                rotation=rotation,
+                align=align,
+                mode=mode,
+            )
+            self.color = Color(0xC0C0C0)
+            self.label = f"FlexibleCoupler-{shaft_diameter}"
+            RigidJoint("a", self, Pos(Z=12.5 * MM))
+            RigidJoint("b", self, Location((0, 0, 12.5 * MM), (1, 0, 0), 180))
+
+
 class RouterSpindleMount(BasePartObject):
     """RouterSpindleMount
 
@@ -1372,13 +1470,6 @@ if __name__ == "__main__":
 
     set_defaults(reset_camera=Camera.CENTER)
 
-    # rail = CBeamLinearRail(30 * CM)
-    # gantry = XLargeCBeamGantry(6)
-    # rail.joints["screw_axis"].connect_to(gantry.joints["nut"], position=10 * CM)
-    # print(gantry.show_topology())
-    # show(rail, gantry)
-    # exit()
-
     # show(
     #     pack(
     #         [
@@ -1415,6 +1506,8 @@ if __name__ == "__main__":
                 CBeamRiserPlate(),
                 EccentricSpacer("6mm"),
                 EccentricSpacer("1/4in"),
+                FlexibleCoupler("1/4in"),
+                FlexibleCoupler("8mm"),
                 RouterSpindleMount().rotate(Axis.Z, 180),
                 ShimWasher("MiniVWheel"),
                 ShimWasher("10x5x1"),

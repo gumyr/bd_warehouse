@@ -44,6 +44,7 @@ Parts available in the OpenBuilds part store:
 .. autoclass:: CBeamGantryPlateXLarge
 .. autoclass:: CBeamRiserPlate
 .. autoclass:: EccentricSpacer
+.. autoclass:: FlexibleCoupler
 .. autoclass:: RouterSpindleMount
 .. autoclass:: ShimWasher
 .. autoclass:: SingleRowCappedDeepGrooveBallBearing
