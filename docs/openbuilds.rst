@@ -49,6 +49,7 @@ Parts available in the OpenBuilds part store:
 .. autoclass:: ShimWasher
 .. autoclass:: SingleRowCappedDeepGrooveBallBearing
 .. autoclass:: SpacerBlock
+.. autoclass:: StepperMotor
 .. autoclass:: VSlotLinearRail
 .. autoclass:: XtremeSolidVWheel
 

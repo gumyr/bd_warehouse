@@ -1465,6 +1465,132 @@ class XtremeSolidVWheelAssembly(Compound):
         )
 
 
+class StepperMotor(Compound):
+    """Assembly: OpenBuilds StepperMotors
+
+    This custom Openbuilds NEMA Stepper Motor series offers a range of options, from the
+    NEMA 17 for lighter duty, high-precision CNC projects, to the NEMA 23 for larger builds
+    requiring more power, and the NEMA 23 High Torque for enhanced holding power and
+    strength to elevate any build.
+
+    Product Features:
+        - Plug and Play Xtension connector for easy and fast install
+        - Flat shaft section for better torque
+
+    Common Product Specifications:
+        - Step Angle: 1.8
+        - 4 Wire Bi-Polar
+        - RoHS Compliant
+
+    NEMA 17 Product Specifications:
+        - Shaft Size: 5mm
+        - Torque: 76 oz*in
+        - Peak Current is 1.68A/phase
+        - M3 Mounting Holes
+        - 12-24VDC (Recommended)
+
+    NEMA 23 Product Specifications
+        - Shaft Size: 1/4"
+        - Torque: 175 oz*in
+        - Peak Current is 2.8A/phase
+        - 12-48VDC (Recommended)
+
+    NEMA 23 High Torque Product Specifications:
+        - 2 Phase
+        - Shaft Size: 1/4"
+        - Torque: 345 oz*in
+        - 24-48VDC (Recommended)
+
+    Args:
+        motor_type (Literal["Nema17", "Nema23", "Nema23HighTorque"]): steppers
+
+    Raises:
+        ValueError: Invalid motor_type
+    """
+
+    def __init__(self, motor_type: Literal["Nema17", "Nema23", "Nema23HighTorque"]):
+        motor_data = {
+            "Nema17": (48, 5, 2, 9, 24),
+            "Nema23": (56, IN / 4, 2.675, 5.6, 20.6),
+            "Nema23HighTorque": (86, IN / 4, 2.675, 5.6, 20.6),
+        }
+        try:
+            len, shaft_d, flat, shaft_l1, shaft_l2 = motor_data[motor_type]
+        except KeyError:
+            raise ValueError(
+                f"{motor_type} is invalid, must be one of {motor_data.keys()}"
+            )
+
+        m3 = SocketHeadCapScrew("M3-0.5", 20)
+
+        with BuildPart() as stepper:
+            if motor_type in ["Nema23", "Nema23HighTorque"]:
+                with BuildSketch() as skt1:
+                    with BuildLine():
+                        l1 = Line((28.2, 0), (28.2, 16.07))
+                        l2 = JernArc(l1 @ 1, l1 % 1, 2.5, 90)
+                        l3 = Line(l2 @ 1, (23.57, 18.57))
+                        l4 = JernArc(l3 @ 1, l3 % 1, 5, -45)
+                        mirror(about=Plane(l4 ^ 1))
+                        mirror(about=Plane.YZ)
+                        mirror(about=Plane.XZ)
+                    make_face()
+                extrude(amount=-11)
+                add(Face(skt1.wire().offset_2d(-0.1)))
+                extrude(amount=-len + 11)
+                add(skt1.face().located(Pos(Z=-len + 11)))
+                extrude(amount=-11)
+                with BuildSketch() as skt2:
+                    RectangleRounded(28.2 * 2, 28.2 * 2, 4.6)
+                    with GridLocations(23.57 * 2, 23.57 * 2, 2, 2) as mount_holes:
+                        Circle(2.55, mode=Mode.SUBTRACT)
+                extrude(amount=-4.8)
+                with BuildSketch():
+                    Circle(19.05)
+                extrude(amount=1.6)
+            else:
+                with BuildSketch() as skt1:
+                    Rectangle(21.209 * 2, 21.209 * 2)
+                    Circle(26.5, mode=Mode.INTERSECT)
+                extrude(amount=-8.75)
+                with BuildSketch() as skt2:
+                    Rectangle(21.109 * 2, 21.109 * 2)
+                    Circle(25, mode=Mode.INTERSECT)
+                extrude(amount=-len)
+                add(skt1.face().located(Pos(Z=-len + 8.75)))
+                extrude(amount=-8.75)
+                with GridLocations(15.5 * 2, 15.5 * 2, 2, 2) as mount_holes:
+                    Hole(1.5, 6)
+                    ThreadedHole(m3, depth=7.5, counter_sunk=False)
+                with BuildSketch():
+                    Circle(11)
+                extrude(amount=2)
+
+        with BuildPart() as shaft:
+            with BuildSketch():
+                Circle(shaft_d / 2)
+            extrude(amount=shaft_l1)
+            with BuildSketch():
+                Circle(shaft_d / 2)
+                with Locations((0, flat)):
+                    Rectangle(
+                        shaft_d,
+                        shaft_d,
+                        align=(Align.CENTER, Align.MIN),
+                        mode=Mode.SUBTRACT,
+                    )
+            extrude(amount=shaft_l2)
+
+        stepper.part.color = Color(0x020202)
+        shaft.part.color = Color(0xC0C0C0)
+
+        super().__init__()
+        self.label = f"StepperMotor-{motor_type}"
+        self.children = [stepper.part, shaft.part]
+        for label, loc in zip(["a", "b", "c", "d"], mount_holes.locations):
+            RigidJoint(label, self, -loc)
+
+
 if __name__ == "__main__":
     from ocp_vscode import show, set_defaults, Camera
 
@@ -1516,6 +1642,9 @@ if __name__ == "__main__":
                 ShimWasher("FlatWasher"),
                 SingleRowCappedDeepGrooveBallBearing("M5-10-4", "OpenBuilds"),
                 SpacerBlock(),
+                StepperMotor("Nema17"),
+                StepperMotor("Nema23"),
+                StepperMotor("Nema23HighTorque"),
                 VSlotLinearRail("20x20", 25),
                 VSlotLinearRail("20x40", 25),
                 VSlotLinearRail("20x60", 25),
