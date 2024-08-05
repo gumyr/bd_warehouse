@@ -3094,7 +3094,7 @@ class ThreadedHole(BasePartObject):
 
         if isinstance(fastener, HeatSetNut):
             raise ValueError(
-                "ThreadedHole doesn't accept fasteners of type HeatSetNut - use insertHole instead"
+                "ThreadedHole doesn't accept fasteners of type HeatSetNut - use InsertHole instead"
             )
 
         if depth is not None:
@@ -3115,6 +3115,16 @@ class ThreadedHole(BasePartObject):
             threaded_hole=True,
             update_hole_locations=context is not None,
         )
+        if not simple:
+            with BuildPart(mode=Mode.PRIVATE):
+                thread = IsoThread(
+                    major_diameter=fastener.thread_diameter + 0.01,
+                    pitch=fastener.thread_pitch,
+                    length=min(fastener.length, self.hole_depth),
+                    external=False,
+                    end_finishes=("fade", "fade"),
+                    hand=fastener.hand,
+                ).move(Pos(Z=-self.hole_depth))
 
         super().__init__(
             part=hole_part,
@@ -3122,26 +3132,9 @@ class ThreadedHole(BasePartObject):
             rotation=(0, 0, 0),
             mode=mode,
         )
-        holes = self
-        if not simple:
-            thread = IsoThread(
-                major_diameter=fastener.thread_diameter,
-                pitch=fastener.thread_pitch,
-                length=fastener.nut_data["m"],
-                external=False,
-                end_finishes=("fade", "fade"),
-                hand=fastener.hand,
-            ).locate(hole_part.location)
 
-            super().__init__(
-                part=thread,
-                align=None,
-                rotation=(0, 0, 0),
-                mode=Mode.ADD,
-            )
-            self = Compound(
-                [h + t for h, t in zip(holes.compounds(), self.compounds())]
-            )
+        self.thread = None if simple else thread
+        self.thread_locations = LocationList._get_context().locations
 
 
 class InsertHole(BasePartObject):
