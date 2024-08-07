@@ -37,7 +37,7 @@ from __future__ import annotations
 import csv
 import math
 from abc import ABC, abstractmethod
-from math import cos, pi, radians, sin, sqrt, tan
+from math import atan, cos, pi, radians, sin, sqrt, tan
 from typing import Literal, Optional, Union
 
 import bd_warehouse
@@ -56,7 +56,7 @@ from build123d.build_enums import Align, Mode, SortBy
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
-from build123d.geometry import Axis, Color, Location, Plane, Pos, RotationLike, Vector
+from build123d.geometry import Axis, Color, Location, Plane, Pos, Rot, RotationLike, Vector
 from build123d.joints import RigidJoint
 from build123d.objects_curve import (
     JernArc,
@@ -75,7 +75,7 @@ from build123d.objects_sketch import (
     Trapezoid,
 )
 from build123d.operations_generic import add, chamfer, fillet, split
-from build123d.operations_part import extrude, revolve
+from build123d.operations_part import extrude, revolve, loft
 from build123d.operations_sketch import make_face
 from build123d.topology import (
     Compound,
@@ -2781,6 +2781,78 @@ class CheeseHeadWasher(Washer):
             with Locations((d1 / 2, 0)):
                 Rectangle((d2 - d1) / 2, h, align=Align.MIN)
             chamfer(profile.vertices().group_by(Axis.X)[0], 0.25 * h)
+        return profile.sketch.face()
+
+    countersink_profile = Washer.default_countersink_profile
+
+
+class InternalToothLockWasher(Washer):
+    """Internal Tooth Lock Washer
+
+    Args:
+        size (str): size specification, e.g. "M6"
+        fastener_type (Literal["din6797", "asme_b18.21.1"], optional): Defaults to "din6797".
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+    """
+    fastener_data = read_fastener_parameters_from_csv(
+        "internal_tooth_lock_washer_parameters.csv"
+    )
+    
+    def __init__(
+        self,
+        size: str,
+        fastener_type: Literal["din6797", "asme_b18.21.1"] = "din6797",
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+        super().__init__(size, fastener_type, rotation, align, mode)
+    
+    def make_washer(self):
+        (d1, d2, s) = (self.washer_data[p] for p in ["d1", "d2", "s"])
+        n = round(self.washer_data["n"] / (IN if not self.is_metric else MM))
+        
+        # tooth outer diameter
+        dt = d1 + (d2-d1)/2
+        
+        # tooth arc angle
+        at = ({ 6:  30, 8:  27, 9: 22.5, 10: 20, 12: 20, 14: 16, 16: 12 }).get(n)
+        
+        # tooth inner and outer widths
+        w1, w2 = (d1 * pi * at / 360, dt * pi * at / 360)
+        
+        # solve for angle to rotate inner face of tooth -> overall height == 2*s per DIN 6797
+        # +---------+                  
+        # |         | s                
+        # +---------+                  
+        #      w1
+        # ref: https://math.stackexchange.com/questions/213545/solving-trigonometric-equations-of-the-form-a-sin-x-b-cos-x-c
+        a, b   = w1/2, s/2
+        c, d   = s, sqrt((w1/2)**2 + (s/2)**2 - s**2)
+        angle  = (-atan(d/c) + atan(a/b)) * 180/pi
+
+        # tooth inner and outer faces pre projection 
+        f1 = (Rot(Y=angle) * (Plane.XZ * Rectangle(w1, s))).faces()[0]
+        f2 = (Plane.XZ * Rectangle(w2, s)).faces()[0]
+
+        return (
+            Pos(Z=s/2) * (
+                Cylinder(d2/2, s) 
+                - Cylinder(dt/2, s, mode=Mode.SUBTRACT) 
+                + PolarLocations(0, n) * loft([
+                    f1.project_to_shape(Cylinder(d1/2, 10*s), (0,-1, 0)),
+                    f2.project_to_shape(Cylinder(dt/2, 10*s), (0,-1, 0)),
+                ])
+            )
+         )
+
+    def washer_profile(self):
+        (d1, d2, s) = (self.washer_data[p] for p in ["d1", "d2", "s"])
+        with BuildSketch(Plane.XZ) as profile:
+            with Locations((d1 / 2, 0)):
+                Rectangle((d2 - d1) / 2, h, align=Align.MIN)
         return profile.sketch.face()
 
     countersink_profile = Washer.default_countersink_profile
