@@ -2811,7 +2811,7 @@ class InternalToothLockWasher(Washer):
         super().__init__(size, fastener_type, rotation, align, mode)
     
     def make_washer(self):
-        (d1, d2, s) = (self.washer_data[p] for p in ["d1", "d2", "s"])
+        (d1, d2, h) = (self.washer_data[p] for p in ["d1", "d2", "h"])
         n = round(self.washer_data["n"] / (IN if not self.is_metric else MM))
         
         # tooth outer diameter
@@ -2823,38 +2823,32 @@ class InternalToothLockWasher(Washer):
         # tooth inner and outer widths
         w1, w2 = (d1 * pi * at / 360, dt * pi * at / 360)
         
-        # solve for angle to rotate inner face of tooth -> overall height == 2*s per DIN 6797
+        # solve for angle to rotate inner face of tooth -> overall height == 2*h per DIN 6797
         # +---------+                  
-        # |         | s                
+        # |         | h                
         # +---------+                  
         #      w1
         # ref: https://math.stackexchange.com/questions/213545/solving-trigonometric-equations-of-the-form-a-sin-x-b-cos-x-c
-        a, b   = w1/2, s/2
-        c, d   = s, sqrt((w1/2)**2 + (s/2)**2 - s**2)
+        a, b   = w1/2, h/2
+        c, d   = h, sqrt((w1/2)**2 + (h/2)**2 - h**2)
         angle  = (-atan(d/c) + atan(a/b)) * 180/pi
 
         # tooth inner and outer faces pre projection 
-        f1 = (Rot(Y=angle) * (Plane.XZ * Rectangle(w1, s))).faces()[0]
-        f2 = (Plane.XZ * Rectangle(w2, s)).faces()[0]
+        f1 = (Rot(Y=angle) * (Plane.XZ * Rectangle(w1, h))).faces()[0]
+        f2 = (Plane.XZ * Rectangle(w2, h)).faces()[0]
 
         return (
-            Pos(Z=s/2) * (
-                Cylinder(d2/2, s) 
-                - Cylinder(dt/2, s, mode=Mode.SUBTRACT) 
+            Pos(Z=h/2) * (
+                Cylinder(d2/2, h) 
+                - Cylinder(dt/2, h, mode=Mode.SUBTRACT) 
                 + PolarLocations(0, n) * loft([
-                    f1.project_to_shape(Cylinder(d1/2, 10*s), (0,-1, 0)),
-                    f2.project_to_shape(Cylinder(dt/2, 10*s), (0,-1, 0)),
+                    f1.project_to_shape(Cylinder(d1/2, 10*h), (0,-1, 0)),
+                    f2.project_to_shape(Cylinder(dt/2, 10*h), (0,-1, 0)),
                 ])
             )
          )
 
-    def washer_profile(self):
-        (d1, d2, s) = (self.washer_data[p] for p in ["d1", "d2", "s"])
-        with BuildSketch(Plane.XZ) as profile:
-            with Locations((d1 / 2, 0)):
-                Rectangle((d2 - d1) / 2, h, align=Align.MIN)
-        return profile.sketch.face()
-
+    washer_profile      = Washer.default_washer_profile
     countersink_profile = Washer.default_countersink_profile
 
 
