@@ -253,6 +253,8 @@ class Bearing(ABC, BasePartObject):
             1.8 * pi * self.race_center_radius / self.roller_diameter
         )
         super().__init__(self.make_bearing())
+        # Change position to match PressFitHole expectations
+        self.position += (0, 0, self.bearing_dict["B"] / 2)
         bbox = self.bounding_box()
         RigidJoint("a", self, Pos(Z=bbox.min.Z))
         RigidJoint("b", self, Pos(Z=bbox.max.Z))
