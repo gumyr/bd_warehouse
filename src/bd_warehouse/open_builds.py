@@ -755,10 +755,10 @@ class FlexibleCoupler(BasePartObject):
 
     Args:
         shaft_diameter (Literal["8mm", "1/4in"]): load shaft diameter
-    rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-    align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
-        or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
-    mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+            or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD.
 
     Raises:
         ValueError: Invalid shaft diameter
