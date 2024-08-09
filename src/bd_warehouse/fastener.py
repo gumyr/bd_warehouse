@@ -2045,9 +2045,9 @@ class HexHeadWithFlangeScrew(Screw):
     Args:
         size (str): size specification, e.g. "M6-1"
         length (float): screw length
-        fastener_type (Literal["en1662", "en1665"], optional): Defaults to "en1662".
-            en1662 - Hexagon bolts with flange small series
-            en1665 - Hexagon head bolts with flange
+        fastener_type (Literal["din1662", "din1665"], optional): Defaults to "din1662".
+            din1662 - Hexagon bolts with flange small series
+            din1665 - Hexagon head bolts with flange
 
         hand (Literal["right","left"], optional): thread direction. Defaults to "right".
         simple (bool, optional): simplify by not creating thread. Defaults to True.
@@ -2065,7 +2065,7 @@ class HexHeadWithFlangeScrew(Screw):
         self,
         size: str,
         length: float,
-        fastener_type: Literal["en1662", "en1665"] = "en1662",
+        fastener_type: Literal["din1662", "din1665"] = "din1662",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
         rotation: RotationLike = (0, 0, 0),
