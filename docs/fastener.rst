@@ -47,7 +47,7 @@ Here is a list of the classes (and fastener types) provided:
   * :class:`PlainWasher` : iso7094, iso7093, iso7089, iso7091
   * :class:`ChamferedWasher` : iso7090
   * :class:`CheeseHeadWasher` : iso7092
-
+  * :class:`InternalToothLockWasher` : din6797, asme_b18.21.1
 
 See :ref:`Extending the fastener sub-package <extending>` for guidance on how to easily
 add new sizes or entirely new types of fasteners.
@@ -331,6 +331,7 @@ parameters. All derived washers inherit the same API as the base Washer class.
 * :class:`PlainWasher` : iso7094, iso7093, iso7089, iso7091
 * :class:`ChamferedWasher` : iso7090
 * :class:`CheeseHeadWasher` : iso7092
+* :class:`InternalToothLockWasher` : din6797, asme_b18.21.1
 
 Detailed information about any of the washer types can be readily found on the internet from manufacture's
 websites or from the standard document itself.
