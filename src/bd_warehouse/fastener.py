@@ -56,7 +56,16 @@ from build123d.build_enums import Align, Mode, SortBy
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
-from build123d.geometry import Axis, Color, Location, Plane, Pos, Rot, RotationLike, Vector
+from build123d.geometry import (
+    Axis,
+    Color,
+    Location,
+    Plane,
+    Pos,
+    Rot,
+    RotationLike,
+    Vector,
+)
 from build123d.joints import RigidJoint
 from build123d.objects_curve import (
     JernArc,
@@ -72,6 +81,7 @@ from build123d.objects_sketch import (
     Rectangle,
     RectangleRounded,
     RegularPolygon,
+    SlotOverall,
     Trapezoid,
 )
 from build123d.operations_generic import add, chamfer, fillet, split
@@ -2124,7 +2134,7 @@ class HexHeadWithFlangeScrew(Screw):
 
 
 class PanHeadScrew(Screw):
-    """_summary_
+    """PanHeadScrew
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2527,6 +2537,59 @@ class SocketHeadCapScrew(Screw):
     countersink_profile = Screw.default_countersink_profile
 
 
+class LowProfileScrew(Screw):
+    """LowProfileScrew
+
+    Args:
+        size (str): size specification, e.g. "M5-0.8"
+        length (float): screw length
+        fastener_type (Literal["OpenBuilds"], optional): Defaults to "OpenBuilds".
+            OpenBuilds - OpenBuilds custom low profile socket head cap screw
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+    """
+
+    fastener_data = read_fastener_parameters_from_csv("low_profile_parameters.csv")
+
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["OpenBuilds"] = "OpenBuilds",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
+
+    def head_profile(self):
+        """Low Profile Screws"""
+        (dk, k) = (self.screw_data[p] for p in ["dk", "k"])
+        with BuildSketch(Plane.XZ) as profile:
+            SlotOverall(dk, 2)
+            Rectangle(dk, k, mode=Mode.INTERSECT)
+            split(bisect_by=Plane.YZ)
+        return profile.sketch.face().move(Pos(0, 0, k / 2))
+
+    head_recess = Screw.default_head_recess
+
+    countersink_profile = Screw.default_countersink_profile
+
+
 class Washer(ABC, BasePartObject):
     """Parametric Washer
 
@@ -2796,10 +2859,11 @@ class InternalToothLockWasher(Washer):
         align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
+
     fastener_data = read_fastener_parameters_from_csv(
         "internal_tooth_lock_washer_parameters.csv"
     )
-    
+
     def __init__(
         self,
         size: str,
@@ -2809,46 +2873,47 @@ class InternalToothLockWasher(Washer):
         mode: Mode = Mode.ADD,
     ):
         super().__init__(size, fastener_type, rotation, align, mode)
-    
+
     def make_washer(self):
         (d1, d2, h) = (self.washer_data[p] for p in ["d1", "d2", "h"])
         n = round(self.washer_data["n"] / (IN if not self.is_metric else MM))
-        
+
         # tooth outer diameter
-        dt = d1 + (d2-d1)/2
-        
+        dt = d1 + (d2 - d1) / 2
+
         # tooth arc angle
-        at = ({ 6:  30, 8:  27, 9: 22.5, 10: 20, 12: 20, 14: 16, 16: 12 }).get(n)
-        
+        at = ({6: 30, 8: 27, 9: 22.5, 10: 20, 12: 20, 14: 16, 16: 12}).get(n)
+
         # tooth inner and outer widths
         w1, w2 = (d1 * pi * at / 360, dt * pi * at / 360)
-        
+
         # solve for angle to rotate inner face of tooth -> overall height == 2*h per DIN 6797
-        # +---------+                  
-        # |         | h                
-        # +---------+                  
+        # +---------+
+        # |         | h
+        # +---------+
         #      w1
         # ref: https://math.stackexchange.com/questions/213545/solving-trigonometric-equations-of-the-form-a-sin-x-b-cos-x-c
-        a, b   = w1/2, h/2
-        c, d   = h, sqrt((w1/2)**2 + (h/2)**2 - h**2)
-        angle  = (-atan(d/c) + atan(a/b)) * 180/pi
+        a, b = w1 / 2, h / 2
+        c, d = h, sqrt((w1 / 2) ** 2 + (h / 2) ** 2 - h**2)
+        angle = (-atan(d / c) + atan(a / b)) * 180 / pi
 
-        # tooth inner and outer faces pre projection 
+        # tooth inner and outer faces pre projection
         f1 = (Rot(Y=angle) * (Plane.XZ * Rectangle(w1, h))).faces()[0]
         f2 = (Plane.XZ * Rectangle(w2, h)).faces()[0]
 
-        return (
-            Pos(Z=h/2) * (
-                Cylinder(d2/2, h) 
-                - Cylinder(dt/2, h, mode=Mode.SUBTRACT) 
-                + PolarLocations(0, n) * loft([
-                    f1.project_to_shape(Cylinder(d1/2, 10*h), (0,-1, 0)),
-                    f2.project_to_shape(Cylinder(dt/2, 10*h), (0,-1, 0)),
-                ])
+        return Pos(Z=h / 2) * (
+            Cylinder(d2 / 2, h)
+            - Cylinder(dt / 2, h, mode=Mode.SUBTRACT)
+            + PolarLocations(0, n)
+            * loft(
+                [
+                    f1.project_to_shape(Cylinder(d1 / 2, 10 * h), (0, -1, 0)),
+                    f2.project_to_shape(Cylinder(dt / 2, 10 * h), (0, -1, 0)),
+                ]
             )
-         )
+        )
 
-    washer_profile      = Washer.default_washer_profile
+    washer_profile = Washer.default_washer_profile
     countersink_profile = Washer.default_countersink_profile
 
 

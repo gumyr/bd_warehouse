@@ -35,6 +35,7 @@ Here is a list of the classes (and fastener types) provided:
   * :class:`CounterSunkScrew` : iso2009, iso14582, iso14581, iso10642, iso7046
   * :class:`HexHeadScrew` : iso4017, din931, iso4014
   * :class:`HexHeadWithFlangeScrew` : din1662, din1665
+  * :class:`LowProfileScrew` : OpenBuilds
   * :class:`PanHeadScrew` : asme_b_18.6.3, iso1580, iso14583
   * :class:`PanHeadWithCollarScrew` : din967
   * :class:`RaisedCheeseHeadScrew` : iso7045
@@ -264,6 +265,7 @@ screw parameters. All derived screws inherit the same API as the base Screw clas
 * :class:`CounterSunkScrew` : iso2009, iso14582, iso14581, iso10642, iso7046
 * :class:`HexHeadScrew` : iso4017, din931, iso4014
 * :class:`HexHeadWithFlangeScrew` : din1662, din1665
+* :class:`LowProfileScrew` : OpenBuilds
 * :class:`PanHeadScrew` : asme_b_18.6.3, iso1580, iso14583
 * :class:`PanHeadWithCollarScrew` : din967
 * :class:`RaisedCheeseHeadScrew` : iso7045
