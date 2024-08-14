@@ -45,6 +45,9 @@ Parts available in the OpenBuilds part store:
 .. autoclass:: CBeamRiserPlate
 .. autoclass:: EccentricSpacer
 .. autoclass:: FlexibleCoupler
+.. autoclass:: LockCollar
+.. autoclass:: LowProfileScrew
+.. autoclass:: MetricLeadScrew
 .. autoclass:: RouterSpindleMount
 .. autoclass:: ShimWasher
 .. autoclass:: SingleRowCappedDeepGrooveBallBearing

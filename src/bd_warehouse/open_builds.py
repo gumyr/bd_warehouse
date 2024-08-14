@@ -32,13 +32,16 @@ import math
 from build123d import *
 from build123d import tuplify
 from typing import Union, Literal
+from bd_warehouse.bearing import SingleRowCappedDeepGrooveBallBearing
 from bd_warehouse.fastener import (
     ClearanceHole,
     HexNut,
+    LowProfileScrew,
+    SetScrew,
     SocketHeadCapScrew,
     ThreadedHole,
 )
-from bd_warehouse.bearing import SingleRowCappedDeepGrooveBallBearing
+from bd_warehouse.thread import MetricTrapezoidalThread, TrapezoidalThread
 
 CAVITY_RADIUS = 2.3 * MM
 FILLET_RADIUS = 1.5 * MM
@@ -833,6 +836,107 @@ class FlexibleCoupler(BasePartObject):
             RigidJoint("b", self, Location((0, 0, 12.5 * MM), (1, 0, 0), 180))
 
 
+class LockCollar(Compound):
+    """Assembly: OpenBuilds LockCollar
+
+    Lock Collars are used to create mechanical stops at any location along a shaft or to
+    secure components to it. A popular use is to lock the 8mm Lead Screw place. Includes
+    M5x4 set screw.
+
+    Product Features:
+        - One piece for even distributed clamping force
+        - Integrated set screw to prevent slippage
+
+    Product Specifications:
+        - 1/4" Size ID: 0.250 in, OD: .500 in, W: 7mm
+        - 5mm Size ID: 5mm, OD: 0.5 in, W: 7mm
+        - 8mm Size ID: 8mm, OD: 14mm, W: 7mm
+        - Black Oxide Finished Steel
+        - Color: Black
+
+    Args:
+        inside_diameter (Literal["5mm", "8mm", "1/4in"]): inside diameter of
+            the collor
+
+    Raises:
+        ValueError: Invalid inside diameter
+    """
+
+    def __init__(self, inside_diameter: Literal["5mm", "8mm", "1/4in"]):
+        valid_sizes = {
+            "5mm": (5 * MM, IN / 2, 7 * MM),
+            "8mm": (8 * MM, 14 * MM, 7 * MM),
+            "1/4in": (IN / 4, IN / 2, 7 * MM),
+        }
+        try:
+            id, od, h = valid_sizes[inside_diameter]
+        except KeyError:
+            raise ValueError(
+                f"{inside_diameter} is an invalid inside diameter,"
+                f" must be one of {tuple(valid_sizes.keys())}"
+            )
+        super().__init__()
+
+        setscrew = SetScrew("M5-0.8", 4 * MM)
+        with BuildPart() as collar:
+            with BuildSketch():
+                Circle(od / 2)
+                Circle(id / 2, mode=Mode.SUBTRACT)
+            extrude(amount=h)
+            with Locations(Location((0, od / 2, h / 2), (1, 0, 0), -90)):
+                ThreadedHole(setscrew, depth=od / 2)
+        collar.part.color = Color(0x020202)
+        collar.part.label = "Collar"
+        self.children = [collar.part, setscrew.locate(setscrew.hole_locations[0])]
+        self.label = f"LockCollar{inside_diameter}"
+        RigidJoint("a", self, Location())
+        RigidJoint("b", self, -Location((0, 0, h)))
+
+
+class MetricLeadScrew(Compound):
+    """Assembly: OpenBuilds MetricLeadScrew
+
+    These precision trapezoidal 8mm metric lead screws are a perfect combination of high
+    torque and speed.
+
+    Product Features:
+        - Large diameter helps eliminate whipping
+        - High pitch which provides a quick 8mm translation for every single revolution
+        - Works best with OpenBuilds Nut Blocks and Anti-Backlash Nut Blocks
+
+    Product Specifications:
+        - Tr8*8-2p (4 starts)
+        - Pitch: 2mm
+        - Stainless Steel 304
+        - Color: Silver
+        - Lead Screw Diameter: 7.8~(mm) Note - These lead screws have been customized to
+          work directly with OpenBuilds system.
+
+    Args:
+        length (float): screw length
+
+    Note: Although this lead screw is a single object it is created as an Assembly
+          for efficiency reasons.
+    """
+
+    def __init__(self, length: float):
+        thread = TrapezoidalThread(
+            7.8 * MM, 2 * MM, 30, length, starts=4, end_finishes=("chamfer", "chamfer")
+        )
+        super().__init__()
+        self.children = [
+            thread,
+            Cylinder(
+                thread.root_radius,
+                length,
+                align=(Align.CENTER, Align.CENTER, Align.MIN),
+            ),
+        ]
+        self.color = Color(0x71797E)
+        RigidJoint("axis", self, Location())
+        self.label = f"8mm lead screw"
+
+
 class RouterSpindleMount(BasePartObject):
     """RouterSpindleMount
 
@@ -1417,7 +1521,6 @@ class XtremeSolidVWheel(BasePartObject):
         super().__init__(
             part=wheel.part, rotation=rotation, align=tuplify(align, 3), mode=mode
         )
-        # self.color = Color(0xE0E0E0)
         self.color = Color(0xE0E0D8)
         self.label = "XtremeSolidVWHeel"
         RigidJoint("a", self, Pos(Z=-11 / 2))
@@ -1592,7 +1695,7 @@ class StepperMotor(Compound):
 
 
 if __name__ == "__main__":
-    from ocp_vscode import show, set_defaults, Camera
+    from ocp_vscode import show, show_all, set_defaults, Camera
 
     set_defaults(reset_camera=Camera.CENTER)
 
@@ -1634,6 +1737,13 @@ if __name__ == "__main__":
                 EccentricSpacer("1/4in"),
                 FlexibleCoupler("1/4in"),
                 FlexibleCoupler("8mm"),
+                LockCollar("1/4in"),
+                LockCollar("5mm"),
+                LockCollar("8mm"),
+                LowProfileScrew("M3-0.5", 6, simple=False),
+                LowProfileScrew("M4-0.7", 8, simple=False),
+                LowProfileScrew("M5-0.8", 10, simple=False),
+                MetricLeadScrew(25 * MM),
                 RouterSpindleMount().rotate(Axis.Z, 180),
                 ShimWasher("MiniVWheel"),
                 ShimWasher("10x5x1"),
