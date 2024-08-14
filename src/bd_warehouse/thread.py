@@ -41,7 +41,7 @@ from build123d.build_enums import Align, Keep, Mode, SortBy
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
-from build123d.geometry import Axis, Location, Plane, RotationLike
+from build123d.geometry import Axis, Location, Plane, Rot, RotationLike
 from build123d.joints import RigidJoint
 from build123d.objects_curve import Helix, Polyline
 from build123d.objects_part import BasePartObject
@@ -535,10 +535,13 @@ class TrapezoidalThread(BasePartObject):
     Args:
         thread_angle (int): thread angle in degrees
         diameter (float): thread diameter
-        pitch (float): thread pitch
+        pitch (float): thread pitch - for threads with multiple starts, pitch is the distance
+            between adjacent threads along the axis of the screw.
         size (str): specified by derived class
         length (float): thread length
         external (bool, optional): external or internal thread selector. Defaults to True.
+        starts (int, optional): the number of thread starts, which indicates how many threads
+            run parallel to each other along the screw. Defaults to 1.
         hand (Literal[, optional): twist direction. Defaults to "right".
         end_finishes (Tuple[ Literal[, optional): Profile of each end, one of:
 
@@ -582,6 +585,7 @@ class TrapezoidalThread(BasePartObject):
         thread_angle: float,
         length: float,
         external: bool = True,
+        starts: int = 1,
         hand: Literal["right", "left"] = "right",
         end_finishes: tuple[
             Literal["raw", "square", "fade", "chamfer"],
@@ -598,6 +602,7 @@ class TrapezoidalThread(BasePartObject):
         self.diameter = diameter
         self.thread_angle = thread_angle
         self.pitch = pitch
+        self.lead = pitch * starts
         shoulder_width = (self.pitch / 2) * tan(radians(self.thread_angle / 2))
         apex_width = (self.pitch / 2) - shoulder_width
         root_width = (self.pitch / 2) + shoulder_width
@@ -623,15 +628,21 @@ class TrapezoidalThread(BasePartObject):
             apex_width=apex_width,
             root_radius=self.root_radius,
             root_width=root_width,
-            pitch=self.pitch,
+            pitch=self.lead,
             length=self.length,
             interference=interference,
             end_finishes=self.end_finishes,
             hand=self.hand,
         )
         self.thread_profile = bd_object.thread_profile
+        thread_object = Compound(
+            children=[
+                copy.copy(bd_object).move(Rot(Z=i * (360 / starts)))
+                for i in range(starts)
+            ]
+        )
         super().__init__(
-            part=bd_object,
+            part=thread_object,
             rotation=rotation,
             align=tuplify(align, 3),
             mode=mode,
