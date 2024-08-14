@@ -46,11 +46,13 @@ Parts available in the OpenBuilds part store:
 .. autoclass:: EccentricSpacer
 .. autoclass:: FlexibleCoupler
 .. autoclass:: LockCollar
-.. autoclass:: LowProfileScrew
+.. autoclass:: fastener.LowProfileScrew
+    :noindex:
 .. autoclass:: MetricLeadScrew
 .. autoclass:: RouterSpindleMount
 .. autoclass:: ShimWasher
-.. autoclass:: SingleRowCappedDeepGrooveBallBearing
+.. autoclass:: bearing.SingleRowCappedDeepGrooveBallBearing
+    :noindex:
 .. autoclass:: SpacerBlock
 .. autoclass:: StepperMotor
 .. autoclass:: VSlotLinearRail
