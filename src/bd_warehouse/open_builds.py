@@ -899,6 +899,9 @@ class MetricLeadScrew(Compound):
     These precision trapezoidal 8mm metric lead screws are a perfect combination of high
     torque and speed.
 
+    Note that although this lead screw is a single object it is created as an Assembly
+    for efficiency reasons.
+
     Product Features:
         - Large diameter helps eliminate whipping
         - High pitch which provides a quick 8mm translation for every single revolution
@@ -914,9 +917,6 @@ class MetricLeadScrew(Compound):
 
     Args:
         length (float): screw length
-
-    Note: Although this lead screw is a single object it is created as an Assembly
-          for efficiency reasons.
     """
 
     def __init__(self, length: float):
@@ -1698,6 +1698,29 @@ if __name__ == "__main__":
     from ocp_vscode import show, show_all, set_defaults, Camera
 
     set_defaults(reset_camera=Camera.CENTER)
+
+    # AluminumSpacer("6mm")  # 2
+    # AluminumSpacer("40mm")  # 2
+    # FlexibleCoupler("1/4in")  # 1
+    # AluminumSpacer("3mm")  # 2
+    # EccentricSpacer("6mm")  # 2
+    # XtremeSolidVWheelAssembly(eccentric=True)  # 2
+    # XtremeSolidVWheelAssembly(eccentric=False)  # 2
+    # LowProfileScrew("M5-0.8", 20 * MM),  # 10
+    # LowProfileScrew("M5-0.8", 50 * MM),  # 2
+    # LowProfileScrew("M5-0.8", 27 * MM),  # 4
+    # LockCollar("8mm") # 2
+    # SingleRowCappedDeepGrooveBallBearing("M8-16-5")  # 2
+    # ShimWasher("12x8x1")  # 2
+    # CBeamEndMount()  # 2
+    # CBeamGantryPlateXLarge()  # 1
+    # CBeamLinearRail(500 * MM)  # 1
+    # MetricLeadScrew(500 * MM)  # 1
+    # AcmeAntiBacklashNutBlock8mm()  # 1
+    # ShimWasher("10x5x1")  # 2
+    # StepperMotor("Nema23")  # 1
+
+    # show(XLargeCBeamGantry(4))
 
     # show(
     #     pack(
