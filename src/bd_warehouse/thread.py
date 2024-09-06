@@ -741,17 +741,17 @@ class AcmeThread(TrapezoidalThread):
         diameter = imperial_str_to_float(size)
         pitch = AcmeThread.acme_pitch[size]
         super().__init__(
-            diameter,
-            pitch,
-            self.thread_angle,
-            length,
-            external,
-            hand,
-            end_finishes,
-            interference,
-            rotation,
-            align,
-            mode,
+            diameter=diameter,
+            pitch=pitch,
+            thread_angle=self.thread_angle,
+            length=length,
+            external=external,
+            hand=hand,
+            end_finishes=end_finishes,
+            interference=interference,
+            rotation=rotation,
+            align=align,
+            mode=mode,
         )
 
 
@@ -860,17 +860,17 @@ class MetricTrapezoidalThread(TrapezoidalThread):
             )
         (diameter, pitch) = (float(part) for part in size.split("x"))
         super().__init__(
-            diameter,
-            pitch,
-            self.thread_angle,
-            length,
-            external,
-            hand,
-            end_finishes,
-            interference,
-            rotation,
-            align,
-            mode,
+            diameter=diameter,
+            pitch=pitch,
+            thread_angle=self.thread_angle,
+            length=length,
+            external=external,
+            hand=hand,
+            end_finishes=end_finishes,
+            interference=interference,
+            rotation=rotation,
+            align=align,
+            mode=mode,
         )
 
 
