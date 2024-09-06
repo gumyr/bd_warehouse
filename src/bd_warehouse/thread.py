@@ -361,7 +361,7 @@ class Thread(BasePartObject):
         outside_radius = max(self.apex_radius, self.root_radius) + 0.001
         if self.external:
             chamfer_shape = Solid.extrude(
-                Face.make_from_wires(Wire.make_circle(outside_radius)),
+                Face(Wire.make_circle(outside_radius)),
                 (0, 0, self.length),
             )
         else:
@@ -370,7 +370,7 @@ class Thread(BasePartObject):
             # to M100
             inside_radius -= 0.01
             chamfer_shape = Solid.extrude(
-                Face.make_from_wires(
+                Face(
                     Wire.make_circle(2 * outside_radius),
                     [Wire.make_circle(inside_radius)],
                 ),
