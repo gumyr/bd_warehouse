@@ -43,7 +43,7 @@ license:
     limitations under the License.
 """
 
-from math import sin, cos, tan, acos, radians
+from math import sin, cos, tan, acos, radians, degrees
 from typing import Union
 from build123d import *
 from ocp_vscode import *
@@ -97,7 +97,7 @@ class InvoluteToothProfile(BaseLineObject):
         )
         self.root_radius = self.pitch_radius - self.dedendum
         half_thick_angle = 90 / tooth_count
-
+        half_pitch_angle = half_thick_angle + degrees(tan(radians(pressure_angle)) - radians(pressure_angle))
         # Create the involute curve points
         involute_size = self.addendum_radius - self.base_radius
         pnts = []
@@ -107,7 +107,7 @@ class InvoluteToothProfile(BaseLineObject):
             involute = tan(α) - α
             pnts.append((r * cos(involute), r * sin(involute)))
 
-        with BuildLine(Plane.XY.rotated((0, 0, -half_thick_angle))) as tooth:
+        with BuildLine(Plane.XY.rotated((0, 0, -half_pitch_angle))) as tooth:
             l1 = Spline(*pnts)
             l2 = Line(pnts[0], (self.root_radius, 0))
             root = RadiusArc(
