@@ -3164,7 +3164,7 @@ class TapHole(BasePartObject):
             raise ValueError("No depth provided")
 
         hole_part = _make_fastener_hole(
-            hole_diameters=fastener.clearance_hole_diameters,
+            hole_diameters=fastener.tap_hole_diameters,
             fastener=fastener,
             countersink_profile=fastener.countersink_profile(fit),
             depth=self.hole_depth,
