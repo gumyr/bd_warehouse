@@ -2710,6 +2710,10 @@ class Washer(ABC, BasePartObject):
         bd_object = self.make_washer()
 
         super().__init__(bd_object, rotation, align, mode)
+        self.label = (
+            f"{self.__class__.__name__}({size}, {fastener_type})"
+        )
+        self.color = Color(0xC0C0C0)
 
     def make_washer(self) -> Solid:
         """Create a screw head from the 2D shapes defined in the derived class"""
