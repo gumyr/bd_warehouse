@@ -97,7 +97,9 @@ class InvoluteToothProfile(BaseLineObject):
         )
         self.root_radius = self.pitch_radius - self.dedendum
         half_thick_angle = 90 / tooth_count
-        half_pitch_angle = half_thick_angle + degrees(tan(radians(pressure_angle)) - radians(pressure_angle))
+        half_pitch_angle = half_thick_angle + degrees(
+            tan(radians(pressure_angle)) - radians(pressure_angle)
+        )
         # Create the involute curve points
         involute_size = self.addendum_radius - self.base_radius
         pnts = []
@@ -179,8 +181,8 @@ class SpurGearPlan(BaseSketchObject):
             module, tooth_count, pressure_angle, root_fillet, addendum, dedendum
         )
         gear_teeth = PolarLocations(0, tooth_count) * gear_tooth
-        gear_wire = Wire.make_wire([e for tooth in gear_teeth for e in tooth.edges()])
-        gear_face = -Face.make_from_wires(gear_wire)
+        gear_wire = Wire([e for tooth in gear_teeth for e in tooth.edges()])
+        gear_face = -Face(gear_wire)
         super().__init__(gear_face, rotation, align, mode)
 
 
