@@ -93,7 +93,7 @@ class InvoluteToothProfile(BaseLineObject):
         self.dedendum = (
             dedendum
             if dedendum is not None
-            else (self.pitch_radius - self.base_radius) + 2 * root_fillet
+            else (1.2*module + root_fillet)
         )
         self.root_radius = self.pitch_radius - self.dedendum
         half_thick_angle = 90 / tooth_count
