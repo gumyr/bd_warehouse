@@ -105,7 +105,8 @@ class InvoluteToothProfile(BaseLineObject):
             r = self.base_radius + involute_size * i / 10
             α = acos(self.base_radius / r)  # in radians
             involute = tan(α) - α
-            pnts.append((r * cos(involute), r * sin(involute)))
+            if (rp := r * cos(involute)) > self.root_radius:
+                pnts.append((rp, r * sin(involute)))
 
         with BuildLine(Plane.XY.rotated((0, 0, -half_thick_angle))) as tooth:
             l1 = Spline(*pnts)
