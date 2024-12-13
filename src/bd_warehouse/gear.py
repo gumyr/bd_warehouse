@@ -120,7 +120,8 @@ class InvoluteToothProfile(BaseLineObject):
                 Vector(self.addendum_radius, 0),
                 -self.addendum_radius,
             )
-            fillet(tooth.vertices().sort_by(Axis.X)[1], root_fillet)
+            if root_fillet:
+                fillet(tooth.vertices().sort_by(Axis.X)[1], root_fillet)
             mirror(about=Plane.XZ)
 
         close = (
