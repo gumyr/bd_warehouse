@@ -93,7 +93,7 @@ class InvoluteToothProfile(BaseLineObject):
         self.dedendum = (
             dedendum
             if dedendum is not None
-            else (self.pitch_radius - self.base_radius) + 2 * root_fillet
+            else (1.25 * module)
         )
         self.root_radius = self.pitch_radius - self.dedendum
         half_thick_angle = 90 / tooth_count
@@ -107,7 +107,8 @@ class InvoluteToothProfile(BaseLineObject):
             r = self.base_radius + involute_size * i / 10
             α = acos(self.base_radius / r)  # in radians
             involute = tan(α) - α
-            pnts.append((r * cos(involute), r * sin(involute)))
+            if (rp := r * cos(involute)) > self.root_radius:
+                pnts.append((rp, r * sin(involute)))
 
         with BuildLine(Plane.XY.rotated((0, 0, -half_pitch_angle))) as tooth:
             l1 = Spline(*pnts)
@@ -122,7 +123,8 @@ class InvoluteToothProfile(BaseLineObject):
                 Vector(self.addendum_radius, 0),
                 -self.addendum_radius,
             )
-            fillet(tooth.vertices().sort_by(Axis.X)[1], root_fillet)
+            if root_fillet:
+                fillet(tooth.vertices().sort_by(Axis.X)[1], root_fillet)
             mirror(about=Plane.XZ)
 
         close = (
