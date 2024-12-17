@@ -78,9 +78,9 @@ class InvoluteToothProfile(BaseLineObject):
         module: float,
         tooth_count: int,
         pressure_angle: float,
-        root_fillet: float,
-        addendum: float = None,
-        dedendum: float = None,
+        root_fillet: Optional[float] = None,
+        addendum: Optional[float] = None,
+        dedendum: Optional[float] = None,
         closed: bool = False,
         mode: Mode = Mode.ADD,
     ):
@@ -90,17 +90,13 @@ class InvoluteToothProfile(BaseLineObject):
         self.base_radius = self.pitch_radius * cos(radians(pressure_angle))
         self.addendum = addendum if addendum is not None else module
         self.addendum_radius = self.pitch_radius + self.addendum
-        self.dedendum = (
-            dedendum
-            if dedendum is not None
-            else (1.25 * module)
-        )
+        self.dedendum = dedendum if dedendum is not None else 1.25 * module
         self.root_radius = self.pitch_radius - self.dedendum
         half_thick_angle = 90 / tooth_count
         half_pitch_angle = half_thick_angle + degrees(
             tan(radians(pressure_angle)) - radians(pressure_angle)
         )
-        # Create the involute curve points
+        # # Create the involute curve points
         involute_size = self.addendum_radius - self.base_radius
         pnts = []
         for i in range(11):
@@ -123,7 +119,7 @@ class InvoluteToothProfile(BaseLineObject):
                 Vector(self.addendum_radius, 0),
                 -self.addendum_radius,
             )
-            if root_fillet:
+            if root_fillet is not None:
                 fillet(tooth.vertices().sort_by(Axis.X)[1], root_fillet)
             mirror(about=Plane.XZ)
 
@@ -172,9 +168,9 @@ class SpurGearPlan(BaseSketchObject):
         module: float,
         tooth_count: int,
         pressure_angle: float,
-        root_fillet: float,
-        addendum: float = None,
-        dedendum: float = None,
+        root_fillet: Optional[float] = None,
+        addendum: Optional[float] = None,
+        dedendum: Optional[float] = None,
         rotation: float = 0,
         align: Union[Align, tuple[Align, Align]] = (Align.CENTER, Align.CENTER),
         mode: Mode = Mode.ADD,
@@ -182,6 +178,10 @@ class SpurGearPlan(BaseSketchObject):
         gear_tooth = InvoluteToothProfile(
             module, tooth_count, pressure_angle, root_fillet, addendum, dedendum
         )
+        self.pitch_radius = gear_tooth.pitch_radius
+        self.base_radius = gear_tooth.base_radius
+        self.addendum_radius = gear_tooth.addendum_radius
+        self.root_radius = gear_tooth.root_radius
         gear_teeth = PolarLocations(0, tooth_count) * gear_tooth
         gear_wire = Wire([e for tooth in gear_teeth for e in tooth.edges()])
         gear_face = -Face(gear_wire)
@@ -220,21 +220,23 @@ class SpurGear(BasePartObject):
         module: float,
         tooth_count: int,
         pressure_angle: float,
-        root_fillet: float,
         thickness: float,
-        addendum: float = None,
-        dedendum: float = None,
+        root_fillet: Optional[float] = None,
+        addendum: Optional[float] = None,
+        dedendum: Optional[float] = None,
         rotation: Rotation = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = Align.CENTER,
         mode: Mode = Mode.ADD,
     ):
+        gear_plan = SpurGearPlan(
+            module, tooth_count, pressure_angle, root_fillet, addendum, dedendum
+        )
+        self.pitch_radius = gear_plan.pitch_radius
+        self.base_radius = gear_plan.base_radius
+        self.addendum_radius = gear_plan.addendum_radius
+        self.root_radius = gear_plan.root_radius
         super().__init__(
-            extrude(
-                SpurGearPlan(
-                    module, tooth_count, pressure_angle, root_fillet, addendum, dedendum
-                ),
-                amount=thickness,
-            ),
+            extrude(gear_plan, amount=thickness),
             rotation,
             align,
             mode,
