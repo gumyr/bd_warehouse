@@ -544,7 +544,7 @@ class Nut(ABC, BasePartObject):
                 f"{size_parts} invalid, must be formatted as size-pitch(-length) or size-TPI(-length) where length is optional"
             )
         self.thread_size = "-".join(size_parts[:2])
-        if len(size_parts) == 3:
+        if len(size_parts) >= 3:
             self.length_size = size_parts[2]
         self.is_metric = self.thread_size[0] == "M"
         if self.is_metric:
