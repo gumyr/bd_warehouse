@@ -514,7 +514,7 @@ class IsoThread(BasePartObject):
             )
             self.thread_profile = bd_object.thread_profile
             super().__init__(
-                part=Compound.make_compound(bd_object.solids()),
+                part=Compound(bd_object.solids()),
                 rotation=rotation,
                 align=tuplify(align, 3),
                 mode=mode,
