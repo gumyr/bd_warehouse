@@ -44,7 +44,7 @@ license:
 """
 
 from math import sin, cos, tan, acos, radians, degrees
-from typing import Union
+from typing import Optional, Union
 from build123d import *
 from ocp_vscode import *
 
