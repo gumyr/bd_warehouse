@@ -30,7 +30,7 @@ keywords = [
 ]
 license = {text = "Apache-2.0"}
 classifiers = [
-    "License :: OSI Approved :: Apache-2.0 License",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
 ]
