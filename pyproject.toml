@@ -15,7 +15,7 @@ dynamic = ["version"]
 authors = [
     {name = "Roger Maitland", email = "gumyr9@gmail.com"},
 ]
-description = "A python CAD programming library "
+description = "A build123d parametric part collection"
 readme = "README.md"
 requires-python = ">=3.9"
 keywords = [
