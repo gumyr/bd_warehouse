@@ -224,7 +224,7 @@ class SpurGear(BasePartObject):
         root_fillet: Optional[float] = None,
         addendum: Optional[float] = None,
         dedendum: Optional[float] = None,
-        rotation: Rotation = (0, 0, 0),
+        rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = Align.CENTER,
         mode: Mode = Mode.ADD,
     ):
