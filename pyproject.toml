@@ -17,7 +17,7 @@ authors = [
 ]
 description = "A build123d parametric part collection"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = "=3.11"
 keywords = [
     "3d models",
     "3d printing",
