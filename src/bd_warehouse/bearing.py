@@ -726,9 +726,9 @@ class PressFitHole(BasePartObject):
 
 
 if __name__ == "__main__":
-    from ocp_vscode import show, set_defaults, Camera
+    # from ocp_vscode import show, set_defaults, Camera
 
-    set_defaults(reset_camera=Camera.CENTER)
+    # set_defaults(reset_camera=Camera.CENTER)
 
     b1 = SingleRowCappedDeepGrooveBallBearing(size="M8-22-7")
     b2 = SingleRowDeepGrooveBallBearing(size="M8-22-7")
@@ -739,4 +739,4 @@ if __name__ == "__main__":
     # print(SingleRowTaperedRollerBearing.sizes("SKT"))
     # b5 = SingleRowTaperedRollerBearing("M15-42-14.25")
     # show(b5)
-    show(pack([b1, b2, b3, b4], 5))
+    # show(pack([b1, b2, b3, b4], 5))

@@ -6,7 +6,7 @@ name: gear.py
 by:   Gumyr
 date: July 14nd 2024
 
-This module can be used to create a wide variety of involute spur gears, 
+This module can be used to create a wide variety of involute spur gears,
 either standard ISO (metric) or fully custom.  Involute gears have
 the property of continually meshing at a specific angle (the pressure angle)
 thus avoiding the stutter of non-involute gears as the teeth lose
@@ -23,7 +23,7 @@ gears can mesh, follow these guidelines:
       need to be calculated appropriately.
     - When positioning two gears to mesh, they need to be separated by the
       sum of their pitch radii. For ISO metric gears this is very easy to
-      do - simply multiply the gear module by the sum of the tooth count and 
+      do - simply multiply the gear module by the sum of the tooth count and
       divide by two (in mm), or: separation = module*(n0 + n1)/2 [mm]
 
 license:
@@ -46,7 +46,8 @@ license:
 from math import sin, cos, tan, acos, radians, degrees
 from typing import Optional, Union
 from build123d import *
-from ocp_vscode import *
+
+# from ocp_vscode import *
 
 
 class InvoluteToothProfile(BaseLineObject):
@@ -244,9 +245,9 @@ class SpurGear(BasePartObject):
 
 
 if __name__ == "__main__":
-    from ocp_vscode import show, set_defaults, Camera
+    # from ocp_vscode import show, set_defaults, Camera
 
-    set_defaults(reset_camera=Camera.CENTER)
+    # set_defaults(reset_camera=Camera.CENTER)
 
     gear_tooth = InvoluteToothProfile(
         module=2,
@@ -269,4 +270,4 @@ if __name__ == "__main__":
         root_fillet=0.5 * MM,
         thickness=5 * MM,
     )
-    show(pack([gear_tooth, gear_profile, spur_gear], 5))
+    # show(pack([gear_tooth, gear_profile, spur_gear], 5))

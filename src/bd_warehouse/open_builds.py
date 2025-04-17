@@ -1695,9 +1695,9 @@ class StepperMotor(Compound):
 
 
 if __name__ == "__main__":
-    from ocp_vscode import show, show_all, set_defaults, Camera
+    # from ocp_vscode import show, show_all, set_defaults, Camera
 
-    set_defaults(reset_camera=Camera.CENTER)
+    # set_defaults(reset_camera=Camera.CENTER)
 
     # AluminumSpacer("6mm")  # 2
     # AluminumSpacer("40mm")  # 2
@@ -1736,58 +1736,58 @@ if __name__ == "__main__":
     #     )
     # )
 
-    show(
-        pack(
-            [
-                AcmeAntiBacklashNutBlock8mm(),
-                AluminumSpacer("3mm"),
-                AluminumSpacer("1/8in"),
-                AluminumSpacer("6mm"),
-                AluminumSpacer("1/4in"),
-                AluminumSpacer("9mm"),
-                AluminumSpacer("10mm"),
-                AluminumSpacer("13.2mm"),
-                AluminumSpacer("20mm"),
-                AluminumSpacer("35mm"),
-                AluminumSpacer("1-1/2in"),
-                AluminumSpacer("40mm"),
-                CBeamEndMount(),
-                CBeamLinearRail(25),
-                CBeamGantryPlate(),
-                CBeamGantryPlateXLarge(),
-                CBeamRiserPlate(),
-                EccentricSpacer("6mm"),
-                EccentricSpacer("1/4in"),
-                FlexibleCoupler("1/4in"),
-                FlexibleCoupler("8mm"),
-                LockCollar("1/4in"),
-                LockCollar("5mm"),
-                LockCollar("8mm"),
-                LowProfileScrew("M3-0.5", 6, simple=False),
-                LowProfileScrew("M4-0.7", 8, simple=False),
-                LowProfileScrew("M5-0.8", 10, simple=False),
-                MetricLeadScrew(25 * MM),
-                RouterSpindleMount().rotate(Axis.Z, 180),
-                ShimWasher("MiniVWheel"),
-                ShimWasher("10x5x1"),
-                ShimWasher("12x8x1"),
-                ShimWasher("SlotWasher"),
-                ShimWasher("FlatWasher"),
-                SingleRowCappedDeepGrooveBallBearing("M5-10-4", "OpenBuilds"),
-                SpacerBlock(),
-                StepperMotor("Nema17"),
-                StepperMotor("Nema23"),
-                StepperMotor("Nema23HighTorque"),
-                VSlotLinearRail("20x20", 25),
-                VSlotLinearRail("20x40", 25),
-                VSlotLinearRail("20x60", 25),
-                VSlotLinearRail("20x80", 25),
-                VSlotLinearRail("40x40", 25),
-                XtremeSolidVWheel(),
-            ],
-            20,
-        )
-    )
+    # show(
+    #     pack(
+    #         [
+    #             AcmeAntiBacklashNutBlock8mm(),
+    #             AluminumSpacer("3mm"),
+    #             AluminumSpacer("1/8in"),
+    #             AluminumSpacer("6mm"),
+    #             AluminumSpacer("1/4in"),
+    #             AluminumSpacer("9mm"),
+    #             AluminumSpacer("10mm"),
+    #             AluminumSpacer("13.2mm"),
+    #             AluminumSpacer("20mm"),
+    #             AluminumSpacer("35mm"),
+    #             AluminumSpacer("1-1/2in"),
+    #             AluminumSpacer("40mm"),
+    #             CBeamEndMount(),
+    #             CBeamLinearRail(25),
+    #             CBeamGantryPlate(),
+    #             CBeamGantryPlateXLarge(),
+    #             CBeamRiserPlate(),
+    #             EccentricSpacer("6mm"),
+    #             EccentricSpacer("1/4in"),
+    #             FlexibleCoupler("1/4in"),
+    #             FlexibleCoupler("8mm"),
+    #             LockCollar("1/4in"),
+    #             LockCollar("5mm"),
+    #             LockCollar("8mm"),
+    #             LowProfileScrew("M3-0.5", 6, simple=False),
+    #             LowProfileScrew("M4-0.7", 8, simple=False),
+    #             LowProfileScrew("M5-0.8", 10, simple=False),
+    #             MetricLeadScrew(25 * MM),
+    #             RouterSpindleMount().rotate(Axis.Z, 180),
+    #             ShimWasher("MiniVWheel"),
+    #             ShimWasher("10x5x1"),
+    #             ShimWasher("12x8x1"),
+    #             ShimWasher("SlotWasher"),
+    #             ShimWasher("FlatWasher"),
+    #             SingleRowCappedDeepGrooveBallBearing("M5-10-4", "OpenBuilds"),
+    #             SpacerBlock(),
+    #             StepperMotor("Nema17"),
+    #             StepperMotor("Nema23"),
+    #             StepperMotor("Nema23HighTorque"),
+    #             VSlotLinearRail("20x20", 25),
+    #             VSlotLinearRail("20x40", 25),
+    #             VSlotLinearRail("20x60", 25),
+    #             VSlotLinearRail("20x80", 25),
+    #             VSlotLinearRail("40x40", 25),
+    #             XtremeSolidVWheel(),
+    #         ],
+    #         20,
+    #     )
+    # )
     exit()
 
     # show(
