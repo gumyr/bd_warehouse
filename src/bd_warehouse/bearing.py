@@ -30,63 +30,32 @@ license:
 
 import copy
 from abc import ABC, abstractmethod
-from math import pi, radians, degrees, asin, sin
+from functools import cached_property
+from math import atan, degrees, floor, pi
 from typing import Literal
-from build123d.build_common import Locations, PolarLocations, MM, validate_inputs
-from build123d.build_enums import Align, Mode, SortBy
+
+from build123d.build_common import MM, Locations, PolarLocations, validate_inputs
+from build123d.build_enums import Align, GeomType, Kind, LengthMode, Mode, Side
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
-from build123d.geometry import (
-    Axis,
-    Color,
-    Location,
-    Plane,
-    Pos,
-    Rot,
-    Vector,
-)
+from build123d.geometry import Axis, Color, Location, Plane, Pos, Vector
 from build123d.joints import RigidJoint
-from build123d.objects_curve import (
-    JernArc,
-    Line,
-    PolarLine,
-    Polyline,
-    RadiusArc,
-    Spline,
-)
-from build123d.objects_part import BasePartObject, Cylinder
-from build123d.objects_sketch import (
-    Circle,
-    Polygon,
-    Rectangle,
-    RectangleRounded,
-    RegularPolygon,
-    Trapezoid,
-)
-from build123d.operations_generic import add, chamfer, fillet, split
-from build123d.operations_part import extrude, revolve
+from build123d.objects_curve import JernArc, Line, PolarLine, Polyline, Spline
+from build123d.objects_part import BasePartObject, Sphere
+from build123d.objects_sketch import Circle, Rectangle, RectangleRounded
+from build123d.operations_generic import add, fillet, offset, sweep
+from build123d.operations_part import extrude, revolve, section
 from build123d.operations_sketch import make_face
-from build123d.pack import pack
-from build123d.topology import (
-    Compound,
-    Curve,
-    Edge,
-    Face,
-    Part,
-    Shell,
-    Sketch,
-    Solid,
-    Wire,
-)
+from build123d.topology import Compound, Edge, Face, Shell, Solid, Wire, Part
 
 from bd_warehouse.fastener import (
+    _make_fastener_hole,
     evaluate_parameter_dict,
-    read_fastener_parameters_from_csv,
     isolate_fastener_type,
     lookup_drill_diameters,
+    read_fastener_parameters_from_csv,
     select_by_size_fn,
-    _make_fastener_hole,
 )
 
 
@@ -189,6 +158,10 @@ class Bearing(ABC, BasePartObject):
     def race_center_radius(self):
         return NotImplementedError  # pragma: no cover
 
+    @property
+    def roller_count(self):
+        return int(1.8 * pi * self.race_center_radius / self.roller_diameter)
+
     def default_race_center_radius(self):
         """Default roller race center radius"""
         (d1, D1) = (self.bearing_dict[p] for p in ["d1", "D1"])
@@ -249,9 +222,6 @@ class Bearing(ABC, BasePartObject):
                 f"{size} invalid, must be one of {self.sizes(self.bearing_type)}"
             ) from e
 
-        self.roller_count = int(
-            1.8 * pi * self.race_center_radius / self.roller_diameter
-        )
         super().__init__(self.make_bearing())
         # Change position to match PressFitHole expectations
         self.position += (0, 0, self.bearing_dict["B"] / 2)
@@ -263,10 +233,10 @@ class Bearing(ABC, BasePartObject):
     def make_bearing(self) -> Compound:
         """Create bearing from the shapes defined in the derived class"""
 
-        outer_race = revolve(self.default_outer_race_section(), Axis.Z)
+        outer_race = revolve(self.outer_race_section(), Axis.Z)
         outer_race.color = Color(0xC0C0C0)
         outer_race.label = "OuterRace"
-        inner_race = revolve(self.default_inner_race_section(), Axis.Z)
+        inner_race = revolve(self.inner_race_section(), Axis.Z)
         inner_race.color = Color(0xC0C0C0)
         inner_race.label = "InnerRace"
 
@@ -299,8 +269,8 @@ class Bearing(ABC, BasePartObject):
 
     def default_inner_race_section(self) -> Face:
         """Create 2D profile inner race"""
-        (d1, d, B, r12) = (self.bearing_dict[p] for p in ["d1", "d", "B", "r12"])
 
+        (d1, d, B, r12) = (self.bearing_dict[p] for p in ["d1", "d", "B", "r12"])
         with BuildSketch(Plane.XZ) as section:
             with Locations(((d1 + d) / 4, 0)):
                 RectangleRounded((d1 - d) / 2, B, r12)
@@ -419,64 +389,96 @@ class SingleRowAngularContactBallBearing(Bearing):
     @property
     def roller_diameter(self):
         """Default roller diameter"""
-        (d, d2, D) = (self.bearing_dict[p] for p in ["d", "d2", "D"])
+        d, d2, D = (self.bearing_dict[p] for p in ["d", "d2", "D"])
         D2 = D - (d2 - d)
-        return 0.4 * (D2 - d2)
+        return (D2 - d2) / 2
+
+    @property
+    def contact_angle(self):
+        a, D = (self.bearing_dict[p] for p in ["a", "D"])
+        return degrees(atan(a / (D / 2)))
 
     @property
     def race_center_radius(self):
         return self.default_race_center_radius()
 
     def inner_race_section(self):
-        (d, d1, d2, r12, B) = (
-            self.bearing_dict[p] for p in ["d", "d1", "d2", "r12", "B"]
+        d, d1, d2, r12, B, D = (
+            self.bearing_dict[p] for p in ["d", "d1", "d2", "r12", "B", "D"]
         )
+        roller_r = self.roller_diameter / 2
+        with BuildSketch(Plane.XZ) as section:
+            with Locations(((d1 + d) / 4, 0)):
+                Rectangle((d1 - d) / 2, B)
+            with Locations((d1 / 2, 0)):
+                Rectangle(
+                    (d1 - d2) / 2,
+                    B / 2,
+                    align=(Align.MAX, Align.MIN),
+                    mode=Mode.SUBTRACT,
+                )
+            with Locations(((D + d) / 4, 0)):
+                Circle(roller_r, mode=Mode.SUBTRACT)
+            fillet(section.vertices().group_by(Axis.X)[0], r12)
 
-        inner_race = (
-            Workplane("XZ")
-            .moveTo(d2 / 2 - r12, 0)
-            .radiusArc((d2 / 2, r12), -r12)
-            .spline([(d1 / 2, B - r12)], tangents=[(0, 1), (0, 1)], includeCurrent=True)
-            .radiusArc((d1 / 2 - r12, B), -r12)
-            .hLineTo(d / 2 + r12)
-            .radiusArc((d / 2, B - r12), -r12)
-            .vLineTo(r12)
-            .radiusArc((d / 2 + r12, 0), -r12)
-            .close()
-        )
-        return inner_race
+        return section.sketch.face()
 
     def outer_race_section(self):
-        (d, D, D1, d2, r12, r34, B) = (
+        d, D, D1, d2, r12, r34, B = (
             self.bearing_dict[p] for p in ["d", "D", "D1", "d2", "r12", "r34", "B"]
         )
         D2 = D - (d2 - d)
-        outer_race = (
-            Workplane("XZ")
-            .moveTo(D / 2 - r12, 0)
-            .radiusArc((D / 2, r12), -r12)
-            .vLineTo(B - r34)
-            .radiusArc((D / 2 - r34, B), -r34)
-            .hLineTo(D2 / 2 + r12)
-            .radiusArc((D2 / 2, B - r12), -r12)
-            .spline([(D1 / 2, r12)], tangents=[(0, -1), (0, -1)], includeCurrent=True)
-            .radiusArc((D1 / 2 + r12, 0), -r12)
-            .close()
+
+        roller_r = self.roller_diameter / 2
+        with BuildSketch(Plane.XZ) as section:
+            with Locations(((D1 + D) / 4, 0)):
+                Rectangle((D1 - D) / 2, B)
+            with Locations((D1 / 2, 0)):
+                Rectangle(
+                    (D1 - D2) / 2,
+                    B / 2,
+                    align=(Align.MIN, Align.MAX),
+                    mode=Mode.SUBTRACT,
+                )
+            with Locations(((D + d) / 4, 0)):
+                Circle(roller_r, mode=Mode.SUBTRACT)
+            fillet(section.vertices().group_by(Axis.X)[-1].sort_by(Axis.Y)[-1], r12)
+            fillet(section.vertices().group_by(Axis.X)[-1].sort_by(Axis.Y)[0], r34)
+
+        return section.sketch.face()
+
+    def cage(self):
+        d, d1, D, D1, d2, r12, r34, B = (
+            self.bearing_dict[p]
+            for p in ["d", "d1", "D", "D1", "d2", "r12", "r34", "B"]
         )
-        return outer_race
+        hole = Sphere(0.525 * self.roller_diameter)
+        cage_t = 0.2 * (D1 - d2)
 
-    def cap(self) -> Solid:
-        (d, D, d2, B) = (self.bearing_dict[p] for p in ["d", "D", "d2", "B"])
-        D2 = D - (d2 - d)
+        cage_line = Plane.XZ * Spline(
+            (d2 / 2 + cage_t, 0.4 * B),
+            (d1 / 2 + cage_t, -0.4 * B),
+            tangents=((0, -1), (0, -1)),
+        )
+        cage_face = Face.revolve(cage_line, 360, Axis.Z)
+        cage_face -= PolarLocations((D - d) / 2, self.roller_count) * hole
+        cage = Solid.thicken(cage_face, -cage_t)
+        cage.color = Color(0x909090)
 
-        with BuildPart() as cap:
-            with BuildSketch(Plane.XY.offset(B * 0.42)):
-                Circle(D2 / 2)
-                Circle(d2 / 2, mode=Mode.SUBTRACT)
-            extrude(amount=B * 0.05)
-        cap_solid = cap.solid()
-        cap_solid.color = Color(0x030303)
-        return cap_solid
+        return cage
+
+    # def cap(self) -> Solid:
+    #     (d, D, d2, B) = (self.bearing_dict[p] for p in ["d", "D", "d2", "B"])
+    #     D2 = D - (d2 - d)
+
+    #     with BuildPart() as cap:
+    #         with BuildSketch(Plane.XY.offset(B * 0.42)):
+    #             Circle(D2 / 2)
+    #             Circle(d2 / 2, mode=Mode.SUBTRACT)
+    #         extrude(amount=B * 0.05)
+    #     cap_solid = cap.solid()
+    #     cap_solid.color = Color(0x030303)
+    #     return cap_solid
 
     roller = Bearing.default_roller
 
@@ -547,116 +549,164 @@ class SingleRowTaperedRollerBearing(Bearing):
     def roller_diameter(self) -> float:
         """Diameter of the larger end of the roller - increased diameter
         allows for room for the cage between the rollers"""
-        return self.roller().edges().sort_by(Axis.Z)[-1].radius * 2.5
+        return max(self._roller_diameters) * 1.25
 
     @property
-    def cone_angle(self) -> float:
-        """Angle of the inner cone raceway"""
-        (a, d1, Db) = (self.bearing_dict[p] for p in ["a", "d1", "Dbmin"])
-        cone_length = (Db / 2) / asin(radians(a))
-        return degrees(asin((d1 / 2) / cone_length))
-
-    @property
-    def roller_axis_angle(self) -> float:
-        """Angle of the central axis of the rollers"""
-        return (self.bearing_dict["a"] + self.cone_angle) / 2
-
-    @property
-    def roller_length(self) -> float:
-        """Roller length"""
-        return 0.7 * self.bearing_dict["B"]
-
-    @property
-    def cone_length(self) -> float:
-        """Distance to intersection of projection lines"""
-        (a, Db) = (self.bearing_dict[p] for p in ["a", "Dbmin"])
-        return (Db / 2) / asin(radians(a))
+    def contact_angle(self) -> float:
+        """Angle of the outer raceway"""
+        e = self.bearing_dict["e"]
+        return degrees(atan(e))
 
     @property
     def race_center_radius(self) -> float:
         """Radius of cone to place the rollers"""
-        return (self.cone_length - self.roller_length / 2) * sin(
-            radians(self.roller_axis_angle)
-        )
+        if not hasattr(self, "_race_center_radius"):
+            self.roller()
+        return self._race_center_radius
+
+    @property
+    def roller_count(self):
+        return floor(self._race_center_radius * 2 * pi / self.roller_diameter)
 
     def outer_race_section(self) -> Face:
         """Outer Cup"""
-        (D, C, Db, a, r34) = (
-            self.bearing_dict[p] for p in ["D", "C", "Dbmin", "a", "r34"]
-        )
-        with BuildSketch() as cup_sketch:
-            # with Locations((C / 2, D / 2 - (D - Db) / 4)):
-            with Locations((C / 2, 0)):
-                Trapezoid((D - Db) / 2, C, a + 90, 90)
-                fillet(cup_sketch.vertices(), r34)
+        if not hasattr(self, "_outer_race_section_cache"):
+            self._outer_race_section_cache = self._outer_race_section()
+        return self._outer_race_section_cache
 
-        # cup_sketch = (
-        #     Sketch()
-        #     .push([(C / 2, D / 2 - (D - Db) / 4)])
-        #     .trapezoid((D - Db) / 2, C, a + 90, 90, 90)
-        #     .reset()
-        #     .vertices()
-        #     .fillet(r34)
-        # )
-        # cup = Workplane(
-        #     cup_sketch._faces.Faces()[0].rotate(Vector(), Vector(0, 1, 0), -90)
-        # ).wires()
-
-        return cup_sketch.sketch
+    def _outer_race_section(self) -> Face:
+        """Non cached version of outer race"""
+        B, C, D, T, r34 = (self.bearing_dict[p] for p in ["B", "C", "D", "T", "r34"])
+        with BuildSketch(
+            Plane((0, 0, -B / 2), x_dir=(1, 0, 0), z_dir=(0, -1, 0))
+        ) as section:
+            with BuildLine() as bl:
+                l1 = Polyline(
+                    (D / 2, 0),
+                    (D / 2, C),
+                    (D / 2 - r34 * 1.5, C),
+                )
+                l2 = PolarLine(
+                    l1 @ 1,
+                    C,
+                    direction=Vector(0, -1).rotate(Axis.Z, -self.contact_angle),
+                    length_mode=LengthMode.VERTICAL,
+                )
+                Line(l2 @ 1, l1 @ 0)
+            make_face()
+            fillet(section.vertices().group_by(Axis.X)[-1], r34)
+        return section.sketch.face()
 
     def inner_race_section(self) -> Face:
         """Central Cone"""
-        (d, B, da, r12, T) = (
-            self.bearing_dict[p] for p in ["d", "B", "da", "r12", "T"]
-        )
-        cone_sketch = (
-            Sketch()
-            .push([(T - B / 2, d / 2 + (da - d) / 2)])
-            .trapezoid((da - d) / 2, B, 90 + self.cone_angle, 90, -90)
-            .reset()
-            .vertices()
-            .fillet(r12)
-        )
-        cone = Workplane(
-            cone_sketch._faces.Faces()[0].rotate(Vector(), Vector(0, 1, 0), -90)
-        ).wires()
-        return cone
+        if not hasattr(self, "_inner_race_section_cache"):
+            self._inner_race_section_cache = self._inner_race_section()
+        return self._inner_race_section_cache
 
-    def roller(self) -> Solid:
+    def _inner_race_section(self) -> Face:
+        """Non cached version of inner race"""
+
+        d, da, B, T, r12 = (self.bearing_dict[p] for p in ["d", "da", "B", "T", "r12"])
+        inner_raceway_angle = self.contact_angle / 1.5
+        with BuildSketch(
+            Plane((0, 0, T - B / 2), x_dir=(1, 0, 0), z_dir=(0, -1, 0))
+        ) as section:
+            with BuildLine() as bl:
+                l1 = Polyline((da / 2 - r12, -B), (d / 2, -B), (d / 2, 0))
+                l2 = PolarLine(
+                    l1 @ 0, B, 90 - inner_raceway_angle, length_mode=LengthMode.VERTICAL
+                )
+                l3 = Line(l1 @ 1, l2 @ 1)
+            make_face()
+            fillet(section.vertices().group_by(Axis.X)[0], r12)
+            # Make a slot around the inner race to capture the rollers
+            outside_edge = section.edges().sort_by(Edge.length)[-1]
+            self.taper_length = outside_edge.length
+            add(
+                sweep(
+                    outside_edge.trim(0.075, 0.925),
+                    Edge.make_line(
+                        outside_edge.position_at(0.5),
+                        outside_edge.position_at(0.5)
+                        + outside_edge.tangent_at(0.5).rotate(Axis.Z, 90) * r12 / 2,
+                    ),
+                ),
+                mode=Mode.SUBTRACT,
+            )
+        return section.sketch.face()
+
+    def roller(self) -> Face:
         """Tapered Roller"""
-        roller_cone_angle = self.bearing_dict["a"] - self.cone_angle
-        cone_radii = [
-            1.2 * (self.cone_length - l) * sin(radians(roller_cone_angle) / 2)
-            for l in [0, self.roller_length]
-        ]
-        return Rot(X=-self.roller_axis_angle) * Solid.make_cone(
-            cone_radii[1],
-            cone_radii[0],
-            self.roller_length,
-            Plane.XY.offset(-self.roller_length / 2),
+        if not hasattr(self, "_roller_cache"):
+            self._roller_cache = self._roller()
+        return self._roller_cache
+
+    def _roller(self) -> Solid:
+        """Non cached version of tapered roller"""
+        GAP = 0.05
+        inner_section = self.inner_race_section()
+        outer_section = self.outer_race_section()
+        inner_edge = (
+            inner_section.edges()
+            .filter_by(Axis.Z, reverse=True)
+            .sort_by(Edge.length)[-1]
         )
+        outer_edge = outer_section.edges().sort_by(Axis.X)[0]
+        roller_inner_edge = inner_edge.trim(GAP, 1 - GAP)
+        c_inner_a = Axis(inner_edge)
+        c_outer_a = Axis(outer_edge)
+        r_axis = Axis(
+            c_inner_a.intersect(c_outer_a),
+            (c_inner_a.direction + c_outer_a.direction * -1) / 2,
+        )
+        roller_non_planar_face = Face.revolve(roller_inner_edge, 360, r_axis)
+        roller_circles = roller_non_planar_face.edges().filter_by(GeomType.CIRCLE)
+        roller_ends = [Face(Wire(e)) for e in roller_circles]
+        roller = Solid(Shell(roller_ends + [roller_non_planar_face]))
+        self._roller_diameters = [2 * e.radius for e in roller_circles]
+        self.cage_edge = section(roller, Plane.XZ).intersect(
+            Axis(
+                r_axis.position + Vector(0.3 * min(self._roller_diameters), 0, 0),
+                r_axis.direction,
+            )
+        )
+        self._race_center_radius = roller.faces().sort_by(Axis.Z)[-1].center().X
+        roller.position -= (self._race_center_radius, 0, 0)
+        roller.color = Color(0x909090)
+        return roller
 
     countersink_profile = Bearing.default_countersink_profile
 
     def cage(self) -> Compound:
         """Cage holding the rollers together with the cone"""
-        thickness = 0.9 * self.bearing_dict["T"]
-        cage_radii = [
-            (self.cone_length - l) * sin(radians(self.roller_axis_angle)) + 0.5 * MM
-            for l in [0, thickness]
-        ]
-        cage_face = Solid.make_cone(
-            cage_radii[1],
-            cage_radii[0],
-            thickness,
-        ).cut(
-            Solid.make_cone(
-                cage_radii[1] - 1 * MM,
-                cage_radii[0] - 1 * MM,
-                thickness,
-            )
+        # To make the cage first create the appropriate conical surface
+        # then punch holes for the rollers which can then be thickened to
+        # a solid object.  This is more efficient then making holes in
+        # a solid cage.
+        roller = self.roller()
+        roller_hole_cutter = offset(roller, 0.25 * MM, kind=Kind.INTERSECTION).move(
+            Pos(X=self.race_center_radius)
         )
-        return cage_face
+        roller_max_r = (
+            roller.faces().filter_by(GeomType.PLANE).sort_by(Face.area)[0].edge().radius
+        )
+        cage_side: Edge = Pos(X=roller_max_r / 4) * Edge.make_line(
+            self.cage_edge @ -0.1, self.cage_edge @ 1.1
+        )
+        bottom = (
+            1
+            if self.cage_edge.position_at(0).Y < self.cage_edge.position_at(1).Y
+            else 0
+        )
+        hook_sign = -1 if bottom == 0 else 1
+        hook = JernArc(cage_side @ bottom, (cage_side % bottom) * hook_sign, 3 * MM, 80)
+        cage_profile = Wire([cage_side, hook])
+        cage_surface = Shell.revolve(cage_profile, 360, Axis.Z)
+        cage_surface -= PolarLocations(0, self.roller_count) * roller_hole_cutter
+        cage = Solid.thicken(cage_surface, 0.5 * MM)
+        cage.color = Color(0x909090)
+
+        return cage
 
 
 class PressFitHole(BasePartObject):
@@ -726,17 +776,19 @@ class PressFitHole(BasePartObject):
 
 
 if __name__ == "__main__":
-    # from ocp_vscode import show, set_defaults, Camera
+    from ocp_vscode import Camera, set_defaults, show, show_all
 
-    # set_defaults(reset_camera=Camera.CENTER)
+    set_defaults(reset_camera=Camera.CENTER)
 
-    b1 = SingleRowCappedDeepGrooveBallBearing(size="M8-22-7")
-    b2 = SingleRowDeepGrooveBallBearing(size="M8-22-7")
+    # b1 = SingleRowCappedDeepGrooveBallBearing(size="M8-22-7")
+    # b2 = SingleRowDeepGrooveBallBearing(size="M8-22-7")
     # print(SingleRowAngularContactBallBearing.sizes("SKT"))
     b3 = SingleRowAngularContactBallBearing(size="M10-30-9")
     # print(SingleRowCylindricalRollerBearing.sizes("SKT"))
-    b4 = SingleRowCylindricalRollerBearing("M15-35-11")
+    # b4 = SingleRowCylindricalRollerBearing("M15-35-11")
     # print(SingleRowTaperedRollerBearing.sizes("SKT"))
-    # b5 = SingleRowTaperedRollerBearing("M15-42-14.25")
-    # show(b5)
+    # b5 = SingleRowTaperedRollerBearing("M25-52-19.25")
+    bbox = b3.bounding_box()
+    print(b3.bearing_dict["B"], b3.bearing_dict["D"], bbox.size)
+    show(b3)
     # show(pack([b1, b2, b3, b4], 5))
