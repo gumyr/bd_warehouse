@@ -1439,6 +1439,8 @@ class Screw(ABC, BasePartObject):
     def min_hole_depth(self, counter_sunk: bool = True) -> float:
         """Minimum depth of a hole able to accept the screw"""
         countersink_profile = self.countersink_profile("Loose")
+        if countersink_profile is None:  # SetScrew
+            return 0
         head_offset = countersink_profile.vertices().sort_by(Axis.Z)[-1].Z
         if counter_sunk:
             result = self.length + head_offset - self.length_offset()
@@ -1447,7 +1449,7 @@ class Screw(ABC, BasePartObject):
         return result
 
     @property
-    def nominal_lengths(self) -> list[float]:
+    def nominal_lengths(self) -> list[float] | None:
         """A list of nominal screw lengths for this screw"""
         try:
             range_min = self.screw_data["short"]
@@ -1580,8 +1582,8 @@ class Screw(ABC, BasePartObject):
             screw = shank
 
         # Unwrap the Compound as it's unnecessary
-        if isinstance(screw, Compound) and len(screw.solids()) == 1:
-            screw = screw.solid()
+        if isinstance(screw, Compound):
+            screw = screw.unwrap(fully=True)
         screw.label = "body"
 
         if not self.simple:
@@ -2710,9 +2712,7 @@ class Washer(ABC, BasePartObject):
         bd_object = self.make_washer()
 
         super().__init__(bd_object, rotation, align, mode)
-        self.label = (
-            f"{self.__class__.__name__}({size}, {fastener_type})"
-        )
+        self.label = f"{self.__class__.__name__}({size}, {fastener_type})"
         self.color = Color(0xC0C0C0)
 
     def make_washer(self) -> Solid:
