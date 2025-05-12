@@ -1,7 +1,8 @@
 import copy
+
+from bd_warehouse.bearing import PressFitHole, SingleRowDeepGrooveBallBearing
+from bd_warehouse.fastener import ClearanceHole, SocketHeadCapScrew
 from build123d import *
-from bd_warehouse.fastener import SocketHeadCapScrew, ClearanceHole
-from bd_warehouse.bearing import SingleRowDeepGrooveBallBearing, PressFitHole
 from ocp_vscode import show
 
 # Dimensions in the default unit of MM
