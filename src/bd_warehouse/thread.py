@@ -739,7 +739,11 @@ class AcmeThread(TrapezoidalThread):
         mode: Mode = Mode.ADD,
     ):
         diameter = imperial_str_to_float(size)
-        pitch = AcmeThread.acme_pitch[size]
+        try:
+            pitch = AcmeThread.acme_pitch[size]
+        except KeyError as exc:
+            raise ValueError("Invalid screw size") from exc
+
         super().__init__(
             diameter=diameter,
             pitch=pitch,
