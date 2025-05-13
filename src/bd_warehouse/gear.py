@@ -46,8 +46,7 @@ license:
 from math import sin, cos, tan, acos, radians, degrees
 from typing import Optional, Union
 from build123d import *
-
-# from ocp_vscode import *
+from OCP.StdFail import StdFail_NotDone
 
 
 class InvoluteToothProfile(BaseLineObject):
@@ -121,7 +120,13 @@ class InvoluteToothProfile(BaseLineObject):
                 -self.addendum_radius,
             )
             if root_fillet is not None:
-                fillet(tooth.vertices().sort_by(Axis.X)[1], root_fillet)
+                try:
+                    fillet(tooth.vertices().sort_by(Axis.X)[1], root_fillet)
+                except StdFail_NotDone as err:
+                    raise ValueError(
+                        "Invalid root radius, try a smaller value"
+                    ) from err
+
             mirror(about=Plane.XZ)
 
         close = (
@@ -183,6 +188,8 @@ class SpurGearPlan(BaseSketchObject):
         self.base_radius = gear_tooth.base_radius
         self.addendum_radius = gear_tooth.addendum_radius
         self.root_radius = gear_tooth.root_radius
+        if self.base_radius < self.root_radius:
+            raise ValueError("Invalid configuration, try changing the pressure angle")
         gear_teeth = PolarLocations(0, tooth_count) * gear_tooth
         gear_wire = Wire([e for tooth in gear_teeth for e in tooth.edges()])
         gear_face = Face(gear_wire)

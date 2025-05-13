@@ -52,6 +52,24 @@ def test_spur_gear_plan():
     assert spur_gear_plan.face().normal_at() == pytest.approx(Vector(0, 0, 1), abs=1e-5)
 
 
+def test_invalid_spur_gear():
+    # Too large root fillet
+    with pytest.raises(Exception):
+        spur_gear_plan = SpurGearPlan(
+            module=1,
+            tooth_count=100,
+            pressure_angle=14.5,
+            root_fillet=0.5,
+        )
+    # Too many teeth for pressure angle
+    with pytest.raises(Exception):
+        spur_gear_plan = SpurGearPlan(
+            module=1,
+            tooth_count=100,
+            pressure_angle=14.5,
+        )
+
+
 def test_spur_gear():
     module, tooth_count, pressure_angle, root_fillet, thickness = (2, 12, 14.5, 0.5, 5)
     spur_gear = SpurGear(
@@ -72,4 +90,5 @@ def test_spur_gear():
 
 if __name__ == "__main__":
     test_spur_gear_plan()
+    test_invalid_spur_gear()
     test_spur_gear()
