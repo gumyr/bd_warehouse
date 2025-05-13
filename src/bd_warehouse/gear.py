@@ -185,7 +185,9 @@ class SpurGearPlan(BaseSketchObject):
         self.root_radius = gear_tooth.root_radius
         gear_teeth = PolarLocations(0, tooth_count) * gear_tooth
         gear_wire = Wire([e for tooth in gear_teeth for e in tooth.edges()])
-        gear_face = -Face(gear_wire)
+        gear_face = Face(gear_wire)
+        if gear_face.normal_at().Z < 0:
+            gear_face = -gear_face
         super().__init__(gear_face, rotation, align, mode)
 
 
