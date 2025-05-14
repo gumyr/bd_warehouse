@@ -187,7 +187,7 @@ class Bearing(ABC, BasePartObject):
         return 0
 
     @classmethod
-    def types(cls) -> list[str]:
+    def types(cls) -> set[str]:
         """Return a set of the bearing types"""
         return set(p.split(":")[0] for p in list(cls.bearing_data.values())[0].keys())
 
