@@ -680,7 +680,16 @@ class Nut(ABC, BasePartObject):
 
 
 class DomedCapNut(Nut):
-    """DomedCapNut
+    """Domed Cap Nut
+
+    DIN 1587 domed cap nuts, also known as acorn nuts, feature a high, rounded, closed-end top.
+    These nuts are typically used to provide a finished appearance while also protecting exposed
+    bolt threads from damage or corrosion. The dome prevents the entry of dirt and moisture, making
+    them suitable for applications where hygiene, safety, or aesthetics are important. Domed cap nuts
+    are often found in furniture, machinery, automotive, and architectural applications.
+
+    These nuts are tightened like standard hex nuts but offer the added benefit of thread protection
+    and a smoother exterior that reduces the risk of snagging or injury.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -824,6 +833,17 @@ class DomedCapNut(Nut):
 
 class HeatSetNut(Nut):
     """Heat Set Nut
+
+    Heat set insert nuts are specially designed threaded inserts used in thermoplastics to provide
+    durable, reusable threads in 3D printed or injection-molded parts. These inserts are installed
+    by heating them—typically with a soldering iron—and pressing them into a pre-formed hole in the
+    plastic. As the insert heats the surrounding plastic, it melts slightly and flows into the
+    knurled or slotted features of the insert, forming a strong mechanical bond upon cooling.
+
+    Heat set nuts are ideal for applications where threaded fasteners are frequently assembled and
+    disassembled, helping to prevent wear and stripping in plastic components. They are widely used
+    in prototyping, enclosures, robotics, and other applications where lightweight, modular designs
+    are needed.
 
     Args:
         size (str): nut size, e.g. M5-0.8-Standard
@@ -1113,7 +1133,21 @@ class HeatSetNut(Nut):
 
 
 class HexNut(Nut):
-    """HexNut
+    """Hex Nut
+
+    Hex nuts are the most commonly used type of fastening nut, featuring a six-sided profile that
+    provides a strong grip and easy installation with standard tools. They are used in conjunction
+    with bolts, screws, and other externally threaded fasteners to secure components in mechanical
+    assemblies.
+
+    ISO 4032, ISO 4033, and ISO 4035 define different variants of metric hex nuts:
+    - ISO 4032 specifies a regular height hex nut with a standard width across flats.
+    - ISO 4033 defines a heavy series hex nut, typically used for larger or more heavily loaded assemblies.
+    - ISO 4035 specifies a thin (jam) nut, used where space is limited or as a locknut against a standard nut.
+
+    These nuts are widely used across industries including automotive, aerospace, machinery, and
+    construction. They are available in various grades and finishes to suit different strength,
+    corrosion resistance, and environmental requirements.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -1150,7 +1184,17 @@ class HexNut(Nut):
 
 
 class HexNutWithFlange(Nut):
-    """HexNutWithFlange
+    """Hex Nut With Flange
+
+    A hex nut with flange combines a standard six-sided nut with an integrated flange at the base,
+    which acts like a built-in washer. This flange helps distribute the clamping load over a larger
+    surface area, reducing surface pressure and the risk of damage to softer materials. It also
+    improves resistance to loosening due to vibration by increasing friction at the mating surface.
+
+    DIN 1665 specifies metric hex flange nuts used in general-purpose and structural applications.
+    These nuts are often used in automotive, machinery, and assembly applications where ease of use,
+    improved load distribution, and vibration resistance are desired. The flanged base eliminates the
+    need for a separate washer in many cases, simplifying assembly and reducing part count.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -1221,7 +1265,17 @@ class HexNutWithFlange(Nut):
 
 
 class UnchamferedHexagonNut(Nut):
-    """UnchamferedHexagonNut
+    """Unchamfered Hexagon Nut
+
+    ISO 4036 defines a thin, unchamfered hexagon nut, typically used in non-critical applications
+    or where space and weight constraints are a priority. Unlike standard hex nuts, these nuts lack
+    a chamfered edge and are manufactured with reduced height, which makes them suitable for
+    low-stress assemblies, locking applications (e.g., as a jam nut), or secondary fastening positions.
+
+    Due to their minimal height and absence of chamfers, they are generally not intended for high-load
+    structural use. Instead, they are ideal for internal assemblies, compact enclosures, or when used
+    in combination with standard nuts to resist loosening under vibration. ISO 4036 nuts are most often
+    found in light mechanical assemblies and electronics hardware.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -1262,7 +1316,17 @@ class UnchamferedHexagonNut(Nut):
 
 
 class SquareNut(Nut):
-    """SquareNut
+    """Square Nut
+
+    Square nuts, as defined by DIN 557, are four-sided nuts commonly used in older machinery,
+    woodworking, and applications where a flat bearing surface and greater resistance to loosening
+    are beneficial. Their larger surface area compared to hex nuts provides increased grip and load
+    distribution, especially when used with flat washers or in slots.
+
+    DIN 557 specifies standard square nuts with a flat top and bottom and sharp or slightly chamfered
+    corners. These nuts are well-suited for tightening by hand or with simple tools, and are often
+    found in applications where ease of alignment or aesthetics are not critical. Their geometry makes
+    them less prone to rounding and easier to weld or lock in place.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -1713,7 +1777,18 @@ class Screw(ABC, BasePartObject):
 
 
 class ButtonHeadScrew(Screw):
-    """ButtonHeadScrew
+    """Button Head Screw
+
+    ISO 7380-1 defines hexagon socket button head screws, characterized by a low-profile, rounded
+    head and an internal hex drive. These screws are designed for applications requiring a smooth,
+    finished appearance with moderate strength. The large head diameter provides a greater bearing
+    surface, reducing the risk of pull-through and improving load distribution on softer materials.
+
+    Button head screws are commonly used in enclosures, furniture, robotics, and lightweight mechanical
+    assemblies where aesthetics and compact form factor are important. The internal hex socket allows
+    for easy installation with standard hex keys, and their shallow head height makes them well-suited
+    for space-constrained applications. However, they are not intended for high-torque or high-strength
+    applications due to their smaller head-to-shank transition area.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -1770,7 +1845,18 @@ class ButtonHeadScrew(Screw):
 
 
 class ButtonHeadWithCollarScrew(Screw):
-    """ButtonHeadWithCollarScrew
+    """Button Head With Collar Screw
+
+    ISO 7380-2 defines hexagon socket button head screws with an integrated collar or washer face
+    beneath the head. This collar increases the bearing surface area, improving load distribution and
+    reducing surface deformation when fastening into softer materials. Compared to standard button
+    head screws (ISO 7380-1), the collar also adds stability and reduces the risk of loosening due to
+    vibration.
+
+    These screws retain the low-profile, rounded aesthetic of button head designs while providing
+    enhanced performance in critical applications. They are ideal for assemblies in robotics, consumer
+    electronics, machinery panels, and enclosures where a smooth finish and added clamping force are
+    needed. The internal hex drive allows for easy and secure installation using standard hex keys.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -1843,7 +1929,21 @@ class ButtonHeadWithCollarScrew(Screw):
 
 
 class CheeseHeadScrew(Screw):
-    """CheeseHeadScrew
+    """Cheese Head Screw
+
+    Cheese head screws are cylindrical-head fasteners with vertical sides and a flat top, offering a
+    clean, compact profile. The head has a smaller diameter and taller profile than pan or button head
+    screws, providing a deep drive socket or slot for strong torque transmission. These screws are
+    commonly used where head space is limited or where components are recessed into counterbores.
+
+    Multiple ISO standards define variations:
+    - ISO 1207: Slotted cheese head machine screws for general applications.
+    - ISO 7048: Cross-recessed (Phillips) cheese head screws.
+    - ISO 14580: Hex socket cheese head screws, often used in precision assemblies.
+
+    Cheese head screws are widely used in electrical components, enclosures, and machinery where a tall
+    head is acceptable but a compact footprint is desired. Their straight vertical sides also make them
+    ideal for components that require precise guidance or centering in assembly features.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -1901,7 +2001,23 @@ class CheeseHeadScrew(Screw):
 
 
 class CounterSunkScrew(Screw):
-    """CounterSunkScrew
+    """CounterSunk Screw
+
+    Countersunk screws are flat-head fasteners designed to sit flush with or below the surface of the
+    material they are installed into. The conical underside of the head matches a countersunk hole,
+    allowing for a clean finish and reduced interference in assembled products. These screws are used
+    in applications where appearance, clearance, or aerodynamics are important, such as in enclosures,
+    electronics, automotive panels, and structural components.
+
+    Multiple ISO standards define specific variations:
+    - ISO 2009: Slotted countersunk head screws.
+    - ISO 7046: Cross-recessed (Phillips) countersunk screws for general use.
+    - ISO 10642: Hex socket countersunk screws, often used in machinery and precision equipment.
+    - ISO 14581: Low-profile, cross-recessed countersunk screws for space-constrained applications.
+    - ISO 14582: Hex socket, low-profile countersunk screws for compact, high-strength fastening.
+
+    The variety of head heights and drive types enables countersunk screws to meet the aesthetic,
+    mechanical, and space requirements of a wide range of assemblies.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -1973,7 +2089,22 @@ class CounterSunkScrew(Screw):
 
 
 class HexHeadScrew(Screw):
-    """HexHeadScrew
+    """Hex Head Screw
+
+    Hex head screws, also referred to as hex bolts or hex cap screws, are externally threaded fasteners
+    with a six-sided head designed for use with wrenches or sockets. They are widely used in
+    construction, machinery, automotive, and industrial applications where strong, reliable bolted joints
+    are required.
+
+    Two main ISO standards define their dimensional properties:
+    - ISO 4014: Hex head screws with a partially threaded shank, typically used where shear strength is
+    needed along the unthreaded portion.
+    - ISO 4017: Fully threaded hex head screws, used for general-purpose fastening where full thread
+    engagement is desired.
+
+    These screws are available in a range of material grades and finishes, and are often used with
+    corresponding hex nuts and washers to ensure uniform clamping force and load distribution. Their
+    standardized geometry ensures compatibility with automated assembly tools and industry-standard hardware.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2052,7 +2183,23 @@ class HexHeadScrew(Screw):
 
 
 class HexHeadWithFlangeScrew(Screw):
-    """HexHeadWithFlangeScrew
+    """Hex Head With Flange Screw
+
+    Hex head screws with flanges combine a standard hexagonal head with an integrated washer-like
+    flange at the base. The flange increases the bearing surface area under the head, distributing
+    clamping forces more evenly and reducing surface damage to the assembled material. This design
+    also improves resistance to loosening caused by vibration, especially when used without a separate
+    washer.
+
+    DIN 1662 and DIN 1665 define common types of flanged hex screws:
+    - DIN 1662: Hex flange screws with a partially threaded shank.
+    - DIN 1665: Hex flange screws that are fully threaded, offering continuous engagement over the
+    entire shaft.
+
+    These screws are frequently used in automotive, structural, and industrial applications where
+    secure fastening, reduced part count, and simplified assembly are important. The integrated flange
+    simplifies the design and assembly process by eliminating the need for a separate washer while
+    enhancing load distribution.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2136,7 +2283,23 @@ class HexHeadWithFlangeScrew(Screw):
 
 
 class PanHeadScrew(Screw):
-    """PanHeadScrew
+    """Pan Head Screw
+
+    Pan head screws feature a broad, low-profile head with gently curved sides and a flat bearing
+    surface underneath. This shape provides a large contact area, reducing the likelihood of damage
+    to the fastened material and allowing for a clean, finished appearance. The rounded sides offer a
+    smoother look than hex or cheese heads while still accommodating a variety of drive types.
+
+    Several standards define pan head screws:
+    - ISO 1580: Slotted pan head machine screws for general mechanical use.
+    - ISO 14583: Pan head screws with a hexalobular (Torx) drive for improved torque transfer and
+    reduced cam-out.
+    - ASME B18.6.3: The U.S. standard for slotted, cross-recessed (Phillips), or combination-drive
+    pan head machine screws.
+
+    Pan head screws are commonly used in enclosures, electronics, mechanical assemblies, and
+    applications where aesthetics, low head height, and easy access are important. Their wide head
+    allows for secure fastening without requiring countersinking or additional washers.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2198,7 +2361,17 @@ class PanHeadScrew(Screw):
 
 
 class PanHeadWithCollarScrew(Screw):
-    """PanHeadWithCollarScrew
+    """Pan Head With Collar Screw
+
+    DIN 967 defines a pan head screw with an integrated collar or washer-like flange beneath the head.
+    The collar increases the bearing surface area, improving load distribution and reducing surface
+    indentation on the clamped material. The pan head retains a low-profile, rounded appearance,
+    while the collar eliminates the need for a separate washer in many applications.
+
+    These screws typically feature a slotted or cross-recessed (Phillips) drive and are widely used
+    in automotive, appliance, and light mechanical assemblies where compactness, aesthetics, and
+    vibration resistance are important. The combination of pan head geometry and an integral flange
+    makes them especially useful when fastening to softer materials such as plastics or thin sheet metal.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2258,7 +2431,17 @@ class PanHeadWithCollarScrew(Screw):
 
 
 class RaisedCheeseHeadScrew(Screw):
-    """RaisedCheeseHeadScrew
+    """Raised Cheese Head Screw
+
+    ISO 7045 defines raised cheese head screws with a cylindrical, slightly domed head and a flat
+    underside. These screws combine the deep drive engagement and tall profile of standard cheese head
+    screws with a subtle domed surface for improved aesthetics and reduced edge sharpness. The result
+    is a screw that offers high torque capability while maintaining a more refined appearance.
+
+    Raised cheese head screws are typically available with slotted or cross-recessed (Phillips) drives,
+    and are used in mechanical assemblies, consumer electronics, and enclosures where clearance is
+    limited but drive reliability is important. The tall head allows for secure tool engagement, while
+    the rounded top helps reduce snagging and cosmetic impact in visible assemblies.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2318,7 +2501,21 @@ class RaisedCheeseHeadScrew(Screw):
 
 
 class RaisedCounterSunkOvalHeadScrew(Screw):
-    """RaisedCounterSunkOvalHeadScrew
+    """Raised CounterSunk Oval Head Screw
+
+    Raised countersunk screws—also known as oval head screws—feature a conical bearing surface like
+    standard countersunk screws, but with a gently domed top. This combination provides a flush fit
+    with a slightly protruding decorative finish, making them suitable for applications where appearance
+    and smooth contours are important.
+
+    Multiple ISO standards define oval head screws with different drive types:
+    - ISO 2010: Slotted raised countersunk head screws for general-purpose use.
+    - ISO 7047: Cross-recessed (Phillips) version for improved alignment and automation.
+    - ISO 14584: Hexalobular (Torx) drive version for high torque applications with reduced cam-out.
+
+    These screws are commonly used in electronics, appliance housings, mechanical assemblies, and
+    consumer products where flush mounting is required but a low-profile dome provides a more refined
+    look and reduced snagging.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2401,7 +2598,17 @@ class RaisedCounterSunkOvalHeadScrew(Screw):
 
 
 class SetScrew(Screw):
-    """SetScrew
+    """Set Screw
+
+    ISO 4026 defines set screws with a flat point and a hexagon socket drive. These screws are fully
+    threaded and lack a head, allowing them to sit flush or recessed within a mating part. Set screws
+    are primarily used to secure one component against another—most commonly to fix a rotating part
+    such as a gear or pulley onto a shaft.
+
+    The flat point provides secure contact without damaging the mating surface, making it ideal for
+    use in applications where frequent adjustments or disassembly may be required. Set screws are
+    commonly used in mechanical assemblies, couplings, collars, and linkages where space is limited
+    and unobtrusive fastening is essential.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2485,12 +2692,24 @@ class SetScrew(Screw):
 
 
 class SocketHeadCapScrew(Screw):
-    """SocketHeadCapScrew
+    """Socket Head Cap Screw
+
+    Socket head cap screws are high-strength fasteners with a cylindrical head and an internal
+    hexagonal drive. Designed for use where external wrench clearance is limited, these screws are
+    tightened with a hex key (Allen wrench) and provide excellent torque transfer and holding power.
+    The tall head allows for deep socket engagement, reducing the risk of stripping.
+
+    - ISO 4762 specifies metric socket head cap screws for general and precision mechanical use.
+    - ASME B18.3 defines the inch-based counterpart, widely used in North American engineering standards.
+
+    Socket head cap screws are commonly used in machinery, robotics, automotive assemblies, and
+    structural applications where compactness and reliability are important. Their strong clamping force
+    and clean geometry make them ideal for pre-tapped holes and locations with tight access.
 
     Args:
         size (str): size specification, e.g. "M6-1"
         length (float): screw length
-        fastener_type (Literal["iso4762","asme_b18.3], optional): Defaults to "iso4762".
+        fastener_type (Literal["iso4762","asme_b18.3"], optional): Defaults to "iso4762".
             iso4762 - Hexagon socket head cap screws
             asme_b18.3 - Imperial hexagon socket head cap screws
         hand (Literal["right","left"], optional): thread direction. Defaults to "right".
@@ -2540,7 +2759,19 @@ class SocketHeadCapScrew(Screw):
 
 
 class LowProfileScrew(Screw):
-    """LowProfileScrew
+    """Low Profile Screw
+
+    Low profile screws are specialized fasteners designed with a wide, flat, and shallow head that
+    minimizes protrusion above the mating surface. These screws are commonly used in aluminum
+    extrusion-based assemblies—such as those built with OpenBuilds V-slot and C-beam systems—where
+    clearance is limited and flush mounting is desired.
+
+    The large diameter head offers generous bearing area and good load distribution, while the low
+    height ensures smooth movement of linear components and avoids interference with adjacent parts.
+    These screws typically feature an internal hex drive and come in standard metric thread sizes (e.g., M5).
+
+    Low profile screws are ideal for use in DIY CNC machines, 3D printers, linear motion assemblies,
+    and other modular hardware systems where both mechanical performance and compactness are essential.
 
     Args:
         size (str): size specification, e.g. "M5-0.8"
@@ -2748,7 +2979,21 @@ class Washer(ABC, BasePartObject):
 
 
 class PlainWasher(Washer):
-    """PlainWasher
+    """Plain Washer
+
+    Plain washers are flat, disc-shaped components used under the head of a screw or nut to distribute
+    the clamping load and protect the mating surface from damage. They also help reduce surface
+    deformation and prevent fasteners from loosening due to vibration or movement.
+
+    Several ISO standards define plain washers of different series:
+    - ISO 7089: Normal series washers with standard outer diameter and thickness.
+    - ISO 7091: Normal series washers with slightly tighter tolerances and more controlled flatness.
+    - ISO 7093: Large series washers with greater outer diameter for use with oversized or slotted holes.
+    - ISO 7094: Extra-large series washers, offering the greatest surface area and ideal for use with
+    soft materials or wide clearances.
+
+    These washers are used in nearly all types of bolted assemblies across mechanical, structural,
+    automotive, and industrial applications.
 
     Args:
         size (str): size specification, e.g. "M6"
@@ -2778,7 +3023,20 @@ class PlainWasher(Washer):
 
 
 class ChamferedWasher(Washer):
-    """ChamferedWasher
+    """Chamfered Washer
+
+    ISO 7090 defines chamfered washers, which are plain washers with a conical or beveled underside
+    designed to match the chamfer on fasteners such as countersunk or chamfered-head bolts. The chamfer
+    provides full surface contact between the washer and fastener head, improving load distribution and
+    alignment, especially in high-stress or structural applications.
+
+    These washers help prevent damage to the mating surface by reducing point loading and ensuring
+    even contact. They are typically used with screws or bolts that have a 120° chamfer under the head—
+    such as ISO 7379 shoulder screws—or in assemblies requiring enhanced axial alignment and bearing
+    surface support.
+
+    Chamfered washers are commonly found in heavy machinery, construction, tooling fixtures, and
+    high-precision assemblies where joint integrity is critical.
 
     Args:
         size (str): size specification, e.g. "M6"
@@ -2816,7 +3074,19 @@ class ChamferedWasher(Washer):
 
 
 class CheeseHeadWasher(Washer):
-    """CheeseHeadWasher
+    """Cheese Head Washer
+
+    ISO 7092 defines plain washers specifically designed for use with cheese head screws. These washers
+    have a reduced outer diameter and a thickness tailored to the narrow, cylindrical profile of cheese
+    head fasteners, ensuring proper seating and load distribution under the head without protruding
+    beyond its edges.
+
+    Cheese head washers help prevent surface damage, distribute clamping forces more evenly, and improve
+    appearance in precision assemblies. Their compact size makes them ideal for use in electronics,
+    instrumentation, and machine components where space is limited and a clean, flush appearance is desired.
+
+    These washers are especially useful when paired with ISO 1207 or ISO 14580 cheese head screws in
+    counterbored holes or recessed applications.
 
     Args:
         size (str): size specification, e.g. "M6"
@@ -2855,6 +3125,20 @@ class CheeseHeadWasher(Washer):
 
 class InternalToothLockWasher(Washer):
     """Internal Tooth Lock Washer
+
+    Internal tooth lock washers are circular washers with multiple sharp, radially inward-facing teeth
+    designed to bite into the surface of the mating part and the underside of the fastener head. This
+    toothed profile increases friction and provides mechanical resistance to loosening caused by
+    vibration or rotation.
+
+    - DIN 6797 defines metric internal tooth lock washers commonly used in precision electrical and
+    mechanical assemblies.
+    - ASME B18.21.1 provides similar specifications for inch-based applications and general-purpose use.
+
+    Because the teeth are located on the inner circumference, internal tooth lock washers are ideal
+    for use under round or pan head screws, where edge clearance is limited or appearance is important.
+    They are commonly used in electronics, appliance housings, and light-duty machinery to maintain
+    tight assemblies without chemical threadlockers or locking nuts.
 
     Args:
         size (str): size specification, e.g. "M6"
