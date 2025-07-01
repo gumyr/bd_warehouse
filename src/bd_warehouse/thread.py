@@ -162,15 +162,24 @@ class Thread(BasePartObject):
             height = self.apex_radius - self.root_radius
             overlap = -interference * copysign(1, height)
             with BuildLine():  # thread profile
-                Polyline(
-                    (self.root_width / 2, overlap),
-                    (self.root_width / 2, 0),
-                    (self.apex_width / 2 + self.apex_offset, height),
-                    (-self.apex_width / 2 + self.apex_offset, height),
-                    (-self.root_width / 2, 0),
-                    (-self.root_width / 2, overlap),
-                    close=True,
-                )
+                if overlap == 0:
+                    Polyline(
+                        (self.root_width / 2, 0),
+                        (self.apex_width / 2 + self.apex_offset, height),
+                        (-self.apex_width / 2 + self.apex_offset, height),
+                        (-self.root_width / 2, 0),
+                        close=True,
+                    )
+                else:
+                    Polyline(
+                        (self.root_width / 2, overlap),
+                        (self.root_width / 2, 0),
+                        (self.apex_width / 2 + self.apex_offset, height),
+                        (-self.apex_width / 2 + self.apex_offset, height),
+                        (-self.root_width / 2, 0),
+                        (-self.root_width / 2, overlap),
+                        close=True,
+                    )
                 if not self.right_hand:
                     mirror(about=Plane.XZ, mode=Mode.REPLACE)
             make_face()
@@ -508,6 +517,7 @@ class IsoThread(BasePartObject):
                 root_width=root_width,
                 pitch=self.pitch,
                 length=self.length,
+                interference=interference,
                 end_finishes=self.end_finishes,
                 hand=self.hand,
                 simple=simple,
