@@ -1,0 +1,56 @@
+name: Wheel building and publishing
+
+on: [push, pull_request, workflow_dispatch] # TODO: update this later
+
+jobs:
+  build_wheel:
+    # This does the actual wheel building or if triggered manually via the workflow dispatch, or for a tag.
+    # this job does NOT publish the wheel
+    name: Build wheel on ubuntu-latest
+    runs-on: ubuntu-latest
+    #if: github.event_name == 'workflow_dispatch'
+    if: (github.repository == 'gumyr/bd_warehouse' && ( startsWith(github.ref, 'refs/tags/v'))) || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # get all history for setuptools_scm
+        
+      - name: Build sdist and wheel
+        shell: bash
+        run: |
+          pwd
+          ls -lR
+          python3 -V
+          python3 -m pip install --upgrade pip
+          python3 -m pip -V
+          python3 -m pip install build
+          python3 -m build --outdir wheelhouse
+          python3 -m pip freeze
+          ls -lR
+
+      - uses: actions/upload-artifact@v5
+        with:
+          path: ./wheelhouse/bd_warehouse*.* # store the bd_warehouse wheel and sdist
+      
+  upload_pypi:
+    needs: [build_wheel]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/bd-warehouse
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+    # if: github.event_name == 'release' && github.event.action == 'published'
+    # or, alternatively, upload to PyPI on every tag starting with 'v' (remove on: release above to use this)
+    if: needs.build_wheel.result == 'success'
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          # unpacks default artifact into dist/
+          # if `name: artifact` is omitted, the action will create extra parent dir
+          name: artifact
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with: # for testing with test.pypi.org (TODO: disable after test success)
+          repository-url: https://test.pypi.org/legacy/ # TODO: disable after test success

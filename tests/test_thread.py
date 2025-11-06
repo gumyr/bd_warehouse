@@ -25,6 +25,7 @@ license:
     limitations under the License.
 
 """
+
 import random
 import unittest
 from bd_warehouse.thread import *
@@ -72,7 +73,7 @@ class TestIsoThread(unittest.TestCase):
                         end_finishes=(end0, end1),
                         hand="right",
                     )
-                    self.assertTrue(thread.is_valid())
+                    self.assertTrue(thread.is_valid)
 
     def test_interior_thread(self):
         """Simple validity check for an interior thread"""
@@ -88,7 +89,7 @@ class TestIsoThread(unittest.TestCase):
                         end_finishes=(end0, end1),
                         hand="left" if end0 == end1 else "right",
                     )
-                    self.assertTrue(thread.is_valid())
+                    self.assertTrue(thread.is_valid)
 
     def test_parsing(self):
         with self.assertRaises(ValueError):
@@ -114,7 +115,7 @@ class TestAcmeThread(unittest.TestCase):
             length=1 * IN,
             external=True,
         )
-        self.assertTrue(acme_thread.is_valid())
+        self.assertTrue(acme_thread.is_valid)
 
     def test_interior_thread(self):
         """Simple validity check for an interior thread"""
@@ -124,7 +125,7 @@ class TestAcmeThread(unittest.TestCase):
             length=1 * IN,
             external=False,
         )
-        self.assertTrue(acme_thread.is_valid())
+        self.assertTrue(acme_thread.is_valid)
 
     def test_sizes(self):
         """Validate sizes list if created"""
@@ -148,7 +149,7 @@ class TestMetricTrapezoidalThread(unittest.TestCase):
             length=10 * MM,
             external=True,
         )
-        self.assertTrue(trap_thread.is_valid())
+        self.assertTrue(trap_thread.is_valid)
 
     def test_interior_thread(self):
         """Simple validity check for an interior thread"""
@@ -158,7 +159,7 @@ class TestMetricTrapezoidalThread(unittest.TestCase):
             length=100 * MM,
             external=False,
         )
-        self.assertTrue(trap_thread.is_valid())
+        self.assertTrue(trap_thread.is_valid)
 
     def test_parsing(self):
         with self.assertRaises(ValueError):
@@ -177,13 +178,13 @@ class TestPlasticBottleThread(unittest.TestCase):
             size="M38SP444",
             external=True,
         )
-        self.assertTrue(bottle_thread.is_valid())
+        self.assertTrue(bottle_thread.is_valid)
 
     def test_exterior_left_thread(self):
         """Simple validity check for an exterior thread"""
 
         bottle_thread = PlasticBottleThread(size="M38SP444", external=True, hand="left")
-        self.assertTrue(bottle_thread.is_valid())
+        self.assertTrue(bottle_thread.is_valid)
 
     def test_interior_thread(self):
         """Simple validity check for an interior thread"""
@@ -191,7 +192,7 @@ class TestPlasticBottleThread(unittest.TestCase):
         bottle_thread = PlasticBottleThread(
             size="L18SP400", external=False, manufacturing_compensation=0.2
         )
-        self.assertTrue(bottle_thread.is_valid())
+        self.assertTrue(bottle_thread.is_valid)
 
     def test_parsing(self):
         """Validate sizes"""
