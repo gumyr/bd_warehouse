@@ -12,6 +12,7 @@ runs:
       with:
         enable-cache: false
         python-version: ${{ inputs.python-version }}
+        activate-environment: true
     - name: Install Requirements
       shell: bash
       run: |
