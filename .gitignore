@@ -1,7 +1,7 @@
 # Packaging debris
 dist/
 *.egg-info/
-src/build123d/_version.py
+src/bd_warehouse/_version.py
 
 # Testing debris
 __pycache__/
@@ -24,3 +24,13 @@ docs/_build/
 #mypy cache
 .mypy_cache
 build
+
+# Environments
+.env
+.envrc
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/

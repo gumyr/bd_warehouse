@@ -17,7 +17,7 @@ authors = [
 ]
 description = "A build123d parametric part collection"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10, <3.14"
 keywords = [
     "3d models",
     "3d printing",
@@ -36,7 +36,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "build123d",
+    "build123d >= 0.10.0",
     "typing_extensions >= 4.4.0, <5",
 ]
 
@@ -49,6 +49,19 @@ docs = [
     "sphinx-hoverxref",
     "sphinx-rtd-theme",
     "sphinx-autodoc-typehints",
+]
+
+development = [
+    "black",
+    "mypy",
+    "pytest",
+    "pytest-cov",
+    "wheel",
+]
+
+all = [
+    "bd_warehouse[docs]",
+    "bd_warehouse[development]",
 ]
 
 [tool.setuptools]
@@ -64,8 +77,11 @@ where = ["src"]
 [tool.setuptools.package-data]
 "*" = ["*.csv"]
 # "bd_warehouse.data" = ["*.csv"]
-
 # exclude = ["bd_warehouse._dev"]
 
 [tool.setuptools_scm]
 write_to = "src/bd_warehouse/_version.py"
+
+[tool.black]
+target-version = ["py310", "py311", "py312", "py313"]
+line-length = 88
