@@ -36,7 +36,7 @@ jobs:
     needs: [build_wheel]
     runs-on: ubuntu-latest
     environment:
-      name: pypi
+      name: testpypi # TODO: change back to pypi upon test success
       url: https://pypi.org/p/bd-warehouse
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
