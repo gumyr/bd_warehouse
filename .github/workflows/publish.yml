@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: testpypi # TODO: change back to pypi upon test success
-      url: https://pypi.org/p/bd-warehouse
+      # url: https://pypi.org/p/bd-warehouse # TODO: uncomment after test success
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
     # if: github.event_name == 'release' && github.event.action == 'published'
