@@ -8,7 +8,6 @@ jobs:
     # this job does NOT publish the wheel
     name: Build wheel on ubuntu-latest
     runs-on: ubuntu-latest
-    #if: github.event_name == 'workflow_dispatch'
     if: (github.repository == 'gumyr/bd_warehouse' && ( startsWith(github.ref, 'refs/tags/v'))) || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v5
@@ -36,12 +35,10 @@ jobs:
     needs: [build_wheel]
     runs-on: ubuntu-latest
     environment:
-      name: testpypi # TODO: change back to pypi upon test success
-      # url: https://pypi.org/p/bd-warehouse # TODO: uncomment after test success
+      name: pypi
+      url: https://pypi.org/p/bd-warehouse
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
-    # if: github.event_name == 'release' && github.event.action == 'published'
-    # or, alternatively, upload to PyPI on every tag starting with 'v' (remove on: release above to use this)
     if: needs.build_wheel.result == 'success'
     steps:
       - uses: actions/download-artifact@v6
@@ -52,5 +49,5 @@ jobs:
           path: dist
 
       - uses: pypa/gh-action-pypi-publish@release/v1
-        with: # for testing with test.pypi.org (TODO: disable after test success)
-          repository-url: https://test.pypi.org/legacy/ # TODO: disable after test success
+        # with: # for testing with test.pypi.org (TODO: disable after test success)
+        #   repository-url: https://test.pypi.org/legacy/ # TODO: disable after test success
