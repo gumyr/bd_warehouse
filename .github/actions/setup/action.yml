@@ -1,0 +1,19 @@
+name: 'Setup'
+inputs:
+  python-version:  # id of input
+    description: 'Python version'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Python (uv)
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: false
+        python-version: ${{ inputs.python-version }}
+        activate-environment: true
+    - name: Install Requirements
+      shell: bash
+      run: |
+        uv pip install .[development]

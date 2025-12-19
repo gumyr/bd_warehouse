@@ -1,4 +1,4 @@
-![build123d, a parametric part collection](docs/assets/bd_title_image.png)
+![build123d, a parametric part collection](https://github.com/gumyr/bd_warehouse/raw/main/docs/assets/bd_title_image.png)
 
 # bd_warehouse
 
@@ -35,10 +35,16 @@ The documentation for **bd_warehouse** can found at [bd_warehouse](https://bd-wa
 
 There is a [***Discord***](https://discord.com/invite/Bj9AQPsCfx) server (shared with CadQuery) where you can ask for help in the build123d channel.
 
-To install **bd_warehouse** from github:
+The recommended method for most users to install **bd_warehouse** is:
+```
+pip install bd_warehouse
+```
+
+To install the latest **bd_warehouse** non-released version from github:
 ```
 python3 -m pip install git+https://github.com/gumyr/bd_warehouse
 ```
+
 Development install
 ```
 git clone https://github.com/gumyr/bd_warehouse.git
