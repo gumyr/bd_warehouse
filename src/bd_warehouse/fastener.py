@@ -607,6 +607,8 @@ class Nut(ABC, BasePartObject):
             self.nut_plan(), max_nut_height, (0, 0, 1)
         ) - Solid.make_cylinder(self.thread_diameter / 2, nut_thread_height)
         nut = nut.intersect(nut_blank)
+        if isinstance(nut, list):
+            nut = nut[0]
 
         # Add a flange as it exists outside of the head plan
         if method_exists(self.__class__, "flange_profile"):
@@ -1708,6 +1710,8 @@ class Screw(ABC, BasePartObject):
         elif has_plan:
             head_blank = extrude(head_plan, max_head_height)
             head = head.intersect(head_blank)
+        if isinstance(head, list):
+            head = head[0]
 
         # Add a flange as it exists outside of the head plan
         if has_flange:
