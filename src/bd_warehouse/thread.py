@@ -232,6 +232,8 @@ class Thread(BasePartObject):
                     bottom_loop = split(bottom_loop, bisect_by=Plane.XY, keep=Keep.TOP)
                 else:
                     bottom_loop = bottom_loop.intersect(chamfer_shape)
+                    if isinstance(bottom_loop, list):
+                        bottom_loop = bottom_loop[0]
                 bottom_loop.label = label
                 bd_object.children = [bottom_loop] + children
 
@@ -268,6 +270,8 @@ class Thread(BasePartObject):
                             )
                     else:
                         top_loop = top_loop.intersect(chamfer_shape)
+                        if isinstance(top_loop, list):
+                            top_loop = top_loop[0]
                     if top_loop.volume != 0:
                         top_loop.label = label
                         top_loops.append(top_loop)

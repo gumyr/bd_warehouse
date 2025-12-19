@@ -99,11 +99,24 @@ class TestIsoThread(unittest.TestCase):
                 major_diameter=5, pitch=1, length=5, end_finishes=("not", "supported")
             )
 
+    # def test_simple(self):
+    #     thread = IsoThread(
+    #         major_diameter=6 * MM, pitch=1 * MM, length=8 * MM, simple=True
+    #     )
+    #     self.assertTrue(thread.wrapped.IsNull())
     def test_simple(self):
         thread = IsoThread(
             major_diameter=6 * MM, pitch=1 * MM, length=8 * MM, simple=True
         )
-        self.assertTrue(thread.wrapped.IsNull())
+
+        try:
+            wrapped = thread.wrapped
+        except AssertionError:
+            # New build123d: wrapped asserts when no geometry exists
+            self.assertTrue(True)
+        else:
+            # Old build123d: wrapped exists but is null
+            self.assertTrue(wrapped.IsNull())
 
 
 class TestAcmeThread(unittest.TestCase):

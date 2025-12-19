@@ -670,6 +670,8 @@ class SingleRowTaperedRollerBearing(Bearing):
                 r_axis.direction,
             )
         )
+        if isinstance(self.cage_edge, list):
+            self.cage_edge = self.cage_edge[0]
         self._race_center_radius = roller.faces().sort_by(Axis.Z)[-1].center().X
         roller.position -= (self._race_center_radius, 0, 0)
         roller.color = Color(0x909090)
