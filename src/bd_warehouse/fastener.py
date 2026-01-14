@@ -1633,7 +1633,10 @@ class Screw(ABC, BasePartObject):
             hand=self.hand,
             end_finishes=ends,
             simple=self.simple,
-        ).locate(Pos(Z=-self.length))
+            # ).locate(Pos(Z=-self.length))
+        )
+        if not self.simple:
+            thread = thread.locate(Pos(Z=-self.length))
         thread.label = "thread"
 
         shank = Solid.make_cylinder(
