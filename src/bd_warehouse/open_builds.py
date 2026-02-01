@@ -1606,12 +1606,19 @@ class StepperMotor(Compound):
 
     Args:
         motor_type (Literal["Nema17", "Nema23", "Nema23HighTorque"]): steppers
+        motor_length (Union[float, None], optional): The length of the motor body
+            in the axis of the shaft. If None, uses a standard length for the
+            specified motor type. Defaults to None.
 
     Raises:
         ValueError: Invalid motor_type
     """
 
-    def __init__(self, motor_type: Literal["Nema17", "Nema23", "Nema23HighTorque"]):
+    def __init__(
+        self,
+        motor_type: Literal["Nema17", "Nema23", "Nema23HighTorque"],
+        motor_length: Union[float, None] = None,
+    ):
         motor_data = {
             "Nema17": (48, 5, 2, 9, 24),
             "Nema23": (56, IN / 4, 2.675, 5.6, 20.6),
@@ -1624,10 +1631,19 @@ class StepperMotor(Compound):
                 f"{motor_type} is invalid, must be one of {motor_data.keys()}"
             )
 
+        if motor_length is not None:
+            if motor_length <= 0:
+                raise ValueError(
+                    f"Expected motor_length greater than 0, got {motor_length}"
+                )
+            len = motor_length
+
         m3 = SocketHeadCapScrew("M3-0.5", 20)
 
         with BuildPart() as stepper:
             if motor_type in ["Nema23", "Nema23HighTorque"]:
+                skt1_length = min(len / 2, 11)
+                skt2_length = min(len, 4.8)
                 with BuildSketch() as skt1:
                     with BuildLine():
                         l1 = Line((28.2, 0), (28.2, 16.07))
@@ -1638,30 +1654,31 @@ class StepperMotor(Compound):
                         mirror(about=Plane.YZ)
                         mirror(about=Plane.XZ)
                     make_face()
-                extrude(amount=-11)
+                extrude(amount=-skt1_length)
                 add(Face(skt1.wire().offset_2d(-0.1)))
-                extrude(amount=-len + 11)
-                add(skt1.face().located(Pos(Z=-len + 11)))
-                extrude(amount=-11)
+                extrude(amount=-len + skt1_length)
+                add(skt1.face().located(Pos(Z=-len + skt1_length)))
+                extrude(amount=-skt1_length)
                 with BuildSketch() as skt2:
                     RectangleRounded(28.2 * 2, 28.2 * 2, 4.6)
                     with GridLocations(23.57 * 2, 23.57 * 2, 2, 2) as mount_holes:
                         Circle(2.55, mode=Mode.SUBTRACT)
-                extrude(amount=-4.8)
+                extrude(amount=-skt2_length)
                 with BuildSketch():
                     Circle(19.05)
                 extrude(amount=1.6)
             else:
+                skt1_length = min(len / 2, 8.75)
                 with BuildSketch() as skt1:
                     Rectangle(21.209 * 2, 21.209 * 2)
                     Circle(26.5, mode=Mode.INTERSECT)
-                extrude(amount=-8.75)
+                extrude(amount=-skt1_length)
                 with BuildSketch() as skt2:
                     Rectangle(21.109 * 2, 21.109 * 2)
                     Circle(25, mode=Mode.INTERSECT)
                 extrude(amount=-len)
-                add(skt1.face().located(Pos(Z=-len + 8.75)))
-                extrude(amount=-8.75)
+                add(skt1.face().located(Pos(Z=-len + skt1_length)))
+                extrude(amount=-skt1_length)
                 with GridLocations(15.5 * 2, 15.5 * 2, 2, 2) as mount_holes:
                     Hole(1.5, 6)
                     ThreadedHole(m3, depth=7.5, counter_sunk=False)
