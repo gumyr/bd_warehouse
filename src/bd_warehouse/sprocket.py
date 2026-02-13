@@ -30,13 +30,11 @@ license:
 
 """
 
-from math import sin, asin, cos, pi, radians, sqrt
+from math import cos, pi, radians, sqrt
 from build123d import *
+from build123d.geometry import TOLERANCE
 
 
-#
-#  =============================== CLASSES ===============================
-#
 class Sprocket(BasePartObject):
     """
     Create a new sprocket object as defined by the given parameters. The input parameter
@@ -60,6 +58,10 @@ class Sprocket(BasePartObject):
             Defaults to 0.
         bore_diameter (float): size of the central hole in the sprocket (default 0) - if 0,
             no bore hole is added to the sprocket
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0)
+        align (Align | tuple[Align, Align, Align] | None, optional): align MIN, CENTER,
+            or MAX of object. Defaults to Align.CENTER
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD
 
     **NOTE**: Default parameters are for standard single sprocket bicycle chains.
 
@@ -154,14 +156,31 @@ class Sprocket(BasePartObject):
         sprocket_tooth_wires = ShapeList(PolarLocations(0, self.num_teeth) * tooth)
         sprocket_perimeter = Wire(e for e in sprocket_tooth_wires.edges())
         sprocket_face = Pos(Z=-self.thickness / 2) * Face(sprocket_perimeter)
-        sprocket = Rot(Z=90) * extrude(sprocket_face, self.thickness)
+        sprocket = Rot(Z=90) * extrude(sprocket_face, self.thickness, (0, 0, 1))
 
-        # Chamfer the outside edges if the sprocket has "flat" teeth determined by ..
-        # .. extracting all the unique radii
-        arc_list = sprocket.edges().filter_by(GeomType.CIRCLE).group_by(Edge.radius)[2]
-        self._flat_teeth = len(arc_list) == 3
+        # Chamfer the outside edges if the sprocket has "flat" teeth
+        self._flat_teeth = len(tooth.edges()) == 5
         if self._flat_teeth:
-            sprocket = chamfer(arc_list, self.thickness * 0.25, self.thickness * 0.5)
+            # Note: this is done twice to get the chamfer aligned correctly
+            chamfer_edges = (
+                sprocket.edges()
+                .filter_by(GeomType.CIRCLE)
+                .filter_by(lambda e: abs(e.radius - self.outer_radius) < TOLERANCE)
+                .group_by(Axis.Z)[-1]
+            )
+            sprocket = chamfer(
+                chamfer_edges, self.thickness * 0.5, self.thickness * 0.25
+            )
+            chamfer_edges = (
+                sprocket.edges()
+                .filter_by(GeomType.CIRCLE)
+                .filter_by(lambda e: abs(e.radius - self.outer_radius) < TOLERANCE)
+                .group_by(Axis.Z)[0]
+            )
+
+            sprocket = chamfer(
+                chamfer_edges, self.thickness * 0.5, self.thickness * 0.25
+            )
 
         #
         # Create bolt holes
@@ -178,6 +197,7 @@ class Sprocket(BasePartObject):
         # Create a central bore
         if self.bore_diameter != 0:
             sprocket -= Cylinder(self.bore_diameter / 2, self.thickness)
+
         return sprocket
 
     @staticmethod
@@ -232,106 +252,37 @@ class Sprocket(BasePartObject):
 
         roller_rad = roller_diameter / 2 + clearance
         tooth_a_degrees = 360 / num_teeth
-        half_tooth_a = radians(tooth_a_degrees / 2)
         pitch_rad = sqrt(chain_pitch**2 / (2 * (1 - cos(radians(tooth_a_degrees)))))
         outer_rad = pitch_rad + roller_rad / 2
 
-        # Calculate the angle at which the tooth arc intersects the outside edge arc
-        outer_intersect_a_r = asin(
-            (
-                outer_rad**3 * (-(pitch_rad * sin(half_tooth_a)))
-                + sqrt(
-                    outer_rad**6 * (-((pitch_rad * cos(half_tooth_a)) ** 2))
-                    + 2
-                    * outer_rad**4
-                    * (chain_pitch - roller_rad) ** 2
-                    * (pitch_rad * cos(half_tooth_a)) ** 2
-                    + 2 * outer_rad**4 * (pitch_rad * cos(half_tooth_a)) ** 4
-                    + 2
-                    * outer_rad**4
-                    * (pitch_rad * cos(half_tooth_a)) ** 2
-                    * (pitch_rad * sin(half_tooth_a)) ** 2
-                    - outer_rad**2
-                    * (chain_pitch - roller_rad) ** 4
-                    * (pitch_rad * cos(half_tooth_a)) ** 2
-                    + 2
-                    * outer_rad**2
-                    * (chain_pitch - roller_rad) ** 2
-                    * (pitch_rad * cos(half_tooth_a)) ** 4
-                    + 2
-                    * outer_rad**2
-                    * (chain_pitch - roller_rad) ** 2
-                    * (pitch_rad * cos(half_tooth_a)) ** 2
-                    * (pitch_rad * sin(half_tooth_a)) ** 2
-                    - outer_rad**2 * (pitch_rad * cos(half_tooth_a)) ** 6
-                    - 2
-                    * outer_rad**2
-                    * (pitch_rad * cos(half_tooth_a)) ** 4
-                    * (pitch_rad * sin(half_tooth_a)) ** 2
-                    - outer_rad**2
-                    * (pitch_rad * cos(half_tooth_a)) ** 2
-                    * (pitch_rad * sin(half_tooth_a)) ** 4
-                )
-                + outer_rad
-                * (chain_pitch - roller_rad) ** 2
-                * (pitch_rad * sin(half_tooth_a))
-                - outer_rad
-                * (pitch_rad * cos(half_tooth_a)) ** 2
-                * (pitch_rad * sin(half_tooth_a))
-                - outer_rad * (pitch_rad * sin(half_tooth_a)) ** 3
-            )
-            / (
-                2
-                * (
-                    outer_rad**2 * (pitch_rad * cos(half_tooth_a)) ** 2
-                    + outer_rad**2 * (pitch_rad * sin(half_tooth_a)) ** 2
-                )
-            )
+        # pitch_circle = CenterArc((0, 0), pitch_rad, 0, 360) # for debug only
+        outer_circle = CenterArc((0, 0), outer_rad, 0, 360)
+        roller_circle = CenterArc(
+            Vector(pitch_rad, 0).rotate(Axis.Z, tooth_a_degrees / 2), roller_rad, 0, 360
+        )
+        roller_ray = PolarLine((0, 0), pitch_rad, tooth_a_degrees / 2)
+        link_circle = CenterArc(
+            Vector(pitch_rad, 0).rotate(Axis.Z, -tooth_a_degrees / 2),
+            chain_pitch - roller_rad,
+            0,
+            360,
         )
 
-        # Bottom of the roller arc
-        start_pt = Vector(pitch_rad - roller_rad).rotate(Axis.Z, tooth_a_degrees / 2)
-        # Where the roller arc meets transitions to the top half of the tooth
-        tangent_pt = Vector(0, -roller_rad).rotate(
-            Axis.Z, -tooth_a_degrees / 2
-        ) + Vector(pitch_rad, 0).rotate(Axis.Z, tooth_a_degrees / 2)
-        # The intersection point of the tooth and the outer rad
-        outer_pt = Vector(
-            outer_rad * cos(outer_intersect_a_r), outer_rad * sin(outer_intersect_a_r)
-        )
-        # The location of the tip of the spike if there is no "flat" section
-        spike_pt = Vector(
-            sqrt(pitch_rad**2 - (chain_pitch / 2) ** 2)
-            + sqrt((chain_pitch - roller_rad) ** 2 - (chain_pitch / 2) ** 2),
-        )
-
-        # Generate the tooth outline
-        if outer_pt.Y > 0:  # "Flat" topped sprockets
-            l1 = RadiusArc(start_pt, tangent_pt, -roller_rad)
-            l2 = RadiusArc(l1 @ 1, outer_pt, chain_pitch - roller_rad)
-            l3 = RadiusArc(l2 @ 1, (outer_pt.X, -outer_pt.Y), outer_rad)
-            l4 = RadiusArc(
-                l3 @ 1, (tangent_pt.X, -tangent_pt.Y), chain_pitch - roller_rad
-            )
-            l5 = RadiusArc(l4 @ 1, (start_pt.X, -start_pt.Y), -roller_rad)
-            tooth_perimeter = Wire([l1, l2, l3, l4, l5])
-        else:  # "Spiky" sprockets
-            l1 = RadiusArc(start_pt, tangent_pt, -roller_rad)
-            l2 = RadiusArc(l1 @ 1, spike_pt, chain_pitch - roller_rad)
-            l3 = RadiusArc(
-                l1 @ 2, (tangent_pt.X, -tangent_pt.Y), chain_pitch - roller_rad
-            )
-            l4 = RadiusArc(l1 @ 3, (start_pt.X, -start_pt.Y), -roller_rad)
-            tooth_perimeter = Wire([l1, l2, l3, l4])
+        roller_line_pnt = roller_circle.intersect(link_circle)[0]
+        outer_pnt = link_circle.intersect(outer_circle).sort_by(Axis.Y)[-1]
+        roller_start_pnt = roller_ray.intersect(roller_circle)[0]
+        arc1 = roller_circle.trim(roller_start_pnt, roller_line_pnt)
+        if outer_pnt.Y > 0:  # "Flat" topped sprockets
+            arc2 = link_circle.trim(roller_line_pnt, outer_pnt)
+            arc3 = RadiusArc(outer_pnt, (outer_pnt.X, -outer_pnt.Y), outer_rad)
+            arc4 = arc2.mirror(Plane.XZ)
+            arc5 = arc1.mirror(Plane.XZ)
+            tooth_perimeter = Wire([arc1, arc2, arc3, arc4, arc5])
+        else:
+            link_axis_pnt = link_circle.intersect(Axis.X).sort_by(Axis.X)[-1]
+            arc2 = link_circle.trim(roller_line_pnt, link_axis_pnt)
+            arc3 = arc2.mirror(Plane.XZ)
+            arc4 = arc1.mirror(Plane.XZ)
+            tooth_perimeter = Wire([arc1, arc2, arc3, arc4])
 
         return tooth_perimeter
-
-
-from ocp_vscode import show_all, show, Camera, set_defaults
-
-set_defaults(reset_camera=Camera.KEEP)
-
-
-s = Sprocket(32)
-# s = Sprocket(16, chain_pitch=0.5 * IN, roller_diameter=0.49 * IN)
-show_all()
