@@ -303,6 +303,3 @@ class Sprocket(BasePartObject):
             tooth_perimeter = Wire([arc1, arc2, arc3, arc4])
 
         return tooth_perimeter
-
-
-from ocp_vscode import *
