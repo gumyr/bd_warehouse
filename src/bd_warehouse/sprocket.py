@@ -69,6 +69,7 @@ class Sprocket(BasePartObject):
         pitch_radius (float): radius of the circle formed by the center of the chain rollers
         outer_radius (float): size of the sprocket from center to tip of the teeth
         pitch_circumference (float): circumference of the sprocket at the pitch radius
+        plan (Face): 2D plan of the base sprocket without any cutouts
 
     Example:
 
@@ -150,37 +151,32 @@ class Sprocket(BasePartObject):
 
     def _make_sprocket(self) -> Compound:
         """Create a new sprocket object as defined by the class attributes"""
-        tooth = Sprocket._make_tooth_outline(
+        tooth_tip = Sprocket._make_tooth_outline(
             self.num_teeth, self.chain_pitch, self.roller_diameter, self.clearance
         )
-        sprocket_tooth_wires = ShapeList(PolarLocations(0, self.num_teeth) * tooth)
-        sprocket_perimeter = Wire(e for e in sprocket_tooth_wires.edges())
-        sprocket_face = Pos(Z=-self.thickness / 2) * Face(sprocket_perimeter)
-        sprocket = Rot(Z=90) * extrude(sprocket_face, self.thickness, (0, 0, 1))
+        tooth_face = Pos(Z=-self.thickness / 2) * Face(
+            Wire(
+                tooth_tip.edges()
+                + [Line((0, 0), tooth_tip @ 0), Line((0, 0), tooth_tip @ 1)]
+            )
+        )
+        tooth = extrude(tooth_face, self.thickness, (0, 0, 1))
 
         # Chamfer the outside edges if the sprocket has "flat" teeth
-        self._flat_teeth = len(tooth.edges()) == 5
+        self._flat_teeth = len(tooth_tip.edges()) == 5
         if self._flat_teeth:
-            # Note: this is done twice to get the chamfer aligned correctly
-            chamfer_edges = (
-                sprocket.edges()
-                .filter_by(GeomType.CIRCLE)
-                .filter_by(lambda e: abs(e.radius - self.outer_radius) < TOLERANCE)
-                .group_by(Axis.Z)[-1]
+            tip_face = (
+                tooth.faces().filter_by(GeomType.CYLINDER).sort_by_distance((0, 0))[-1]
             )
-            sprocket = chamfer(
-                chamfer_edges, self.thickness * 0.5, self.thickness * 0.25
+            to_chamfer = tip_face.edges().filter_by(GeomType.CIRCLE)
+            tooth = chamfer(
+                to_chamfer,
+                self.thickness * 0.25,
+                self.thickness * 0.5,
+                reference=tip_face,
             )
-            chamfer_edges = (
-                sprocket.edges()
-                .filter_by(GeomType.CIRCLE)
-                .filter_by(lambda e: abs(e.radius - self.outer_radius) < TOLERANCE)
-                .group_by(Axis.Z)[0]
-            )
-
-            sprocket = chamfer(
-                chamfer_edges, self.thickness * 0.5, self.thickness * 0.25
-            )
+        sprocket = Solid() + PolarLocations(0, self.num_teeth) * tooth
+        sprocket.orientation += (0, 0, 90)
 
         #
         # Create bolt holes
@@ -199,6 +195,23 @@ class Sprocket(BasePartObject):
             sprocket -= Cylinder(self.bore_diameter / 2, self.thickness)
 
         return sprocket
+
+    @property
+    def plan(self) -> Face:
+        """2D plan of the base sprocket without any cutouts"""
+        tooth_tip = Sprocket._make_tooth_outline(
+            self.num_teeth, self.chain_pitch, self.roller_diameter, self.clearance
+        )
+        tooth_face = Face(
+            Wire(
+                tooth_tip.edges()
+                + [Line((0, 0), tooth_tip @ 0), Line((0, 0), tooth_tip @ 1)]
+            )
+        )
+        if tooth_face.normal_at().Z == -1:
+            tooth_face = -tooth_face
+        sprocket_plan = Face() + PolarLocations(0, self.num_teeth) * tooth_face
+        return sprocket_plan
 
     @staticmethod
     def sprocket_pitch_radius(num_teeth: int, chain_pitch: float) -> float:
@@ -290,3 +303,6 @@ class Sprocket(BasePartObject):
             tooth_perimeter = Wire([arc1, arc2, arc3, arc4])
 
         return tooth_perimeter
+
+
+from ocp_vscode import *
