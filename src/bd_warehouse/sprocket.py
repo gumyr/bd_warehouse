@@ -255,12 +255,10 @@ class Sprocket(BasePartObject):
         pitch_rad = sqrt(chain_pitch**2 / (2 * (1 - cos(radians(tooth_a_degrees)))))
         outer_rad = pitch_rad + roller_rad / 2
 
-        # pitch_circle = CenterArc((0, 0), pitch_rad, 0, 360) # for debug only
         outer_circle = CenterArc((0, 0), outer_rad, 0, 360)
         roller_circle = CenterArc(
             Vector(pitch_rad, 0).rotate(Axis.Z, tooth_a_degrees / 2), roller_rad, 0, 360
         )
-        roller_ray = PolarLine((0, 0), pitch_rad, tooth_a_degrees / 2)
         link_circle = CenterArc(
             Vector(pitch_rad, 0).rotate(Axis.Z, -tooth_a_degrees / 2),
             chain_pitch - roller_rad,
@@ -268,9 +266,15 @@ class Sprocket(BasePartObject):
             360,
         )
 
-        roller_line_pnt = roller_circle.intersect(link_circle)[0]
-        outer_pnt = link_circle.intersect(outer_circle).sort_by(Axis.Y)[-1]
-        roller_start_pnt = roller_ray.intersect(roller_circle)[0]
+        roller_line_pnt = Line(roller_circle.arc_center, link_circle.arc_center) @ (
+            roller_rad / chain_pitch
+        )
+        outer_pnt = link_circle.find_intersection_points(outer_circle).sort_by(Axis.Y)[
+            -1
+        ]
+        roller_start_pnt = (
+            PolarLine((0, 0), pitch_rad - roller_rad, tooth_a_degrees / 2) @ 1
+        )
         arc1 = roller_circle.trim(roller_start_pnt, roller_line_pnt)
         if outer_pnt.Y > 0:  # "Flat" topped sprockets
             arc2 = link_circle.trim(roller_line_pnt, outer_pnt)
