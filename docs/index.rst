@@ -69,12 +69,11 @@ Table Of Contents
     gear.rst
     openbuilds.rst
     pipe.rst
+    sprocket.rst
     thread.rst
 
 ..    chain.rst
-..    drafting.rst
 ..    finger_jointed_boxes.rst
-..    sprocket.rst
 
 ==================
 Indices and tables
