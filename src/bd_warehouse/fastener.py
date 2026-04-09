@@ -113,7 +113,7 @@ def read_fastener_parameters_from_csv(filename: str) -> dict:
 
     parameters = {}
     data_resource = resources.files(bd_warehouse) / f"data/{filename}"
-    with data_resource.open() as csvfile:
+    with data_resource.open(encoding="utf-8", newline="") as csvfile:
         reader = csv.DictReader(csvfile)
         fieldnames = reader.fieldnames
         for row in reader:
@@ -213,7 +213,7 @@ def read_drill_sizes() -> dict:
     drill_sizes = {}
     data_resource = resources.files(bd_warehouse) / "data/drill_sizes.csv"
 
-    with data_resource.open() as csvfile:
+    with data_resource.open(encoding="utf-8", newline="") as csvfile:
         reader = csv.DictReader(csvfile)
         fieldnames = reader.fieldnames
         for row in reader:
@@ -248,7 +248,7 @@ def lookup_nominal_screw_lengths() -> dict:
     # Read the nominal screw length csv file and build a dictionary
     nominal_screw_lengths = {}
     data_resource = resources.files(bd_warehouse) / "data/nominal_screw_lengths.csv"
-    with data_resource.open() as csvfile:
+    with data_resource.open(encoding="utf-8", newline="") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             unit_factor = MM if row["Unit"] == "mm" else IN
