@@ -138,6 +138,44 @@ def test_nuts(nut_class: Nut, nut_type: str, nut_size: str):
         assembly_with_rotated_nut_and_hole = Compound(children=[rotate_hole_tests.part, rotated_nut.moved(rotated_nut.hole_locations[0])])
         assert not assembly_with_rotated_nut_and_hole.do_children_intersect()[0]
 
+@pytest.mark.parametrize(
+    "screw_class, screw_type, screw_size, nut_indent",
+    [
+        (screw_class, screw_type, screw_size, nut_indent)
+        for screw_size in ["M5-0.8", "1/4-20"]
+        for screw_class, screw_types in Screw.select_by_size(screw_size).items()
+        for screw_type in screw_types
+        for nut_indent in [0, -5]
+    ],
+)
+def test_screws_and_nuts(screw_class: Screw, screw_type: str, screw_size: str, nut_indent: float):
+    SIMPLE=random.choice([True, False])
+    SCREW_LENGTH = 20
+    screw: Screw = screw_class(
+        size=screw_size,
+        length=SCREW_LENGTH,
+        fastener_type=screw_type,
+        simple=SIMPLE,
+    )
+
+    nuts_info = [
+        (nut_class, nut_type, nut_size)
+        for nut_size in ["M5-0.8", "M5-0.8-Standard", "1/4-20"]
+        for nut_class, nut_types in Nut.select_by_size(nut_size).items()
+        for nut_type in nut_types
+    ]
+    (nut_class, nut_type, nut_size) = nuts_info[random.randint(0, nuts_info.__len__() - 1)]
+
+    nut: Nut = nut_class(size=nut_size, fastener_type=nut_type, simple=SIMPLE)
+    nut.label = f"{nut_class}:{nut_size}:{nut_type}"
+    screw.joints["b"].connect_to(nut.joints["b"], position=nut_indent)
+    assembly = Compound(children=[screw, nut])
+
+    assert nut.orientation.X == -180, "Orientation"
+    assert abs(screw.bounding_box().size.Z - assembly.bounding_box().size.Z) < 0.1, f"size.Z for {nut.label=}"
+    if nut_class != DomedCapNut and SIMPLE:
+        # b-joint of DomedCapNut does not match with lowest position of its nut thread
+        assert not assembly.do_children_intersect()[0], f"Intersection for {nut.label=}"
 
 @pytest.mark.parametrize(
     "washer_class, washer_type, washer_size",

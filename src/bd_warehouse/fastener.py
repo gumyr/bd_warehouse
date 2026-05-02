@@ -66,7 +66,10 @@ from build123d.geometry import (
     RotationLike,
     Vector,
 )
-from build123d.joints import RigidJoint
+from build123d.joints import (
+  CylindricalJoint,
+  RigidJoint
+)
 from build123d.objects_curve import (
     JernArc,
     Line,
@@ -1664,6 +1667,7 @@ class Screw(ABC, BasePartObject):
         )
         self.color = Color(0xC0C0C0)
         RigidJoint("a", self, Location())
+        CylindricalJoint("b", self, axis=Axis(self.faces().filter_by(Plane.XY).sort_by(Axis.Z)[0].center_location), linear_range=(-self.length + self.head_height, 0))
 
     def make_head(self) -> Solid:
         """Create a screw head from the 2D shapes defined in the derived class"""
