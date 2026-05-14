@@ -34,6 +34,7 @@ from bd_warehouse.fastener import (
     DomedCapNut,
     HeatSetNut,
     HexNut,
+    HexNutWithFlange,
     InsertHole,
     Nut,
     Screw,
@@ -44,8 +45,7 @@ from bd_warehouse.fastener import (
     UnchamferedHexagonNut,
     Washer,
 )
-from build123d import Axis, Box, BuildPart, Locations
-
+from build123d import Axis, Box, BuildPart, Compound, Locations
 
 @pytest.mark.parametrize(
     "screw_class, screw_type, screw_size",
@@ -88,7 +88,6 @@ def test_screws(screw_class: Screw, screw_type: str, screw_size: str):
                 TapHole(screw)
     assert hole_tests.part.volume < 100 * 100 * screw_min_length
 
-
 @pytest.mark.parametrize(
     "nut_class, nut_type, nut_size",
     [
@@ -125,6 +124,19 @@ def test_nuts(nut_class: Nut, nut_type: str, nut_size: str):
             else:
                 ClearanceHole(nut, captive_nut=captive)
     assert hole_tests.part.volume < 100 * 100 * 20
+
+    # Check that rotated holes can be created
+    if not nut_class in [HeatSetNut, HexNutWithFlange]:
+        rotated_nut: Nut = nut_class(size=nut_size, fastener_type=nut_type, simple=True, rotation=(0, 0, 45))
+        with BuildPart() as rotate_hole_tests:
+            Box(100, 100, 20)
+            top = rotate_hole_tests.faces().sort_by(Axis.Z)[-1]
+            with Locations(top):
+                ClearanceHole(rotated_nut, captive_nut=True, rotation=(0, 0, 45))
+        assert rotate_hole_tests.part.volume < 100 * 100 * 20
+
+        assembly_with_rotated_nut_and_hole = Compound(children=[rotate_hole_tests.part, rotated_nut.moved(rotated_nut.hole_locations[0])])
+        assert not assembly_with_rotated_nut_and_hole.do_children_intersect()[0]
 
 
 @pytest.mark.parametrize(

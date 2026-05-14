@@ -3348,6 +3348,7 @@ class ClearanceHole(BasePartObject):
         counter_sunk (bool, optional): Is the fastener countersunk into the part?.
             Defaults to True.
         captive_nut (bool, optional): Is rotation of the nut disabled?. Defaults to False.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
         mode (Mode, optional): combination mode. Defaults to Mode.SUBTRACT.
 
     Raises:
@@ -3365,6 +3366,7 @@ class ClearanceHole(BasePartObject):
         depth: float = None,
         counter_sunk: bool = True,
         captive_nut: bool = False,
+        rotation: RotationLike = (0, 0, 0),
         mode: Mode = Mode.SUBTRACT,
     ):
         context: BuildPart = BuildPart._get_context(self)
@@ -3403,7 +3405,7 @@ class ClearanceHole(BasePartObject):
         super().__init__(
             part=hole_part,
             align=None,
-            rotation=(0, 0, 0),
+            rotation=rotation,
             mode=mode,
         )
 
