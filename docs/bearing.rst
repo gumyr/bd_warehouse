@@ -132,3 +132,6 @@ Note that this object can place a hole in the part sized and aligned for the bor
 an axle is intended to pass through the part.  The ``fit`` parameter determines how much larger this
 hole is than the bearing bore. The `hole_locations` attribute of the bearing instance passed
 to ``PressFitHole`` will be updated with the location of the hole to easy assembly creation.
+The ``depth`` parameter controls the depth of this flat-bottomed axle hole, not the bearing seat.
+When ``depth`` is omitted, the axle hole passes through the contextual part in Builder mode and
+defaults to the bearing thickness in Algebra mode.

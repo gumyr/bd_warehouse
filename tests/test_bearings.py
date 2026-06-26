@@ -26,8 +26,8 @@ license:
 
 """
 
-import random
 import re
+from math import pi
 
 import pytest
 from bd_warehouse.bearing import (
@@ -36,7 +36,7 @@ from bd_warehouse.bearing import (
     SingleRowDeepGrooveBallBearing,
     SingleRowTaperedRollerBearing,
 )
-from build123d import Axis, Box, BuildPart, Locations
+from build123d import Axis, Box, BuildPart, Locations, Mode
 
 
 @pytest.mark.parametrize(
@@ -71,13 +71,47 @@ def test_bearings(bearing_class: Bearing, bearing_type: str, bearing_size: str):
     if bearing_class != SingleRowTaperedRollerBearing:
         assert bbox_size.Z == pytest.approx(float(thickness), abs=1e-2)
 
-    # Check that holes can be created
+    # Check that holes can be created for each fit
     with BuildPart() as hole_tests:
         Box(100, 100, 50)
         top = hole_tests.faces().sort_by(Axis.Z)[-1]
         with Locations(top):
-            PressFitHole(bearing, fit=random.choice(["Close", "Normal", "Loose"]))
+            for fit in ["Close", "Normal", "Loose"]:
+                PressFitHole(bearing, fit=fit)
     assert hole_tests.part.volume < 100 * 100 * 50
+
+
+def test_press_fit_hole_has_flat_axle_bore():
+    bearing = SingleRowDeepGrooveBallBearing("M8-22-7")
+    axle_depth = 20
+    interference = 0.1
+
+    hole = PressFitHole(
+        bearing,
+        interference=interference,
+        fit="Close",
+        depth=axle_depth,
+        mode=Mode.ADD,
+    )
+
+    assert hole.bounding_box().min.Z == pytest.approx(-axle_depth)
+    assert hole.bounding_box().max.Z == pytest.approx(0)
+    seat_radius = bearing.outer_diameter / 2 - interference
+    axle_radius = bearing.clearance_hole_diameters["Close"] / 2
+    expected_volume = pi * (
+        seat_radius**2 * bearing.thickness
+        + axle_radius**2 * (axle_depth - bearing.thickness)
+    )
+    assert hole.volume == pytest.approx(expected_volume)
+
+
+def test_press_fit_hole_algebra_default_depth():
+    bearing = SingleRowDeepGrooveBallBearing("M8-22-7")
+
+    hole = PressFitHole(bearing, mode=Mode.ADD)
+
+    assert hole.hole_depth == bearing.thickness
+    assert hole.bounding_box().min.Z == pytest.approx(-bearing.thickness)
 
 
 if __name__ == "__main__":

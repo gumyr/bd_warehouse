@@ -200,7 +200,7 @@ def isolate_fastener_type(target_fastener: str, fastener_data: dict) -> dict:
     for size, parameters in fastener_data.items():
         dimension_dict = {}
         for type_dimension, value in parameters.items():
-            (fastener_name, dimension) = tuple(type_dimension.strip().split(":"))
+            fastener_name, dimension = tuple(type_dimension.strip().split(":"))
             if target_fastener == fastener_name and not value == "":
                 dimension_dict[dimension] = value
         if len(dimension_dict) > 0:
@@ -308,7 +308,7 @@ def hexalobular_recess(size: str) -> tuple[Face, float]:
     except KeyError as e:
         raise ValueError(f"{size} is an invalid hexalobular size") from e
 
-    (A, B, Re) = (screw_data[p] for p in ["A", "B", "Re"])
+    A, B, Re = (screw_data[p] for p in ["A", "B", "Re"])
 
     # Given the outer (A) and inner (B) diameters and the external radius (Re),
     # calculate the internal radius
@@ -551,7 +551,7 @@ class Nut(ABC, BasePartObject):
             self.thread_diameter = float(size_parts[0][1:])
             self.thread_pitch = float(size_parts[1])
         else:
-            (self.thread_diameter, self.thread_pitch) = decode_imperial_size(
+            self.thread_diameter, self.thread_pitch = decode_imperial_size(
                 self.thread_size
             )
 
@@ -641,7 +641,7 @@ class Nut(ABC, BasePartObject):
 
     def default_nut_profile(self) -> Face:
         """Create 2D profile of hex nuts with double chamfers"""
-        (m, s) = (self.nut_data[p] for p in ["m", "s"])
+        m, s = (self.nut_data[p] for p in ["m", "s"])
         e = polygon_diagonal(s, 6)
         # Chamfer angle must be between 15 and 30 degrees
         cs = (e - s) * tan(radians(15)) / 2
@@ -674,7 +674,7 @@ class Nut(ABC, BasePartObject):
         """
         # Note that fit is only used for some flanged nuts but is here for uniformity
         del fit
-        (m, s) = (self.nut_data[p] for p in ["m", "s"])
+        m, s = (self.nut_data[p] for p in ["m", "s"])
         width = polygon_diagonal(s, 6) + self.socket_clearance
         with BuildSketch(Plane.XZ) as profile:
             Rectangle(width / 2, m, align=Align.MIN)
@@ -722,7 +722,7 @@ class DomedCapNut(Nut):
 
     def nut_profile(self) -> Face:
         """Create 2D profile of hex nuts with double chamfers"""
-        (dk, m, s) = (self.nut_data[p] for p in ["dk", "m", "s"])
+        dk, m, s = (self.nut_data[p] for p in ["dk", "m", "s"])
         e = polygon_diagonal(s, 6)
         # Chamfer angle must be between 15 and 30 degrees
         cs = (e - s) * tan(radians(15)) / 2
@@ -752,7 +752,7 @@ class DomedCapNut(Nut):
         """
         # Note that fit is only used for some flanged nuts but is here for uniformity
         del fit
-        (dk, m, s) = (self.nut_data[p] for p in ["dk", "m", "s"])
+        dk, m, s = (self.nut_data[p] for p in ["dk", "m", "s"])
         width = polygon_diagonal(s, 6) + self.socket_clearance
         with BuildSketch(Plane.XZ) as profile:
             Rectangle(width / 2, m + dk / 2, align=Align.MIN)
@@ -1231,7 +1231,7 @@ class HexNutWithFlange(Nut):
 
     def flange_profile(self) -> Face:
         """Flange for hexagon Bolts"""
-        (dc, c) = (self.nut_data[p] for p in ["dc", "c"])
+        dc, c = (self.nut_data[p] for p in ["dc", "c"])
         flange_angle = 25
         tangent_point = Vector(
             (c / 2) * cos(radians(90 - flange_angle)),
@@ -1256,7 +1256,7 @@ class HexNutWithFlange(Nut):
             raise ValueError(
                 f"{fit} invalid, must be one of {list(self.clearance_hole_diameters.keys())}"
             ) from e
-        (dc, s, m) = (self.nut_data[p] for p in ["dc", "s", "m"])
+        dc, s, m = (self.nut_data[p] for p in ["dc", "s", "m"])
         clearance = clearance_hole_diameter - self.thread_diameter
         width = max(dc + clearance, polygon_diagonal(s, 6) + self.socket_clearance)
         with BuildSketch(Plane.XZ) as profile:
@@ -1308,7 +1308,7 @@ class UnchamferedHexagonNut(Nut):
 
     def nut_profile(self):
         """Create 2D profile of hex nuts with double chamfers"""
-        (m, s) = (self.nut_data[p] for p in ["m", "s"])
+        m, s = (self.nut_data[p] for p in ["m", "s"])
         with BuildSketch(Plane.XZ) as profile:
             Rectangle(polygon_diagonal(s, 6) / 2 - 0.001, m, align=Align.MIN)
         return profile.sketch.face()
@@ -1358,7 +1358,7 @@ class SquareNut(Nut):
 
     def nut_profile(self) -> Face:
         """Create 2D profile of hex nuts with double chamfers"""
-        (m, s) = (self.nut_data[p] for p in ["m", "s"])
+        m, s = (self.nut_data[p] for p in ["m", "s"])
         e = polygon_diagonal(s, 4)
         # Chamfer angle must be between 15 and 30 degrees
         cs = (e - s) * tan(radians(15)) / 2
@@ -1385,7 +1385,7 @@ class SquareNut(Nut):
         """
         # Note that fit is only used for some flanged nuts but is here for uniformity
         del fit
-        (m, s) = (self.nut_data[p] for p in ["m", "s"])
+        m, s = (self.nut_data[p] for p in ["m", "s"])
         width = polygon_diagonal(s, 4) + self.socket_clearance
         with BuildSketch(Plane.XZ) as profile:
             Rectangle(width / 2, m, align=Align.MIN)
@@ -1578,7 +1578,7 @@ class Screw(ABC, BasePartObject):
             self.thread_diameter = float(size_parts[0][1:])
             self.thread_pitch = float(size_parts[1])
         else:
-            (self.thread_diameter, self.thread_pitch) = decode_imperial_size(
+            self.thread_diameter, self.thread_pitch = decode_imperial_size(
                 self.thread_size
             )
 
@@ -1702,7 +1702,7 @@ class Screw(ABC, BasePartObject):
         # (e.g. hex) and/or to add an engagement recess
         if has_recess:
             # pylint: disable=no-member
-            (recess_plan, recess_depth, recess_taper) = self.head_recess()
+            recess_plan, recess_depth, recess_taper = self.head_recess()
             recess = Solid.extrude_taper(
                 recess_plan,
                 (0, 0, -recess_depth),
@@ -1728,7 +1728,7 @@ class Screw(ABC, BasePartObject):
         recess_plan = None
         # Slot Recess
         try:
-            (dk, n, t) = (self.screw_data[p] for p in ["dk", "n", "t"])
+            dk, n, t = (self.screw_data[p] for p in ["dk", "n", "t"])
             recess_plan = slot_recess(dk, n)
             recess_depth = t
             recess_taper = 0
@@ -1736,7 +1736,7 @@ class Screw(ABC, BasePartObject):
             pass
         # Hex Recess
         try:
-            (s, t) = (self.screw_data[p] for p in ["s", "t"])
+            s, t = (self.screw_data[p] for p in ["s", "t"])
             recess_plan = hex_recess(s)
             recess_depth = t
             recess_taper = 0
@@ -1748,15 +1748,15 @@ class Screw(ABC, BasePartObject):
             recess = self.screw_data["recess"]
             recess = str(recess).upper()
             if recess.startswith("PH"):
-                (recess_plan, recess_depth) = cross_recess(recess)
+                recess_plan, recess_depth = cross_recess(recess)
                 recess_taper = 30  # TODO
                 recess_taper = 20
             elif recess.startswith("T"):
-                (recess_plan, recess_depth) = hexalobular_recess(recess)
+                recess_plan, recess_depth = hexalobular_recess(recess)
                 recess_taper = 0
                 recess_taper = 5
             elif recess.startswith("R"):
-                (recess_plan, recess_depth) = square_recess(recess)
+                recess_plan, recess_depth = square_recess(recess)
                 recess_taper = 0
         except KeyError:
             pass
@@ -1835,7 +1835,7 @@ class ButtonHeadScrew(Screw):
 
     def head_profile(self) -> Face:
         """Create 2D profile of button head screws"""
-        (dk, dl, k, rf) = (self.screw_data[p] for p in ["dk", "dl", "k", "rf"])
+        dk, dl, k, rf = (self.screw_data[p] for p in ["dk", "dl", "k", "rf"])
 
         with BuildSketch(Plane.XZ) as profile:
             with BuildLine():
@@ -1906,7 +1906,7 @@ class ButtonHeadWithCollarScrew(Screw):
 
     def head_profile(self) -> Face:
         """Create 2D profile of button head screws with collar"""
-        (dk, dl, dc, k, rf, c) = (
+        dk, dl, dc, k, rf, c = (
             self.screw_data[p] for p in ["dk", "dl", "dc", "k", "rf", "c"]
         )
         with BuildSketch(Plane.XZ) as profile:
@@ -1994,7 +1994,7 @@ class CheeseHeadScrew(Screw):
 
     def head_profile(self) -> Face:
         """cheese head screws"""
-        (k, dk) = (self.screw_data[p] for p in ["k", "dk"])
+        k, dk = (self.screw_data[p] for p in ["k", "dk"])
         with BuildSketch(Plane.XZ) as profile:
             Trapezoid(dk, k, 90 - 5, align=(Align.CENTER, Align.MIN))
             fillet(profile.vertices().group_by(Axis.Z)[-1], k * 0.25)
@@ -2077,7 +2077,7 @@ class CounterSunkScrew(Screw):
 
     def head_profile(self) -> Face:
         """Create 2D profile of countersunk screw heads"""
-        (a, k, dk) = (self.screw_data[p] for p in ["a", "k", "dk"])
+        a, k, dk = (self.screw_data[p] for p in ["a", "k", "dk"])
         with BuildSketch(Plane.XZ) as profile:
             Trapezoid(dk, k, 90 - a / 2, align=(Align.CENTER, Align.MAX), rotation=180)
             fillet(profile.vertices().group_by(Axis.Y)[-1], k * 0.075)
@@ -2088,7 +2088,7 @@ class CounterSunkScrew(Screw):
 
     def countersink_profile(self, fit: Literal["Close", "Normal", "Loose"]) -> Face:
         """Create 2D profile of countersink profile"""
-        (a, dk, k) = (self.screw_data[p] for p in ["a", "dk", "k"])
+        a, dk, k = (self.screw_data[p] for p in ["a", "dk", "k"])
         with BuildSketch(Plane.XZ) as profile:
             Trapezoid(dk, k, 90 - a / 2, align=(Align.CENTER, Align.MIN), rotation=180)
             split(bisect_by=Plane.YZ)
@@ -2153,7 +2153,7 @@ class HexHeadScrew(Screw):
 
     def head_profile(self) -> Face:
         """Create 2D profile of hex head screws"""
-        (k, s) = (self.screw_data[p] for p in ["k", "s"])
+        k, s = (self.screw_data[p] for p in ["k", "s"])
         e = polygon_diagonal(s, 6)
         # Chamfer angle must be between 15 and 30 degrees
         cs = (e - s) * tan(radians(15)) / 2
@@ -2181,7 +2181,7 @@ class HexHeadScrew(Screw):
         """
         # Note that fit isn't used but remains for uniformity in the workplane hole methods
         del fit
-        (k, s) = (self.screw_data[p] for p in ["k", "s"])
+        k, s = (self.screw_data[p] for p in ["k", "s"])
         e = polygon_diagonal(s, 6)
         width = e + self.socket_clearance + e
         with BuildSketch(Plane.XZ) as profile:
@@ -2254,7 +2254,7 @@ class HexHeadWithFlangeScrew(Screw):
 
     def flange_profile(self) -> Face:
         """Flange for hexagon Bolts"""
-        (dc, c) = (self.screw_data[p] for p in ["dc", "c"])
+        dc, c = (self.screw_data[p] for p in ["dc", "c"])
         flange_angle = 25
         tangent_point = Vector(
             (c / 2) * cos(radians(90 - flange_angle)),
@@ -2279,7 +2279,7 @@ class HexHeadWithFlangeScrew(Screw):
             raise ValueError(
                 f"{fit} invalid, must be one of {list(self.clearance_hole_diameters.keys())}"
             ) from e
-        (dc, s, k) = (self.screw_data[p] for p in ["dc", "s", "k"])
+        dc, s, k = (self.screw_data[p] for p in ["dc", "s", "k"])
         shaft_clearance = clearance_hole_diameter - self.thread_diameter
         width = max(
             dc + shaft_clearance, polygon_diagonal(s, 6) + self.socket_clearance
@@ -2350,7 +2350,7 @@ class PanHeadScrew(Screw):
 
     def head_profile(self) -> Face:
         """Slotted pan head screws"""
-        (k, dk) = (self.screw_data[p] for p in ["k", "dk"])
+        k, dk = (self.screw_data[p] for p in ["k", "dk"])
         with BuildSketch(Plane.XZ) as profile:
             with BuildLine():
                 l1 = Line((0, 0), (dk / 2, 0))
@@ -2421,7 +2421,7 @@ class PanHeadWithCollarScrew(Screw):
 
     def head_profile(self) -> Face:
         """Cross recessed pan head screws with collar"""
-        (rf, k, dk, c) = (self.screw_data[p] for p in ["rf", "k", "dk", "c"])
+        rf, k, dk, c = (self.screw_data[p] for p in ["rf", "k", "dk", "c"])
 
         flat = sqrt(k - c) * sqrt(2 * rf - (k - c))
         with BuildSketch(Plane.XZ) as profile:
@@ -2491,7 +2491,7 @@ class RaisedCheeseHeadScrew(Screw):
 
     def head_profile(self) -> Face:
         """raised cheese head screws"""
-        (dk, k, rf) = (self.screw_data[p] for p in ["dk", "k", "rf"])
+        dk, k, rf = (self.screw_data[p] for p in ["dk", "k", "rf"])
         oval_height = rf - sqrt(4 * rf**2 - dk**2) / 2
         with BuildSketch(Plane.XZ) as profile:
             with BuildLine():
@@ -2573,7 +2573,7 @@ class RaisedCounterSunkOvalHeadScrew(Screw):
 
     def head_profile(self):
         """raised countersunk oval head screws"""
-        (a, k, rf, dk) = (self.screw_data[p] for p in ["a", "k", "rf", "dk"])
+        a, k, rf, dk = (self.screw_data[p] for p in ["a", "k", "rf", "dk"])
         side_length = k / cos(radians(a / 2))
         oval_height = rf - sqrt(4 * rf**2 - dk**2) / 2
         with BuildSketch(Plane.XZ) as profile:
@@ -2592,7 +2592,7 @@ class RaisedCounterSunkOvalHeadScrew(Screw):
 
     def countersink_profile(self, fit: Literal["Close", "Normal", "Loose"]) -> Face:
         """A flat bottomed cone"""
-        (a, k, dk) = (self.screw_data[p] for p in ["a", "k", "dk"])
+        a, k, dk = (self.screw_data[p] for p in ["a", "k", "dk"])
         side_length = k / cos(radians(a / 2))
 
         with BuildSketch(Plane.XZ) as profile:
@@ -2660,7 +2660,7 @@ class SetScrew(Screw):
     def make_setscrew(self) -> Solid:
         """Construct set screw shape"""
 
-        (s, t) = (self.screw_data[p] for p in ["s", "t"])
+        s, t = (self.screw_data[p] for p in ["s", "t"])
 
         thread = IsoThread(
             major_diameter=self.thread_diameter * 1,
@@ -2752,7 +2752,7 @@ class SocketHeadCapScrew(Screw):
 
     def head_profile(self):
         """Socket Head Cap Screws"""
-        (dk, k) = (self.screw_data[p] for p in ["dk", "k"])
+        dk, k = (self.screw_data[p] for p in ["dk", "k"])
         with BuildSketch(Plane.XZ) as profile:
             Rectangle(dk / 2, k, align=Align.MIN)
             fillet(
@@ -2818,7 +2818,7 @@ class LowProfileScrew(Screw):
 
     def head_profile(self):
         """Low Profile Screws"""
-        (dk, k) = (self.screw_data[p] for p in ["dk", "k"])
+        dk, k = (self.screw_data[p] for p in ["dk", "k"])
         with BuildSketch(Plane.XZ) as profile:
             SlotOverall(dk, 2)
             Rectangle(dk, k, mode=Mode.INTERSECT)
@@ -2964,7 +2964,7 @@ class Washer(ABC, BasePartObject):
 
     def default_washer_profile(self) -> Face:
         """Create 2D profile of hex washers with double chamfers"""
-        (d1, d2, h) = (self.washer_data[p] for p in ["d1", "d2", "h"])
+        d1, d2, h = (self.washer_data[p] for p in ["d1", "d2", "h"])
         with BuildSketch(Plane.XZ) as profile:
             with Locations((d1 / 2, 0)):
                 Rectangle((d2 - d1) / 2, h, align=Align.MIN)
@@ -2981,7 +2981,7 @@ class Washer(ABC, BasePartObject):
                 f"{fit} invalid, must be one of {list(self.clearance_hole_diameters.keys())}"
             ) from e
         gap = clearance_hole_diameter - self.thread_diameter
-        (d2, h) = (self.washer_data[p] for p in ["d2", "h"])
+        d2, h = (self.washer_data[p] for p in ["d2", "h"])
         with BuildSketch(Plane.XZ) as profile:
             Rectangle(d2 / 2 + gap, h, align=Align.MIN)
         return profile.sketch.face()
@@ -3070,7 +3070,7 @@ class ChamferedWasher(Washer):
 
     def washer_profile(self) -> Face:
         """Create 2D profile of hex washers with double chamfers"""
-        (d1, d2, h) = (self.washer_data[p] for p in ["d1", "d2", "h"])
+        d1, d2, h = (self.washer_data[p] for p in ["d1", "d2", "h"])
         with BuildSketch(Plane.XZ) as profile:
             with Locations((d1 / 2, 0)):
                 Rectangle((d2 - d1) / 2, h, align=Align.MIN)
@@ -3122,7 +3122,7 @@ class CheeseHeadWasher(Washer):
 
     def washer_profile(self) -> Face:
         """Create 2D profile of hex washers with double chamfers"""
-        (d1, d2, h) = (self.washer_data[p] for p in ["d1", "d2", "h"])
+        d1, d2, h = (self.washer_data[p] for p in ["d1", "d2", "h"])
         with BuildSketch(Plane.XZ) as profile:
             with Locations((d1 / 2, 0)):
                 Rectangle((d2 - d1) / 2, h, align=Align.MIN)
@@ -3172,7 +3172,7 @@ class InternalToothLockWasher(Washer):
         super().__init__(size, fastener_type, rotation, align, mode)
 
     def make_washer(self):
-        (d1, d2, h) = (self.washer_data[p] for p in ["d1", "d2", "h"])
+        d1, d2, h = (self.washer_data[p] for p in ["d1", "d2", "h"])
         n = round(self.washer_data["n"] / (IN if not self.is_metric else MM))
 
         # tooth outer diameter

@@ -34,7 +34,13 @@ from functools import cached_property
 from math import atan, degrees, floor, pi
 from typing import Literal
 
-from build123d.build_common import MM, Locations, PolarLocations, validate_inputs
+from build123d.build_common import (
+    MM,
+    LocationList,
+    Locations,
+    PolarLocations,
+    validate_inputs,
+)
 from build123d.build_enums import Align, GeomType, Kind, LengthMode, Mode, Side
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
@@ -50,7 +56,6 @@ from build123d.operations_sketch import make_face
 from build123d.topology import Compound, Edge, Face, Shell, Solid, Wire, Part
 
 from bd_warehouse.fastener import (
-    _make_fastener_hole,
     evaluate_parameter_dict,
     isolate_fastener_type,
     lookup_drill_diameters,
@@ -164,12 +169,12 @@ class Bearing(ABC, BasePartObject):
 
     def default_race_center_radius(self):
         """Default roller race center radius"""
-        (d1, D1) = (self.bearing_dict[p] for p in ["d1", "D1"])
+        d1, D1 = (self.bearing_dict[p] for p in ["d1", "D1"])
         return (D1 + d1) / 4
 
     def default_roller_diameter(self):
         """Default roller diameter"""
-        (d1, D1) = (self.bearing_dict[p] for p in ["d1", "D1"])
+        d1, D1 = (self.bearing_dict[p] for p in ["d1", "D1"])
         return 0.625 * (D1 - d1)
 
     @property
@@ -270,7 +275,7 @@ class Bearing(ABC, BasePartObject):
     def default_inner_race_section(self) -> Face:
         """Create 2D profile inner race"""
 
-        (d1, d, B, r12) = (self.bearing_dict[p] for p in ["d1", "d", "B", "r12"])
+        d1, d, B, r12 = (self.bearing_dict[p] for p in ["d1", "d", "B", "r12"])
         with BuildSketch(Plane.XZ) as section:
             with Locations(((d1 + d) / 4, 0)):
                 RectangleRounded((d1 - d) / 2, B, r12)
@@ -278,7 +283,7 @@ class Bearing(ABC, BasePartObject):
 
     def default_outer_race_section(self) -> Face:
         """Create 2D profile inner race"""
-        (D1, D, B, r12) = (self.bearing_dict[p] for p in ["D1", "D", "B", "r12"])
+        D1, D, B, r12 = (self.bearing_dict[p] for p in ["D1", "D", "B", "r12"])
 
         with BuildSketch(Plane.XZ) as section:
             with Locations(((D1 + D) / 4, 0)):
@@ -287,7 +292,7 @@ class Bearing(ABC, BasePartObject):
         return section.sketch.face()
 
     def default_countersink_profile(self, interference: float = 0) -> Face:
-        (D, B) = (self.bearing_dict[p] for p in ["D", "B"])
+        D, B = (self.bearing_dict[p] for p in ["D", "B"])
         with BuildSketch(Plane.XZ) as profile:
             Rectangle(D / 2 - interference, B, align=Align.MIN)
         return profile.sketch.face()
@@ -298,7 +303,7 @@ class Bearing(ABC, BasePartObject):
         return roller
 
     def default_cap(self) -> Solid:
-        (D1, d1, B) = (self.bearing_dict[p] for p in ["D1", "d1", "B"])
+        D1, d1, B = (self.bearing_dict[p] for p in ["D1", "d1", "B"])
         with BuildPart() as cap:
             with BuildSketch(Plane.XY.offset(B * 0.42)):
                 Circle(D1 / 2)
@@ -727,9 +732,10 @@ class PressFitHole(BasePartObject):
         bearing: A bearing instance
         interference: The amount the decrease the hole radius from the bearing outer
             radius. Defaults to 0.
-        fit: one of "Close", "Normal", "Loose" which determines hole diameter for the
-            bore. Defaults to "Normal".
-        depth: hole depth. Defaults to through part.
+        fit: one of "Close", "Normal", "Loose" which determines the axle hole
+            diameter. Defaults to "Normal".
+        depth: axle hole depth. In Builder mode, the default is through the part. In
+            Algebra mode, the default is the bearing thickness.
         mode (Mode, optional): combination mode. Defaults to Mode.SUBTRACT.
 
     Raises:
@@ -752,22 +758,40 @@ class PressFitHole(BasePartObject):
         if not isinstance(bearing, Bearing):
             raise ValueError("pressFitHole only accepts bearings")
 
-        if depth is not None:
-            self.hole_depth = depth
-        elif depth is None and context is not None:
+        if depth is None and context is not None:
             self.hole_depth = 2 * context.max_dimension
         else:
-            raise ValueError("No depth provided")
+            self.hole_depth = bearing.thickness if depth is None else depth
 
-        hole_part = _make_fastener_hole(
-            hole_diameters=bearing.clearance_hole_diameters,
-            fastener=bearing,
-            depth=self.hole_depth,
-            countersink_profile=bearing.countersink_profile(interference),
-            fit=fit,
-            counter_sunk=True,
-            update_hole_locations=context is not None,
+        try:
+            axle_hole_radius = bearing.clearance_hole_diameters[fit] / 2
+        except KeyError as e:
+            raise ValueError(
+                f"{fit} invalid, must be one of "
+                f"{list(bearing.clearance_hole_diameters.keys())}"
+            ) from e
+
+        bore_direction = Vector(0, 0, -1)
+        axle_hole = Solid.make_cylinder(
+            radius=axle_hole_radius,
+            height=self.hole_depth,
+            plane=Plane((0, 0, 0), z_dir=bore_direction),
         )
+
+        seat_profile = bearing.countersink_profile(interference)
+        seat_depth = seat_profile.vertices().sort_by(Axis.Z)[-1].Z
+        bearing_seat = revolve(seat_profile, mode=Mode.PRIVATE).moved(
+            Pos(0, 0, -seat_depth)
+        )
+        hole_part = bearing_seat.fuse(axle_hole)
+
+        if context is not None:
+            bearing.hole_locations.extend(
+                [
+                    location * Pos(0, 0, -seat_depth)
+                    for location in LocationList._get_context().locations
+                ]
+            )
 
         super().__init__(
             part=hole_part,
