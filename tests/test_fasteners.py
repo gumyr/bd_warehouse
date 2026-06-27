@@ -26,6 +26,7 @@ license:
 
 """
 
+import io
 import random
 
 import pytest
@@ -46,6 +47,75 @@ from bd_warehouse.fastener import (
     Washer,
 )
 from build123d import Axis, Box, BuildPart, Compound, Locations
+
+
+def test_csv_reading_uses_explicit_utf8_encoding():
+    """Regression: every CSV read in fastener.py must pass encoding='utf-8'
+    to the .open() call, NOT rely on the locale default.
+
+    On Windows with a CJK default code page (GBK / cp932 / cp949), the ISO 15
+    bearing parameter CSVs contain UTF-8 en-dashes (U+2013, \\xe2\\x80\\x93)
+    that cannot be decoded as GBK. Without an explicit encoding, importing
+    bd_warehouse.bearing fails at class-body time with UnicodeDecodeError.
+
+    This is a source-level check (not runtime) because the CSV reads happen
+    at module import time and cannot be easily monkey-patched after the fact.
+    """
+    import inspect
+    from bd_warehouse import fastener as _fastener_mod
+
+    src = inspect.getsource(_fastener_mod)
+    bare_open = src.count("data_resource.open()")
+    utf8_open = src.count('data_resource.open(encoding="utf-8"')
+
+    assert bare_open == 0, (
+        f"Found {bare_open} bare data_resource.open() calls in fastener.py; "
+        "all must specify encoding='utf-8' to work on non-UTF-8 locales "
+        "(e.g. Windows CJK code pages)."
+    )
+    assert utf8_open >= 3, (
+        f"Expected at least 3 encoding='utf-8' opens in fastener.py "
+        f"(read_fastener_parameters_from_csv, read_drill_sizes, "
+        f"lookup_nominal_screw_lengths); found {utf8_open}."
+    )
+
+
+def test_csv_read_succeeds_under_non_utf8_locale():
+    """Functional check: read_fastener_parameters_from_csv() must succeed
+    even when the active locale cannot decode the CSV bytes.
+
+    We can't actually change sys.getfilesystemencoding() at runtime, but we
+    can verify the function runs to completion on the bearing CSV that
+    contains the en-dash character. If this test runs on any platform
+    (including Windows) without raising, the encoding fix is in effect.
+    """
+    from bd_warehouse.fastener import read_fastener_parameters_from_csv
+
+    data = read_fastener_parameters_from_csv(
+        "single_row_deep_groove_ball_bearing_parameters.csv"
+    )
+    # The file has 30+ bearing rows; exact count may grow over time
+    assert len(data) >= 20, f"expected >=20 rows, got {len(data)}"
+    assert "M8-22-7" in data, "ISO 608 bearing row missing"
+
+
+def test_bearing_csv_contains_non_ascii():
+    """Regression safeguard: confirms the CSV *really does* contain bytes
+    that require UTF-8 decoding, so the encoding fix isn't a no-op."""
+    from importlib import resources
+    from bd_warehouse import fastener as _fastener_mod
+
+    data_resource = (
+        resources.files(_fastener_mod.bd_warehouse)
+        / "data/single_row_deep_groove_ball_bearing_parameters.csv"
+    )
+    with data_resource.open("rb") as f:
+        raw = f.read()
+    # en-dash "–" (U+2013) encoded as UTF-8 bytes \xe2\x80\x93
+    assert b"\xe2\x80\x93" in raw, (
+        "Expected UTF-8 en-dash in bearing CSV; without it the encoding "
+        "fix is untested."
+    )
 
 @pytest.mark.parametrize(
     "screw_class, screw_type, screw_size",
