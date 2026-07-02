@@ -69,6 +69,7 @@ Table Of Contents
     gear.rst
     openbuilds.rst
     pipe.rst
+    retaining_ring.rst
     sprocket.rst
     thread.rst
 
