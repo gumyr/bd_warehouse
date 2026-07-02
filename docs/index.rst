@@ -68,6 +68,7 @@ Table Of Contents
     flange.rst
     gear.rst
     openbuilds.rst
+    o_rings.rst
     pipe.rst
     retaining_ring.rst
     sprocket.rst
