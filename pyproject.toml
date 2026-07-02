@@ -78,6 +78,7 @@ where = ["src"]
 "*" = ["*.csv"]
 # "bd_warehouse.data" = ["*.csv"]
 # exclude = ["bd_warehouse._dev"]
+"bd_warehouse" = ["py.typed"]
 
 [tool.setuptools_scm]
 write_to = "src/bd_warehouse/_version.py"
