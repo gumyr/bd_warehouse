@@ -48,7 +48,6 @@ from build123d.build_common import (
     IN,
     MM,
     PolarLocations,
-    LocationList,
     Locations,
     validate_inputs,
 )
@@ -3228,6 +3227,7 @@ def _make_fastener_hole(
     captive_nut: bool = False,
     threaded_hole: bool = False,
     update_hole_locations: bool = False,
+    locations: tuple[Location, ...] = (),
 ) -> Part:
     """_make_fastener_hole
 
@@ -3250,6 +3250,8 @@ def _make_fastener_hole(
             Defaults to False.
         threaded_hole (bool, optional): Does the hole have threads. Defaults to False.
         update_hole_locations (bool, optional): If in Builder mode. Defaults to False.
+        locations (tuple[Location, ...], optional): Hole locations captured from the
+            caller. Defaults to ().
 
     Raises:
         ValueError: fit or material not in hole_diameters dictionary
@@ -3322,7 +3324,7 @@ def _make_fastener_hole(
         fastener.hole_locations.extend(
             [
                 location * Pos(0, 0, -head_offset)
-                for location in LocationList._get_context().locations
+                for location in locations
             ]
         )
 
@@ -3400,6 +3402,7 @@ class ClearanceHole(BasePartObject):
             counter_sunk=counter_sunk,
             captive_nut=captive_nut,
             update_hole_locations=context is not None,
+            locations=self._get_object_locations(),
         )
 
         super().__init__(
@@ -3471,6 +3474,7 @@ class TapHole(BasePartObject):
             material=material,
             counter_sunk=counter_sunk,
             update_hole_locations=context is not None,
+            locations=self._get_object_locations(),
         )
 
         super().__init__(
@@ -3544,6 +3548,7 @@ class ThreadedHole(BasePartObject):
             counter_sunk=counter_sunk,
             threaded_hole=True,
             update_hole_locations=context is not None,
+            locations=self._get_object_locations(),
         )
         if not simple:
             with BuildPart(mode=Mode.PRIVATE):
@@ -3564,7 +3569,7 @@ class ThreadedHole(BasePartObject):
         )
 
         self.thread = None if simple else thread
-        self.thread_locations = LocationList._get_context().locations
+        self.thread_locations = list(self._get_object_locations())
 
 
 class InsertHole(BasePartObject):
@@ -3622,6 +3627,7 @@ class InsertHole(BasePartObject):
             depth=self.hole_depth,
             fit=fit,
             update_hole_locations=context is not None,
+            locations=self._get_object_locations(),
         )
 
         super().__init__(

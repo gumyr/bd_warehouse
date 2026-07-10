@@ -36,7 +36,6 @@ from typing import Literal
 
 from build123d.build_common import (
     MM,
-    LocationList,
     Locations,
     PolarLocations,
     validate_inputs,
@@ -789,7 +788,7 @@ class PressFitHole(BasePartObject):
             bearing.hole_locations.extend(
                 [
                     location * Pos(0, 0, -seat_depth)
-                    for location in LocationList._get_context().locations
+                    for location in self._get_object_locations()
                 ]
             )
 

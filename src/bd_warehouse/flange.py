@@ -415,6 +415,31 @@ class Flange(BasePartObject):
         return True
 
     @staticmethod
+    def dimension_is_numeric(value) -> bool:
+        """Check if a flange table dimension is available as a number."""
+        return isinstance(value, (int, float))
+
+    @staticmethod
+    def require_numeric_dimensions(
+        flange_data: list, columns: dict[str, int], flange_name: str
+    ) -> None:
+        """Raise ValueError if required table dimensions are unavailable."""
+        unavailable = []
+        for column_name, column_index in columns.items():
+            try:
+                value = flange_data[column_index]
+            except IndexError:
+                unavailable.append(column_name)
+                continue
+            if not Flange.dimension_is_numeric(value):
+                unavailable.append(f"{column_name}={value!r}")
+        if unavailable:
+            raise ValueError(
+                f"{flange_name} requires unavailable ASME table dimensions: "
+                + ", ".join(unavailable)
+            )
+
+    @staticmethod
     def get_flange_data(
         nps: Nps, flange_class: FlangeClass, face_type: FaceType
     ) -> tuple[list, list]:
@@ -925,6 +950,24 @@ class SocketWeldFlange(Flange):
 
     _applies_to = [BuildPart._tag]
 
+    @staticmethod
+    def get_face_section_data(
+        nps: Nps,
+        flange_class: FlangeClass,
+        face_type: FaceType,
+        face_thickness: float = None,
+    ) -> tuple[Union[Sketch, None], float]:
+        flange_data, _ = Flange.get_flange_data(nps, flange_class, face_type)
+        socket_depth_index = 13 if flange_class == 150 else 14
+        Flange.require_numeric_dimensions(
+            flange_data,
+            {"socket bore": 11, "socket depth": socket_depth_index},
+            "SocketWeldFlange",
+        )
+        return Flange.get_face_section_data(
+            nps, flange_class, face_type, face_thickness
+        )
+
     def __init__(
         self,
         nps: Nps,
@@ -947,9 +990,25 @@ class SocketWeldFlange(Flange):
 
         # Get the flange parameters
         flange_data, bolt_data = Flange.get_flange_data(nps, flange_class, face_type)
-        O, tf, X, Y, B11, B13, r, D = (
-            flange_data[i] for i in [0, 1, 3, 5, 9, 11, 12, 14]
+        socket_depth_index = 13 if flange_class == 150 else 14
+        Flange.require_numeric_dimensions(
+            flange_data,
+            {
+                "outside diameter": 0,
+                "flange thickness": 1,
+                "hub diameter": 3,
+                "length through hub": 5,
+                "bore": 9,
+                "socket bore": 11,
+                "corner radius": 12,
+                "socket depth": socket_depth_index,
+            },
+            "SocketWeldFlange",
         )
+        O, tf, X, Y, B11, B13, r = (
+            flange_data[i] for i in [0, 1, 3, 5, 9, 11, 12]
+        )
+        D = flange_data[socket_depth_index]
         W, d_imp, n = bolt_data[1], bolt_data[2], bolt_data[3]
         d = imperial_str_to_float(d_imp)
 
@@ -1022,6 +1081,21 @@ class WeldNeckFlange(Flange):
 
     _applies_to = [BuildPart._tag]
 
+    @staticmethod
+    def get_face_section_data(
+        nps: Nps,
+        flange_class: FlangeClass,
+        face_type: FaceType,
+        face_thickness: float = None,
+    ) -> tuple[Union[Sketch, None], float]:
+        flange_data, _ = Flange.get_flange_data(nps, flange_class, face_type)
+        Flange.require_numeric_dimensions(
+            flange_data, {"welding neck bore": 11}, "WeldNeckFlange"
+        )
+        return Flange.get_face_section_data(
+            nps, flange_class, face_type, face_thickness
+        )
+
     def __init__(
         self,
         nps: Nps,
@@ -1044,6 +1118,19 @@ class WeldNeckFlange(Flange):
 
         # Get the flange parameters
         flange_data, bolt_data = Flange.get_flange_data(nps, flange_class, face_type)
+        Flange.require_numeric_dimensions(
+            flange_data,
+            {
+                "outside diameter": 0,
+                "flange thickness": 1,
+                "hub diameter": 3,
+                "hub end diameter": 4,
+                "length through hub": 7,
+                "welding neck bore": 11,
+                "corner radius": 12,
+            },
+            "WeldNeckFlange",
+        )
         O, tf, X, Ah, Y, B, r = [flange_data[i] for i in [0, 1, 3, 4, 7, 11, 12]]
         W, d_imp, n = bolt_data[1], bolt_data[2], bolt_data[3]
         d = imperial_str_to_float(d_imp)
@@ -1069,7 +1156,8 @@ class WeldNeckFlange(Flange):
             vertices = flange_profile.vertices().group_by(Axis.Y)[-1]
             c = (Ah - B) / 2.5
             chamfer(vertices, c)
-            add(face_profile)
+            if face_profile is not None:
+                add(face_profile)
             Rectangle(
                 B,
                 Y + face_thickness,
