@@ -46,7 +46,7 @@ from build123d.joints import RigidJoint
 from build123d.objects_curve import Helix, Polyline
 from build123d.objects_part import BasePartObject
 from build123d.operations_generic import add, mirror, scale, split
-from build123d.operations_part import loft, section
+from build123d.operations_part import loft
 from build123d.operations_sketch import make_face
 from build123d.topology import Compound, Face, Solid, Wire, tuplify
 from OCP.TopoDS import TopoDS_Shape

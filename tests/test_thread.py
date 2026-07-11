@@ -29,6 +29,7 @@ license:
 import random
 import unittest
 from bd_warehouse.thread import *
+from build123d.operations_part import section
 
 
 class TestSupportFunctions(unittest.TestCase):
