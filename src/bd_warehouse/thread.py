@@ -41,12 +41,12 @@ from build123d.build_enums import Align, Keep, Mode, SortBy
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
-from build123d.geometry import Axis, Location, Plane, Rot, RotationLike
+from build123d.geometry import Axis, Location, Plane, Rot, RotationLike, Vector
 from build123d.joints import RigidJoint
 from build123d.objects_curve import Helix, Polyline
 from build123d.objects_part import BasePartObject
 from build123d.operations_generic import add, mirror, scale, split
-from build123d.operations_part import loft
+from build123d.operations_part import loft, section
 from build123d.operations_sketch import make_face
 from build123d.topology import Compound, Face, Solid, Wire, tuplify
 from OCP.TopoDS import TopoDS_Shape
@@ -311,11 +311,15 @@ class Thread(BasePartObject):
 
             for i in range(11):
                 u_value = i / 10
+                native_z_dir = thread_path_wire % u_value
+                z_dir_thread_axis = Vector(
+                    native_z_dir.X, native_z_dir.Y, 0
+                ).normalized()
                 with BuildSketch(
                     Plane(
                         thread_path_wire @ u_value,
                         x_dir=(0, 0, 1),
-                        z_dir=thread_path_wire % u_value,
+                        z_dir=z_dir_thread_axis,
                     )
                 ):
                     add(self.thread_profile)
@@ -348,11 +352,18 @@ class Thread(BasePartObject):
 
             for i in range(11):
                 u_value = i / 10
-                z_dir = fade_path_wire % u_value
+                native_z_dir = fade_path_wire % u_value
+                z_dir_thread_axis = Vector(
+                    native_z_dir.X, native_z_dir.Y, 0
+                ).normalized()
                 if bottom:
-                    z_dir = z_dir.reverse()
+                    z_dir_thread_axis = z_dir_thread_axis.reverse()
                 with BuildSketch(
-                    Plane(fade_path_wire @ u_value, x_dir=(0, 0, 1), z_dir=z_dir)
+                    Plane(
+                        fade_path_wire @ u_value,
+                        x_dir=(0, 0, 1),
+                        z_dir=z_dir_thread_axis,
+                    )
                 ):
                     add(self.thread_profile)
                     scale(by=(11 - i) / 11)
@@ -876,7 +887,7 @@ class MetricTrapezoidalThread(TrapezoidalThread):
             raise ValueError(
                 f"size invalid, must be one of {MetricTrapezoidalThread.standard_sizes}"
             )
-        (diameter, pitch) = (float(part) for part in size.split("x"))
+        diameter, pitch = (float(part) for part in size.split("x"))
         super().__init__(
             diameter=diameter,
             pitch=pitch,
@@ -1043,10 +1054,8 @@ class PlasticBottleThread(BasePartObject):
         self.interference = interference
         size_match = re.match(r"([LM])(\d+)SP(\d+)", size)
         if not size_match:
-            raise ValueError(
-                "size invalid, must match \
-                    [L|M][diameter(mm)]SP[100|103|110|200|400|410|415:425|444]"
-            )
+            raise ValueError("size invalid, must match \
+                    [L|M][diameter(mm)]SP[100|103|110|200|400|410|415:425|444]")
         self.style = size_match.group(1)
         self.diameter = int(size_match.group(2))
         self.finish = int(size_match.group(3))
@@ -1060,7 +1069,7 @@ class PlasticBottleThread(BasePartObject):
                 f"diameter ({self.diameter}) invalid, must be one"
                 f" of {PlasticBottleThread._finish_data[self.finish][1]}"
             )
-        (diameter_max, diameter_min, self.tpi) = PlasticBottleThread._thread_dimensions[
+        diameter_max, diameter_min, self.tpi = PlasticBottleThread._thread_dimensions[
             self.diameter
         ]
         if self.style == "L":

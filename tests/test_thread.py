@@ -182,6 +182,14 @@ class TestMetricTrapezoidalThread(unittest.TestCase):
         """Validate sizes list if created"""
         self.assertGreater(len(MetricTrapezoidalThread.sizes()), 0)
 
+    def test_thread_angle(self):
+        """Check that the thread angle is relative to thread axis"""
+        mtt = MetricTrapezoidalThread("8x1.5", 2)
+        sect = section(mtt, section_by=Plane.YZ)
+        angled_edges = sect.edges().group_by(Axis.Y)[-2]
+        angle = (angled_edges[0] % 0).get_signed_angle(angled_edges[1] % 0)
+        self.assertAlmostEqual(angle, 150, 5)
+
 
 class TestPlasticBottleThread(unittest.TestCase):
     def test_exterior_thread(self):
