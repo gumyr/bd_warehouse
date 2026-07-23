@@ -3547,12 +3547,7 @@ class ThreadedHole(BasePartObject):
                 f"{list(fastener.tap_hole_diameters.keys())}"
             ) from e
 
-        location_context = LocationList._get_context()
-        active_locations = (
-            list(location_context.locations)
-            if location_context is not None
-            else [Location()]
-        )
+        active_locations = list(self._get_object_locations())
 
         # Construct the cutter at the origin. BasePartObject applies the active
         # workplane and Locations to the completed Compound below.
