@@ -48,7 +48,6 @@ from build123d.build_common import (
     IN,
     MM,
     PolarLocations,
-    LocationList,
     Locations,
     validate_inputs,
 )
@@ -3231,6 +3230,7 @@ def _make_fastener_hole(
     captive_nut: bool = False,
     threaded_hole: bool = False,
     update_hole_locations: bool = False,
+    locations: tuple[Location, ...] = (),
 ) -> Part:
     """_make_fastener_hole
 
@@ -3253,6 +3253,8 @@ def _make_fastener_hole(
             Defaults to False.
         threaded_hole (bool, optional): Does the hole have threads. Defaults to False.
         update_hole_locations (bool, optional): If in Builder mode. Defaults to False.
+        locations (tuple[Location, ...], optional): Hole locations captured from the
+            caller. Defaults to ().
 
     Raises:
         ValueError: fit or material not in hole_diameters dictionary
@@ -3323,10 +3325,7 @@ def _make_fastener_hole(
         head_offset -= head_offset
     if update_hole_locations:
         fastener.hole_locations.extend(
-            [
-                location * Pos(0, 0, -head_offset)
-                for location in LocationList._get_context().locations
-            ]
+            [location * Pos(0, 0, -head_offset) for location in locations]
         )
 
     return fastener_hole
@@ -3402,6 +3401,7 @@ class ClearanceHole(BasePartObject):
             counter_sunk=counter_sunk,
             captive_nut=captive_nut,
             update_hole_locations=context is not None,
+            locations=self._get_object_locations(),
         )
 
         super().__init__(
@@ -3473,6 +3473,7 @@ class TapHole(BasePartObject):
             material=material,
             counter_sunk=counter_sunk,
             update_hole_locations=context is not None,
+            locations=self._get_object_locations(),
         )
 
         super().__init__(
@@ -3546,12 +3547,7 @@ class ThreadedHole(BasePartObject):
                 f"{list(fastener.tap_hole_diameters.keys())}"
             ) from e
 
-        location_context = LocationList._get_context()
-        active_locations = (
-            list(location_context.locations)
-            if location_context is not None
-            else [Location()]
-        )
+        active_locations = list(self._get_object_locations())
 
         # Construct the cutter at the origin. BasePartObject applies the active
         # workplane and Locations to the completed Compound below.
@@ -3673,6 +3669,7 @@ class InsertHole(BasePartObject):
             depth=self.hole_depth,
             fit=fit,
             update_hole_locations=context is not None,
+            locations=self._get_object_locations(),
         )
 
         super().__init__(

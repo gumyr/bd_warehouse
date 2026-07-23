@@ -40,8 +40,11 @@ from bd_warehouse.fastener import (
     SetScrew,
     SocketHeadCapScrew,
     ThreadedHole,
+    TapHole,
 )
 from bd_warehouse.thread import MetricTrapezoidalThread, TrapezoidalThread
+
+from bd_materials import finishes, metals, plastics
 
 CAVITY_RADIUS = 2.3 * MM
 FILLET_RADIUS = 1.5 * MM
@@ -115,10 +118,16 @@ class AcmeAntiBacklashNutBlock8mm(BasePartObject):
                     ThreadedHole(m5, depth=10, counter_sunk=False)
 
         super().__init__(block.part, rotation=rotation, align=align, mode=mode)
-        self.color = Color(0x030303)
+        self.material = metals.aluminum(
+            finish=[finishes.brushed(), finishes.anodize("black")]
+        )
+        self.color = self.material.pbr.interpolate_color()
+
         self.label = "AcmeAntiBacklashNutBlock8mm"
-        for label, loc in zip(["a", "b"], mounts):
-            RigidJoint(label, self, Pos(*(loc.position + Vector(0, 0, 6))))
+        for label, face in zip(
+            ["a", "b"], self.faces().group_by(Axis.Z)[-3].sort_by(Axis.X, reverse=True)
+        ):
+            RigidJoint(label, self, Pos(face.center()))
         for label, loc in zip(["nut_a", "nut_b"], mounts):
             RigidJoint(label, self, loc * Location((0, 0, -6), (0, 0, 1), 30))
         RigidJoint("screw", self, screw_hole.locations[0])
@@ -237,7 +246,9 @@ class AluminumSpacer(BasePartObject):
             extrude(amount=spacer_length)
 
         super().__init__(spacer.part, rotation=rotation, align=align, mode=mode)
-        self.color = Color(0xC0C0C0)
+        self.material = metals.aluminum()
+        self.color = self.material.pbr.interpolate_color()
+
         self.label = f"AluminumSpacer-{length}"
         RigidJoint("a", self, Location())
         RigidJoint("b", self, Pos(Z=spacer_length))
@@ -282,7 +293,7 @@ class CBeamEndMount(BasePartObject):
             with Locations(Location((0, 7.4, -6), (0, 1, 0), 180)):
                 CounterBoreHole(5.588, 8.05, 4.5)
             with Locations((0, 8.9 - 25, 6)):
-                with GridLocations(47.14, 0, 2, 1):
+                with GridLocations(47.14, 0, 2, 1) as motor_mounts:
                     ThreadedHole(m5, counter_sunk=False)
             with Locations((0, 10 - 25, 6)):
                 with GridLocations(20, 0, 2, 1):
@@ -294,9 +305,26 @@ class CBeamEndMount(BasePartObject):
                 with GridLocations(20, 0, 2, 1):
                     ThreadedHole(m5, counter_sunk=False, depth=14 * MM)
 
-        super().__init__(plate.part, rotation, align, mode)
+        for i, motor_mount in enumerate(motor_mounts):
+            RigidJoint(f"motor_mount-{i}", plate.part, motor_mount)
+
+        super().__init__(plate.part.moved(Pos(0, 5, 6)), rotation, align, mode)
         self.label = "CBeamEndMount"
-        self.color = Color(0x020202)
+        self.material = metals.aluminum(
+            finish=[finishes.brushed(), finishes.anodize("black")]
+        )
+        self.color = self.material.pbr.interpolate_color()
+
+        bearing_circle = (
+            self.faces()
+            .sort_by(Axis.Z)[2]
+            .edges()
+            .filter_by(GeomType.CIRCLE)
+            .sort_by(Edge.radius)[-1]
+        )
+        RigidJoint("bearing", self, Pos(bearing_circle.arc_center))
+        # show_all()
+        # exit()
 
 
 class CBeamLinearRailProfile(BaseSketchObject):
@@ -423,12 +451,24 @@ class CBeamLinearRail(BasePartObject):
         super().__init__(
             part=rail, rotation=rotation, align=tuplify(align, 3), mode=mode
         )
-        self.color = Color(0xC0C0C0)
+        self.material = metals.aluminum()
+        self.color = self.material.pbr.interpolate_color()
+
         # RigidJoint("test1", self, Location((10, 0, 0), (0, 90, 0)))
         # RigidJoint("test2", self, Location((0, -10, 50), (90, 0, 0)))
         self.label = "CBeamLinearRail"
         LinearJoint(
             "screw_axis", self, Axis((10, 0, 0), (0, 0, 1)), linear_range=(0, length)
+        )
+        RigidJoint(
+            "bottom_center",
+            self,
+            Location(Plane((-20, 0, length / 2), x_dir=(0, 0, 1), z_dir=(1, 0, 0))),
+        )
+        RigidJoint(
+            "top_center",
+            self,
+            Location(Plane((20, 0, length / 2), x_dir=(0, -1, 0), z_dir=(1, 0, 0))),
         )
 
 
@@ -501,7 +541,11 @@ class CBeamGantryPlate(BasePartObject):
                 Hole(2.55)
 
         super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
-        self.color = Color(0x020202)
+        self.material = metals.aluminum(
+            finish=[finishes.brushed(), finishes.anodize("black")]
+        )
+        self.color = self.material.pbr.interpolate_color()
+
         self.label = "CBeamGantryPlate"
 
 
@@ -589,7 +633,11 @@ class CBeamGantryPlateXLarge(BasePartObject):
                     CounterBoreHole(2.55, 4.5675, 1.6, 6)
 
         super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
-        self.color = Color(0x020202)
+        self.material = metals.aluminum(
+            finish=[finishes.brushed(), finishes.anodize("black")]
+        )
+        self.color = self.material.pbr.interpolate_color()
+
         self.label = "CBeamGantryPlateXLarge"
         for label, loc in zip(["a", "b", "c"], eccentric_mounts):
             RigidJoint(label, self, Pos(*(loc.position - Vector(0, 0, 6))))
@@ -597,6 +645,7 @@ class CBeamGantryPlateXLarge(BasePartObject):
             RigidJoint(label, self, Pos(*(loc.position - Vector(0, 0, 6))))
         for label, loc in zip(["a", "b", "c", "d"], nut_holes):
             RigidJoint(f"nut_{label}", self, loc)
+        RigidJoint("top_center", self, Location((0, 0, 6 * MM)))
 
 
 class CBeamRiserPlate(BasePartObject):
@@ -651,7 +700,11 @@ class CBeamRiserPlate(BasePartObject):
                     ThreadedHole(m5, counter_sunk=False, depth=8 * MM)
 
         super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
-        self.color = Color(0x020202)
+        self.material = metals.aluminum(
+            finish=[finishes.brushed(), finishes.anodize("black")]
+        )
+        self.color = self.material.pbr.interpolate_color()
+
         self.label = "CBeamRiserPlate"
 
 
@@ -736,7 +789,9 @@ class EccentricSpacer(BasePartObject):
             align=align,
             mode=mode,
         )
-        self.color = Color(0xC0C0C0)
+        self.material = metals.aluminum()
+        self.color = self.material.pbr.interpolate_color()
+
         self.label = f"EccentricSpacer-{cam_height}"
         RigidJoint("a", self, Location())
         RigidJoint("b", self, Pos(Z=2.5 * MM + cam_length))
@@ -830,7 +885,9 @@ class FlexibleCoupler(BasePartObject):
                 align=align,
                 mode=mode,
             )
-            self.color = Color(0xC0C0C0)
+            self.material = metals.aluminum(finish=[finishes.bead_blast()])
+            self.color = self.material.pbr.interpolate_color()
+
             self.label = f"FlexibleCoupler-{shaft_diameter}"
             RigidJoint("a", self, Pos(Z=12.5 * MM))
             RigidJoint("b", self, Location((0, 0, 12.5 * MM), (1, 0, 0), 180))
@@ -919,20 +976,35 @@ class MetricLeadScrew(Compound):
         length (float): screw length
     """
 
-    def __init__(self, length: float):
-        thread = TrapezoidalThread(
-            7.8 * MM, 2 * MM, 30, length, starts=4, end_finishes=("chamfer", "chamfer")
-        )
+    def __init__(self, length: float, simple: bool = True):
+
         super().__init__()
-        self.children = [
-            thread,
+        if simple:
+            root_radius = 7.8 * MM / 2
+        else:
+            thread = TrapezoidalThread(
+                7.8 * MM,
+                2 * MM,
+                30,
+                length,
+                starts=4,
+                end_finishes=("chamfer", "chamfer"),
+            )
+            root_radius = thread.root_radius
+        components = [
             Cylinder(
-                thread.root_radius,
+                root_radius,
                 length,
                 align=(Align.CENTER, Align.CENTER, Align.MIN),
             ),
         ]
-        self.color = Color(0x71797E)
+        if not simple:
+            components.append(thread)
+        self.children = components
+
+        self.material = metals.stainless()
+        self.color = self.material.pbr.interpolate_color()
+
         RigidJoint("axis", self, Location())
         self.label = f"8mm lead screw"
 
@@ -1060,7 +1132,11 @@ class RouterSpindleMount(BasePartObject):
             )
         mount.label = "RouterSpindleMount"
         super().__init__(mount, rotation, align, mode)
-        self.color = Color(0x020202)
+        self.material = metals.aluminum(
+            finish=[finishes.brushed(), finishes.anodize("black")]
+        )
+        self.color = self.material.pbr.interpolate_color()
+
         for label, pos in zip(["a", "b", "c", "d"], top_mount_centers):
             RigidJoint(f"top_{label}", self, -pos)
         for label, pos in zip(["a", "b", "c", "d"], top_mount_centers):
@@ -1120,7 +1196,9 @@ class ShimWasher(BasePartObject):
             fillet(shim.edges().group_by(SortBy.LENGTH)[-1], thickness / 5)
 
         super().__init__(shim.part, rotation=rotation, align=align, mode=mode)
-        self.color = Color(0xC0C0C0)
+        self.material = metals.aluminum()
+        self.color = self.material.pbr.interpolate_color()
+
         self.label = f"ShimWasher-{shim_type}"
         RigidJoint("a", self, Location())
         RigidJoint("b", self, Pos(Z=thickness))
@@ -1172,7 +1250,11 @@ class SpacerBlock(BasePartObject):
                     ThreadedHole(m5, counter_sunk=False, depth=12)
 
         super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
-        self.color = Color(0x020202)
+        self.material = metals.aluminum(
+            finish=[finishes.brushed(), finishes.anodize("black")]
+        )
+        self.color = self.material.pbr.interpolate_color()
+
         self.label = "CBeamRiserPlate"
 
 
@@ -1411,7 +1493,9 @@ class VSlotLinearRail(BasePartObject):
         super().__init__(
             part=rail, rotation=rotation, align=tuplify(align, 3), mode=mode
         )
-        self.color = Color(0xC0C0C0)
+        self.material = metals.aluminum()
+        self.color = self.material.pbr.interpolate_color()
+
         # RigidJoint("test1", self, Location((10, 0, 0), (0, 90, 0)))
         # RigidJoint("test2", self, Location((0, -10, 50), (90, 0, 0)))
         self.label = f"{rail_size} VSlot Rail"
@@ -1521,7 +1605,11 @@ class XtremeSolidVWheel(BasePartObject):
         super().__init__(
             part=wheel.part, rotation=rotation, align=tuplify(align, 3), mode=mode
         )
-        self.color = Color(0xE0E0D8)
+        self.material = plastics.pc(
+            color=Color("white"), thickness_mm=2, opacity=0.1, roughness=0.45
+        )
+        self.color = self.material.pbr.interpolate_color()
+
         self.label = "XtremeSolidVWHeel"
         RigidJoint("a", self, Pos(Z=-11 / 2))
         RigidJoint("b", self, Pos(Z=+11 / 2))
@@ -1709,12 +1797,13 @@ class StepperMotor(Compound):
         self.children = [stepper.part, shaft.part]
         for label, loc in zip(["a", "b", "c", "d"], mount_holes.locations):
             RigidJoint(label, self, -loc)
+        RigidJoint(
+            "shaft", self, self.faces().sort_by(Axis.Z)[-1].location_at(0.5, 0.5)
+        )
 
 
 if __name__ == "__main__":
-    # from ocp_vscode import show, show_all, set_defaults, Camera
-
-    # set_defaults(reset_camera=Camera.CENTER)
+    from ocp_vscode import show, show_all, set_defaults, Camera
 
     # AluminumSpacer("6mm")  # 2
     # AluminumSpacer("40mm")  # 2
@@ -1805,17 +1894,17 @@ if __name__ == "__main__":
     #         20,
     #     )
     # )
-    exit()
+    # exit()
 
-    # show(
-    #     pack(
-    #         [
-    #             AcmeAntiBacklashNutBlock8mmAssembly(),
-    #             XLargeCBeamGantry(4),
-    #             XLargeCBeamGantry(6),
-    #             XtremeSolidVWheelAssembly(True),
-    #             XtremeSolidVWheelAssembly(False),
-    #         ],
-    #         20,
-    #     )
-    # )
+    show(
+        pack(
+            [
+                AcmeAntiBacklashNutBlock8mmAssembly(),
+                XLargeCBeamGantry(4),
+                XLargeCBeamGantry(6),
+                XtremeSolidVWheelAssembly(True),
+                XtremeSolidVWheelAssembly(False),
+            ],
+            20,
+        )
+    )

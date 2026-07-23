@@ -106,9 +106,16 @@ class InvoluteToothProfile(BaseLineObject):
             if (rp := r * cos(involute)) > self.root_radius:
                 pnts.append((rp, r * sin(involute)))
 
-        with BuildLine(Plane.XY.rotated((0, 0, -half_pitch_angle))) as tooth:
-            l1 = Spline(*pnts)
-            l2 = Line(pnts[0], (self.root_radius, 0))
+        with BuildLine() as tooth:
+            rotated_pnts = [
+                Vector(*point).rotate(Axis.Z, -half_pitch_angle)
+                for point in pnts
+            ]
+            l1 = Spline(*rotated_pnts)
+            root_flank = Vector(self.root_radius, 0).rotate(
+                Axis.Z, -half_pitch_angle
+            )
+            l2 = Line(rotated_pnts[0], root_flank)
             root = RadiusArc(
                 l2 @ 1,
                 Vector(self.root_radius, 0).rotate(Axis.Z, -2 * half_thick_angle),
@@ -127,20 +134,20 @@ class InvoluteToothProfile(BaseLineObject):
                         "Invalid root radius, try a smaller value"
                     ) from err
 
-            mirror(about=Plane.XZ)
+            mirror(tooth.edges(), about=Plane.XZ)
 
         close = (
             [
                 Edge.make_line(
-                    tooth.vertices().sort_by(Axis.Y)[-1].to_tuple(),
-                    tooth.vertices().sort_by(Axis.Y)[0].to_tuple(),
+                    tooth.line.vertices().sort_by(Axis.Y)[-1].to_tuple(),
+                    tooth.line.vertices().sort_by(Axis.Y)[0].to_tuple(),
                 )
             ]
             if closed
             else []
         )
 
-        super().__init__(Wire(tooth.edges() + close), mode=mode)
+        super().__init__(Wire.combine(tooth.line.edges() + close)[0], mode=mode)
 
 
 class SpurGearPlan(BaseSketchObject):

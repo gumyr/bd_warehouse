@@ -195,7 +195,7 @@ class Pipe(BasePartObject):
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
     ):
-        context: BuildPart = BuildPart._get_context()
+        context: BuildPart = BuildPart._get_context(self)
 
         if path is None:
             if context is not None and context.pending_edges:
