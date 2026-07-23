@@ -43,10 +43,11 @@ from bd_warehouse.fastener import (
     SocketHeadCapScrew,
     SquareNut,
     TapHole,
+    ThreadedHole,
     UnchamferedHexagonNut,
     Washer,
 )
-from build123d import Axis, Box, BuildPart, Compound, Locations
+from build123d import Align, Axis, Box, BuildPart, Compound, Locations
 
 
 def test_csv_reading_uses_explicit_utf8_encoding():
@@ -116,6 +117,108 @@ def test_bearing_csv_contains_non_ascii():
         "Expected UTF-8 en-dash in bearing CSV; without it the encoding "
         "fix is untested."
     )
+
+
+def test_simple_threaded_hole_uses_material_specific_tap_drill():
+    """A simple ThreadedHole is a material-specific cylindrical tap drill."""
+    screw = SocketHeadCapScrew("M6-1", 10)
+    soft_tap = ThreadedHole(
+        screw, material="Soft", depth=20, counter_sunk=False
+    )
+    hard_tap = ThreadedHole(
+        screw, material="Hard", depth=20, counter_sunk=False
+    )
+
+    assert soft_tap.thread is None
+    assert hard_tap.thread is None
+    assert hard_tap.volume > soft_tap.volume
+    assert soft_tap.bounding_box().min.Z == pytest.approx(-20)
+    assert soft_tap.bounding_box().max.Z == pytest.approx(0)
+
+    workpiece = Box(20, 20, 20, align=(Align.CENTER, Align.CENTER, Align.MAX))
+    threaded_part = workpiece - soft_tap
+    assert threaded_part.is_valid
+    assert threaded_part.volume < workpiece.volume
+
+
+def test_detailed_threaded_hole_is_compound_tap_to_requested_depth():
+    """The detailed algebra cutter contains a core and square-ended tap thread."""
+    screw = SocketHeadCapScrew("M6-1", 10)
+    tap = ThreadedHole(
+        screw,
+        material="Soft",
+        depth=20,
+        counter_sunk=False,
+        simple=False,
+    )
+
+    assert tap.thread is not None
+    assert len(tap.solids()) > 1
+    assert tap.bounding_box().min.Z == pytest.approx(-20)
+    assert tap.bounding_box().max.Z == pytest.approx(0, abs=1e-6)
+    assert tap.thread.bounding_box().min.Z == pytest.approx(-20)
+    assert tap.thread.bounding_box().max.Z == pytest.approx(0, abs=1e-6)
+
+    workpiece = Box(20, 20, 20, align=(Align.CENTER, Align.CENTER, Align.MAX))
+    threaded_part = workpiece - tap
+    assert threaded_part.is_valid
+    assert threaded_part.volume < workpiece.volume
+
+
+def test_threaded_hole_builder_locations_and_fastener_locations():
+    """Builder locations are applied once and retained by the fastener."""
+    screw = SocketHeadCapScrew("M6-1", 20)
+    with BuildPart() as plate:
+        Box(40, 20, 10, align=(Align.CENTER, Align.CENTER, Align.MAX))
+        with Locations((-10, 0), (10, 0)):
+            ThreadedHole(screw, depth=10)
+
+    assert plate.part.is_valid
+    assert len(screw.hole_locations) == 2
+    assert sorted(location.position.X for location in screw.hole_locations) == [
+        -10,
+        10,
+    ]
+
+
+def test_threaded_hole_on_rotated_face():
+    """A private construction builder doesn't double-apply an oriented location."""
+    screw = SocketHeadCapScrew("M6-1", 20)
+    with BuildPart() as block:
+        Box(20, 20, 20)
+        side = block.faces().sort_by(Axis.X)[-1]
+        with Locations(side):
+            ThreadedHole(screw, depth=8, counter_sunk=False)
+
+    assert block.part.is_valid
+    assert len(screw.hole_locations) == 1
+    assert screw.hole_locations[0].position.X == pytest.approx(10)
+
+
+def test_threaded_hole_supports_headless_fastener():
+    """A missing countersink profile is valid for a headless set screw."""
+    screw = SetScrew("M6-1", 20)
+    tap = ThreadedHole(screw, depth=20, simple=False)
+
+    assert tap.thread is not None
+    assert tap.bounding_box().min.Z == pytest.approx(-20)
+    assert tap.bounding_box().max.Z == pytest.approx(0, abs=1e-6)
+
+
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        ({"depth": 0}, "greater than zero"),
+        ({"depth": -1}, "greater than zero"),
+        ({"depth": 5}, "too shallow"),
+        ({"depth": 20, "material": "Wood"}, "invalid"),
+    ],
+)
+def test_threaded_hole_rejects_invalid_parameters(kwargs, message):
+    screw = SocketHeadCapScrew("M6-1", 20)
+    with pytest.raises(ValueError, match=message):
+        ThreadedHole(screw, **kwargs)
+
 
 @pytest.mark.parametrize(
     "screw_class, screw_type, screw_size",

@@ -51,6 +51,9 @@ from build123d.build_common import (
     Locations,
     validate_inputs,
 )
+
+# from build123d.build_constants import IN, MM
+# from build123d.build_enums import Align, LengthMode, Mode, SortBy
 from build123d.build_enums import Align, Mode, SortBy
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
@@ -3322,10 +3325,7 @@ def _make_fastener_hole(
         head_offset -= head_offset
     if update_hole_locations:
         fastener.hole_locations.extend(
-            [
-                location * Pos(0, 0, -head_offset)
-                for location in locations
-            ]
+            [location * Pos(0, 0, -head_offset) for location in locations]
         )
 
     return fastener_hole
@@ -3392,7 +3392,6 @@ class ClearanceHole(BasePartObject):
             self.hole_depth = 2 * context.max_dimension
         else:
             raise ValueError("No depth provided")
-
         hole_part = _make_fastener_hole(
             hole_diameters=fastener.clearance_hole_diameters,
             fastener=fastener,
@@ -3537,29 +3536,69 @@ class ThreadedHole(BasePartObject):
             self.hole_depth = 2 * context.max_dimension
         else:
             raise ValueError("No depth provided")
+        if self.hole_depth <= 0:
+            raise ValueError("Hole depth must be greater than zero")
 
-        hole_part = _make_fastener_hole(
-            hole_diameters=fastener.clearance_hole_diameters,
-            fastener=fastener,
-            countersink_profile=fastener.countersink_profile(fit),
-            depth=self.hole_depth,
-            fit=fit,
-            material=material,
-            counter_sunk=counter_sunk,
-            threaded_hole=True,
-            update_hole_locations=context is not None,
-            locations=self._get_object_locations(),
+        try:
+            core_diameter = fastener.tap_hole_diameters[material]
+        except KeyError as e:
+            raise ValueError(
+                f"{material} invalid, must be one of "
+                f"{list(fastener.tap_hole_diameters.keys())}"
+            ) from e
+
+        location_context = LocationList._get_context()
+        active_locations = (
+            list(location_context.locations)
+            if location_context is not None
+            else [Location()]
         )
-        if not simple:
-            with BuildPart(mode=Mode.PRIVATE):
+
+        # Construct the cutter at the origin. BasePartObject applies the active
+        # workplane and Locations to the completed Compound below.
+        with BuildPart(mode=Mode.PRIVATE):
+            head_profile = fastener.countersink_profile(fit) if counter_sunk else None
+            head_height = (
+                head_profile.bounding_box().max.Z if head_profile is not None else 0.0
+            )
+            head_depth = head_height if counter_sunk else 0.0
+            thread_length = self.hole_depth - head_depth
+            if thread_length <= 0:
+                raise ValueError(
+                    f"Hole depth {self.hole_depth} is too shallow for a "
+                    f"countersink depth of {head_depth}"
+                )
+
+            cutter_solids = [
+                Solid.make_cylinder(
+                    radius=core_diameter / 2,
+                    height=self.hole_depth,
+                    plane=Plane.XY.offset(-self.hole_depth),
+                )
+            ]
+
+            if counter_sunk and head_profile is not None:
+                head_cutter = Solid.revolve(
+                    head_profile.moved(Pos(Z=-head_depth)), 360, Axis.Z
+                )
+                cutter_solids.extend(head_cutter.solids())
+
+            thread = None
+            if not simple:
                 thread = IsoThread(
-                    major_diameter=fastener.thread_diameter + 0.01,
+                    major_diameter=fastener.thread_diameter,
                     pitch=fastener.thread_pitch,
-                    length=min(fastener.length, self.hole_depth),
-                    external=False,
-                    end_finishes=("fade", "fade"),
+                    length=thread_length,
+                    external=True,
                     hand=fastener.hand,
+                    end_finishes=("square", "square"),
+                    interference=0.2,
+                    simple=False,
+                    mode=Mode.PRIVATE,
                 ).move(Pos(Z=-self.hole_depth))
+                cutter_solids.extend(thread.solids())
+
+            hole_part = Compound(label="threaded hole cutter", children=cutter_solids)
 
         super().__init__(
             part=hole_part,
@@ -3568,8 +3607,16 @@ class ThreadedHole(BasePartObject):
             mode=mode,
         )
 
-        self.thread = None if simple else thread
-        self.thread_locations = list(self._get_object_locations())
+        self.thread = thread
+        self.thread_locations = active_locations
+
+        if context is not None:
+            fastener_offset = head_depth
+            if isinstance(fastener, (CounterSunkScrew, RaisedCounterSunkOvalHeadScrew)):
+                fastener_offset = 0.0
+            fastener.hole_locations.extend(
+                [location * Pos(Z=-fastener_offset) for location in active_locations]
+            )
 
 
 class InsertHole(BasePartObject):
