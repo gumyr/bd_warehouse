@@ -121,8 +121,6 @@ class AcmeAntiBacklashNutBlock8mm(BasePartObject):
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
-        self.color = self.material.pbr.interpolate_color()
-
         self.label = "AcmeAntiBacklashNutBlock8mm"
         for label, face in zip(
             ["a", "b"], self.faces().group_by(Axis.Z)[-3].sort_by(Axis.X, reverse=True)
@@ -247,8 +245,6 @@ class AluminumSpacer(BasePartObject):
 
         super().__init__(spacer.part, rotation=rotation, align=align, mode=mode)
         self.material = metals.aluminum()
-        self.color = self.material.pbr.interpolate_color()
-
         self.label = f"AluminumSpacer-{length}"
         RigidJoint("a", self, Location())
         RigidJoint("b", self, Pos(Z=spacer_length))
@@ -313,7 +309,6 @@ class CBeamEndMount(BasePartObject):
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
-        self.color = self.material.pbr.interpolate_color()
 
         bearing_circle = (
             self.faces()
@@ -452,7 +447,6 @@ class CBeamLinearRail(BasePartObject):
             part=rail, rotation=rotation, align=tuplify(align, 3), mode=mode
         )
         self.material = metals.aluminum()
-        self.color = self.material.pbr.interpolate_color()
 
         # RigidJoint("test1", self, Location((10, 0, 0), (0, 90, 0)))
         # RigidJoint("test2", self, Location((0, -10, 50), (90, 0, 0)))
@@ -544,8 +538,6 @@ class CBeamGantryPlate(BasePartObject):
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
-        self.color = self.material.pbr.interpolate_color()
-
         self.label = "CBeamGantryPlate"
 
 
@@ -636,8 +628,6 @@ class CBeamGantryPlateXLarge(BasePartObject):
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
-        self.color = self.material.pbr.interpolate_color()
-
         self.label = "CBeamGantryPlateXLarge"
         for label, loc in zip(["a", "b", "c"], eccentric_mounts):
             RigidJoint(label, self, Pos(*(loc.position - Vector(0, 0, 6))))
@@ -703,8 +693,6 @@ class CBeamRiserPlate(BasePartObject):
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
-        self.color = self.material.pbr.interpolate_color()
-
         self.label = "CBeamRiserPlate"
 
 
@@ -790,8 +778,6 @@ class EccentricSpacer(BasePartObject):
             mode=mode,
         )
         self.material = metals.aluminum()
-        self.color = self.material.pbr.interpolate_color()
-
         self.label = f"EccentricSpacer-{cam_height}"
         RigidJoint("a", self, Location())
         RigidJoint("b", self, Pos(Z=2.5 * MM + cam_length))
@@ -886,8 +872,6 @@ class FlexibleCoupler(BasePartObject):
                 mode=mode,
             )
             self.material = metals.aluminum(finish=[finishes.bead_blast()])
-            self.color = self.material.pbr.interpolate_color()
-
             self.label = f"FlexibleCoupler-{shaft_diameter}"
             RigidJoint("a", self, Pos(Z=12.5 * MM))
             RigidJoint("b", self, Location((0, 0, 12.5 * MM), (1, 0, 0), 180))
@@ -1003,8 +987,6 @@ class MetricLeadScrew(Compound):
         self.children = components
 
         self.material = metals.stainless()
-        self.color = self.material.pbr.interpolate_color()
-
         RigidJoint("axis", self, Location())
         self.label = f"8mm lead screw"
 
@@ -1135,8 +1117,6 @@ class RouterSpindleMount(BasePartObject):
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
-        self.color = self.material.pbr.interpolate_color()
-
         for label, pos in zip(["a", "b", "c", "d"], top_mount_centers):
             RigidJoint(f"top_{label}", self, -pos)
         for label, pos in zip(["a", "b", "c", "d"], top_mount_centers):
@@ -1197,8 +1177,6 @@ class ShimWasher(BasePartObject):
 
         super().__init__(shim.part, rotation=rotation, align=align, mode=mode)
         self.material = metals.aluminum()
-        self.color = self.material.pbr.interpolate_color()
-
         self.label = f"ShimWasher-{shim_type}"
         RigidJoint("a", self, Location())
         RigidJoint("b", self, Pos(Z=thickness))
@@ -1253,8 +1231,6 @@ class SpacerBlock(BasePartObject):
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
-        self.color = self.material.pbr.interpolate_color()
-
         self.label = "CBeamRiserPlate"
 
 
@@ -1494,8 +1470,6 @@ class VSlotLinearRail(BasePartObject):
             part=rail, rotation=rotation, align=tuplify(align, 3), mode=mode
         )
         self.material = metals.aluminum()
-        self.color = self.material.pbr.interpolate_color()
-
         # RigidJoint("test1", self, Location((10, 0, 0), (0, 90, 0)))
         # RigidJoint("test2", self, Location((0, -10, 50), (90, 0, 0)))
         self.label = f"{rail_size} VSlot Rail"
@@ -1608,8 +1582,6 @@ class XtremeSolidVWheel(BasePartObject):
         self.material = plastics.pc(
             color=Color("white"), thickness_mm=2, opacity=0.1, roughness=0.45
         )
-        self.color = self.material.pbr.interpolate_color()
-
         self.label = "XtremeSolidVWHeel"
         RigidJoint("a", self, Pos(Z=-11 / 2))
         RigidJoint("b", self, Pos(Z=+11 / 2))
