@@ -53,7 +53,9 @@ from build123d.operations_generic import add, fillet, offset, sweep
 from build123d.operations_part import extrude, revolve, section
 from build123d.operations_sketch import make_face
 from build123d.topology import Compound, Edge, Face, Shell, Solid, Wire, Part
-
+from bd_materials.materials.metals import alloy_steel, AlloySteel, mild_steel
+from bd_materials.materials.plastics import rubber
+from bd_materials.finishes import electropolish, black_oxide
 from bd_warehouse.fastener import (
     evaluate_parameter_dict,
     isolate_fastener_type,
@@ -238,16 +240,17 @@ class Bearing(ABC, BasePartObject):
         """Create bearing from the shapes defined in the derived class"""
 
         outer_race = revolve(self.outer_race_section(), Axis.Z)
-        outer_race.color = Color(0xC0C0C0)
+        outer_race.material = alloy_steel(grade=AlloySteel.G4140_QUENCHED_TEMPERED)
         outer_race.label = "OuterRace"
         inner_race = revolve(self.inner_race_section(), Axis.Z)
-        inner_race.color = Color(0xC0C0C0)
+        inner_race.material = alloy_steel(grade=AlloySteel.G4140_QUENCHED_TEMPERED)
         inner_race.label = "InnerRace"
 
         bearing_pieces = [outer_race, inner_race]
         if self.capped:
             cap = self.cap()
             cap.label = "Cap"
+            cap.material = rubber(color="black")
             bearing_pieces.extend(
                 [
                     cap,
@@ -257,6 +260,7 @@ class Bearing(ABC, BasePartObject):
         else:
             roller = self.roller()
             roller.label = "Roller"
+            roller.material = alloy_steel(grade=AlloySteel.G52100_THROUGH_HARDENED)
             locs = PolarLocations(self.race_center_radius, self.roller_count).locations
             bearing_pieces.extend(
                 [locs[0] * roller] + [l * copy.copy(roller) for l in locs[1:]]
@@ -265,10 +269,10 @@ class Bearing(ABC, BasePartObject):
             if self.method_exists("cage"):
                 cage = self.cage()
                 cage.label = "Cage"
+                cage.material = mild_steel(finish=black_oxide())
                 bearing_pieces.append(cage)
 
         bearing = Compound(children=bearing_pieces)
-        bearing.color = Color(0xC0C0C0)
         return bearing
 
     def default_inner_race_section(self) -> Face:
@@ -298,7 +302,6 @@ class Bearing(ABC, BasePartObject):
 
     def default_roller(self) -> Solid:
         roller = Solid.make_sphere(self.roller_diameter / 2)
-        roller.color = Color(0x909090)
         return roller
 
     def default_cap(self) -> Solid:
@@ -309,7 +312,6 @@ class Bearing(ABC, BasePartObject):
                 Circle(d1 / 2, mode=Mode.SUBTRACT)
             extrude(amount=B * 0.05)
         cap_solid = cap.solid()
-        cap_solid.color = Color(0x030303)
         return cap_solid
 
 
@@ -467,7 +469,6 @@ class SingleRowAngularContactBallBearing(Bearing):
         cage_face = Face.revolve(cage_line, 360, Axis.Z)
         cage_face -= PolarLocations((D - d) / 2, self.roller_count) * hole
         cage = Solid.thicken(cage_face, -cage_t)
-        cage.color = Color(0x909090)
 
         return cage
 
@@ -481,7 +482,6 @@ class SingleRowAngularContactBallBearing(Bearing):
     #             Circle(d2 / 2, mode=Mode.SUBTRACT)
     #         extrude(amount=B * 0.05)
     #     cap_solid = cap.solid()
-    #     cap_solid.color = Color(0x030303)
     #     return cap_solid
 
     roller = Bearing.default_roller
@@ -518,7 +518,6 @@ class SingleRowCylindricalRollerBearing(Bearing):
             roller_length,
             Plane.XY.offset(-roller_length / 2),
         )
-        roller.color = Color(0x909090)
         return roller
 
     countersink_profile = Bearing.default_countersink_profile
@@ -678,7 +677,6 @@ class SingleRowTaperedRollerBearing(Bearing):
             self.cage_edge = self.cage_edge[0]
         self._race_center_radius = roller.faces().sort_by(Axis.Z)[-1].center().X
         roller.position -= (self._race_center_radius, 0, 0)
-        roller.color = Color(0x909090)
         return roller
 
     countersink_profile = Bearing.default_countersink_profile
@@ -710,7 +708,6 @@ class SingleRowTaperedRollerBearing(Bearing):
         cage_surface = Shell.revolve(cage_profile, 360, Axis.Z)
         cage_surface -= PolarLocations(0, self.roller_count) * roller_hole_cutter
         cage = Solid.thicken(cage_surface, 0.5 * MM)
-        cage.color = Color(0x909090)
 
         return cage
 
@@ -802,19 +799,19 @@ class PressFitHole(BasePartObject):
 
 if __name__ == "__main__":
     from ocp_vscode import Camera, set_defaults, show, show_all
+    from build123d import pack
 
     set_defaults(reset_camera=Camera.CENTER)
 
-    # b1 = SingleRowCappedDeepGrooveBallBearing(size="M8-22-7")
-    # b2 = SingleRowDeepGrooveBallBearing(size="M8-22-7")
+    b1 = SingleRowCappedDeepGrooveBallBearing(size="M8-22-7")
+    b2 = SingleRowDeepGrooveBallBearing(size="M8-22-7")
     # print(SingleRowAngularContactBallBearing.sizes("SKT"))
-    # b3 = SingleRowAngularContactBallBearing(size="M10-30-9")
+    b3 = SingleRowAngularContactBallBearing(size="M10-30-9")
     # print(SingleRowCylindricalRollerBearing.sizes("SKT"))
-    # b4 = SingleRowCylindricalRollerBearing("M15-35-11")
+    b4 = SingleRowCylindricalRollerBearing("M15-35-11")
     # print(SingleRowTaperedRollerBearing.sizes("SKT"))
-    # b5 = SingleRowTaperedRollerBearing("M25-52-19.25")
-    b6 = SingleRowTaperedRollerBearing("M32-53-14.5", "SKT")
-    bbox = b3.bounding_box()
+    b5 = SingleRowTaperedRollerBearing("M25-52-19.25")
+    # b6 = SingleRowTaperedRollerBearing("M32-53-14.5", "SKT")
+    # bbox = b3.bounding_box()
     # print(b3.bearing_dict["B"], b3.bearing_dict["D"], bbox.size)
-    show(b6)
-    # show(pack([b1, b2, b3, b4], 5))
+    show(pack([b1, b2, b3, b4, b5], 5))

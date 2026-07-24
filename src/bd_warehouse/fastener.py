@@ -100,6 +100,8 @@ from build123d.topology import (
     Solid,
     Wire,
 )
+from bd_materials.materials.metals import mild_steel
+from bd_materials.finishes import zinc_plate
 
 # ISO standards use single variable dimension labels which are used extensively
 # pylint: disable=invalid-name
@@ -588,7 +590,7 @@ class Nut(ABC, BasePartObject):
         else:
             super().__init__(bd_object, rotation, align, mode)
         self.label = f"{self.__class__.__name__}({size}, {fastener_type})"
-        self.color = Color(0xC0C0C0)
+        self.material = mild_steel(finish=zinc_plate())
         RigidJoint("a", self, Location())
         RigidJoint("b", self, Pos(Z=self.nut_thickness))
 
@@ -1664,7 +1666,7 @@ class Screw(ABC, BasePartObject):
         self.label = (
             f"{self.__class__.__name__}({size}, {length:0.2f}, {fastener_type})"
         )
-        self.color = Color(0xC0C0C0)
+        self.material = mild_steel(finish=zinc_plate())
         RigidJoint("a", self, Location())
 
     def make_head(self) -> Solid:
@@ -2953,7 +2955,7 @@ class Washer(ABC, BasePartObject):
 
         super().__init__(bd_object, rotation, align, mode)
         self.label = f"{self.__class__.__name__}({size}, {fastener_type})"
-        self.color = Color(0xC0C0C0)
+        self.material = mild_steel(finish=zinc_plate())
         RigidJoint("a", self, Location())
         RigidJoint("b", self, Pos(Z=self.washer_thickness))
 
