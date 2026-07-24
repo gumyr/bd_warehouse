@@ -10,7 +10,6 @@ date: August 14th 2021
 desc: This python/build123d code is a parameterized threaded fastener generator.
 
 todo: - add helix line to thread object if simple enabled
-      - support unthreaded sections on screw shanks
       - calculate depth for thru threaded holes
       - optimize recess creation when recess_taper = 0
 
@@ -1506,6 +1505,169 @@ class Screw(ABC, BasePartObject):
         """
         return 0
 
+    def default_thread_length(self) -> float:
+        """Return a fully threaded body length.
+
+        Product standards that define a shorter threaded portion can override
+        ``calculate_thread_length`` while retaining the common body construction.
+        """
+        return self.max_thread_length
+
+    def iso888_thread_length(self) -> float:
+        """Return the standard thread length ``b`` defined by ISO 888."""
+        if self.length <= 125 * MM:
+            standard_thread_length = 2 * self.thread_diameter + 6 * MM
+        elif self.length <= 200 * MM:
+            standard_thread_length = 2 * self.thread_diameter + 12 * MM
+        else:
+            standard_thread_length = 2 * self.thread_diameter + 25 * MM
+        return min(self.max_thread_length, standard_thread_length)
+
+    def iso7380_thread_length(self) -> float:
+        """Return the ISO 7380 reference thread length ``b``.
+
+        The 2022 editions of ISO 7380-1 and ISO 7380-2 specify ``2d + 12``
+        except for M16, where ``b`` is increased to ``3d``.
+        """
+        standard_thread_length = (
+            3 * self.thread_diameter
+            if self.thread_diameter == 16 * MM
+            else 2 * self.thread_diameter + 12 * MM
+        )
+        return min(self.max_thread_length, standard_thread_length)
+
+    def threaded_to_head_thread_length(self) -> float:
+        """Return the complete thread length for a screw threaded to its head.
+
+        The machine-screw standards define the maximum incomplete thread under
+        the head as ``a = 2P``. Countersunk head height has already been removed
+        from ``max_thread_length`` by ``length_offset``.
+        """
+        incomplete_thread_length = 2 * self.thread_pitch
+        return (
+            self.max_thread_length
+            if self.max_thread_length <= incomplete_thread_length
+            else self.max_thread_length - incomplete_thread_length
+        )
+
+    def machine_screw_thread_length(self) -> float:
+        """Return the thread length selected by a machine-screw product standard.
+
+        Lengths up to the standard's discontinuous table line are threaded to
+        the head. Longer screws use the general-purpose ISO 888 thread length.
+        """
+        simple_cutoff_standards = {
+            "iso1207",
+            "iso14580",
+            "iso1580",
+            "din967",
+        }
+        stepped_cutoff_standards = {
+            "iso7045",
+            "iso7048",
+            "iso14583",
+        }
+        countersunk_cutoff_standards = {
+            "iso7046",
+            "iso7047",
+            "iso14581",
+            "iso14584",
+        }
+
+        if self.fastener_type in simple_cutoff_standards:
+            cutoff = 30 * MM if self.thread_diameter <= 3 * MM else 40 * MM
+        elif self.fastener_type in stepped_cutoff_standards:
+            if self.thread_diameter <= 2.5 * MM:
+                cutoff = 30 * MM
+            elif self.thread_diameter <= 3 * MM:
+                cutoff = 35 * MM
+            else:
+                cutoff = 40 * MM
+        elif self.fastener_type in countersunk_cutoff_standards:
+            if self.thread_diameter <= 2.5 * MM:
+                cutoff = 30 * MM
+            elif self.thread_diameter <= 3 * MM:
+                cutoff = 35 * MM
+            elif self.thread_diameter <= 4 * MM:
+                cutoff = 40 * MM
+            else:
+                cutoff = 45 * MM
+        elif self.fastener_type in {"iso2009", "iso2010"}:
+            if self.thread_diameter <= 3 * MM:
+                cutoff = 30 * MM
+            elif self.thread_diameter <= 3.5 * MM:
+                cutoff = 40 * MM
+            else:
+                cutoff = 45 * MM
+        else:
+            return self.default_thread_length()
+
+        return (
+            self.threaded_to_head_thread_length()
+            if self.length <= cutoff
+            else self.iso888_thread_length()
+        )
+
+    def asme_b18_6_3_thread_length(self) -> float:
+        """Return the full-form thread length specified by ASME B18.6.3."""
+        number_5_or_smaller = self.thread_diameter <= 0.125 * IN
+        if self.length <= 3 * self.thread_diameter:
+            return self.max_thread_length - self.thread_pitch
+        if self.length <= (1.125 * IN if number_5_or_smaller else 2 * IN):
+            return self.max_thread_length - 2 * self.thread_pitch
+        return (1 if number_5_or_smaller else 1.5) * IN
+
+    def asme_b18_3_thread_length(self) -> float:
+        """Return the minimum full-form thread length from ASME B18.3."""
+        minimum_thread_lengths = {
+            "#3": 0.62,
+            "#4": 0.75,
+            "#5": 0.75,
+            "#6": 0.75,
+            "#8": 0.88,
+            "#10": 0.88,
+            "1/4": 1.00,
+            "5/16": 1.12,
+            "3/8": 1.25,
+            "7/16": 1.38,
+            "1/2": 1.50,
+            "5/8": 1.75,
+            "3/4": 2.00,
+            "7/8": 2.25,
+            "1": 2.50,
+        }
+        size = self.thread_size.split("-")[0]
+        minimum_thread_length = minimum_thread_lengths[size] * IN
+        first_partial_length = self.screw_data["short"]
+
+        if self.length < first_partial_length:
+            if self.thread_diameter <= 0.625 * IN:
+                incomplete_thread_length = 2 * self.thread_pitch
+                return (
+                    self.max_thread_length
+                    if self.max_thread_length <= incomplete_thread_length
+                    else self.max_thread_length - incomplete_thread_length
+                )
+            return self.max_thread_length
+        return min(self.max_thread_length, minimum_thread_length)
+
+    calculate_thread_length = default_thread_length
+
+    def default_shank_profile(self) -> Face | None:
+        """Return the radial profile of the unthreaded shank, if present."""
+        if self.grip_length <= 0:
+            return None
+        with BuildSketch(Plane.XZ) as profile:
+            with Locations((0, -self.length_offset())):
+                Rectangle(
+                    self.thread_diameter / 2,
+                    self.grip_length,
+                    align=(Align.MIN, Align.MAX),
+                )
+        return profile.sketch.face()
+
+    shank_profile = default_shank_profile
+
     def min_hole_depth(self, counter_sunk: bool = True) -> float:
         """Minimum depth of a hole able to accept the screw"""
         countersink_profile = self.countersink_profile("Loose")
@@ -1614,7 +1776,13 @@ class Screw(ABC, BasePartObject):
                 f"Screw length {self.length} is <= countersunk screw head {length_offset}"
             )
         self.max_thread_length = self.length - length_offset
-        self.thread_length = length - length_offset
+        self.thread_length = self.calculate_thread_length()
+        if not 0 < self.thread_length <= self.max_thread_length:
+            raise ValueError(
+                f"Invalid thread length {self.thread_length} for screw body "
+                f"length {self.max_thread_length}"
+            )
+        self.grip_length = self.max_thread_length - self.thread_length
         head = self.make_head()
 
         if head is None:  # A fully custom screw
@@ -1643,16 +1811,26 @@ class Screw(ABC, BasePartObject):
             thread = thread.locate(Pos(Z=-self.length))
         thread.label = "thread"
 
-        shank = Solid.make_cylinder(
+        thread_core = Solid.make_cylinder(
             thread.min_radius, self.thread_length, Plane.XY.offset(-self.length)
+        )
+        shank_profile = self.shank_profile()
+        unthreaded_shank = (
+            revolve(shank_profile, Axis.Z) if shank_profile is not None else None
         )
 
         if method_exists(self.__class__, "custom_make"):
             screw = self.custom_make()
         elif head is not None:
-            screw = head.fuse(shank)
+            screw = head.fuse(
+                *(
+                    [thread_core, unthreaded_shank]
+                    if unthreaded_shank is not None
+                    else [thread_core]
+                )
+            )
         else:
-            screw = shank
+            screw = thread_core
 
         # Unwrap the Compound as it's unnecessary
         if isinstance(screw, Compound):
@@ -1815,6 +1993,8 @@ class ButtonHeadScrew(Screw):
 
     fastener_data = read_fastener_parameters_from_csv("button_head_parameters.csv")
 
+    calculate_thread_length = Screw.iso7380_thread_length
+
     def __init__(
         self,
         size: str,
@@ -1885,6 +2065,8 @@ class ButtonHeadWithCollarScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "button_head_with_collar_parameters.csv"
     )
+
+    calculate_thread_length = Screw.iso7380_thread_length
 
     def __init__(
         self,
@@ -1974,6 +2156,8 @@ class CheeseHeadScrew(Screw):
 
     fastener_data = read_fastener_parameters_from_csv("cheese_head_parameters.csv")
 
+    calculate_thread_length = Screw.machine_screw_thread_length
+
     def __init__(
         self,
         size: str,
@@ -2051,6 +2235,17 @@ class CounterSunkScrew(Screw):
 
     fastener_data = read_fastener_parameters_from_csv("countersunk_head_parameters.csv")
 
+    def calculate_thread_length(self) -> float:
+        """Use the thread-length rule specified by the selected product standard."""
+        if self.fastener_type in {"iso10642", "iso14582"}:
+            return min(
+                self.max_thread_length,
+                2 * self.thread_diameter + 12 * MM,
+            )
+        if self.fastener_type in {"iso2009", "iso7046", "iso14581"}:
+            return self.machine_screw_thread_length()
+        return self.default_thread_length()
+
     def __init__(
         self,
         size: str,
@@ -2107,7 +2302,8 @@ class HexHeadScrew(Screw):
     construction, machinery, automotive, and industrial applications where strong, reliable bolted joints
     are required.
 
-    Two main ISO standards define their dimensional properties:
+    DIN and ISO standards define their dimensional properties:
+    - DIN 931: Hexagon head bolts with a partially threaded shank.
     - ISO 4014: Hex head screws with a partially threaded shank, typically used where shear strength is
     needed along the unthreaded portion.
     - ISO 4017: Fully threaded hex head screws, used for general-purpose fastening where full thread
@@ -2120,7 +2316,9 @@ class HexHeadScrew(Screw):
     Args:
         size (str): size specification, e.g. "M6-1"
         length (float): screw length
-        fastener_type (Literal["iso4014", "iso4017"], optional): Defaults to "iso4014".
+        fastener_type (Literal["din931", "iso4014", "iso4017"], optional):
+            Defaults to "iso4014".
+            din931 - Hexagon head bolts
             iso4014 - Hexagon head bolt
             iso4017 - Hexagon head screws
         hand (Literal["right","left"], optional): thread direction. Defaults to "right".
@@ -2133,11 +2331,19 @@ class HexHeadScrew(Screw):
 
     fastener_data = read_fastener_parameters_from_csv("hex_head_parameters.csv")
 
+    def calculate_thread_length(self) -> float:
+        """Return the thread length specified for the selected hex-head standard."""
+        return (
+            self.iso888_thread_length()
+            if self.fastener_type in {"din931", "iso4014"}
+            else self.default_thread_length()
+        )
+
     def __init__(
         self,
         size: str,
         length: float,
-        fastener_type: Literal["iso4014", "iso4017"] = "iso4014",
+        fastener_type: Literal["din931", "iso4014", "iso4017"] = "iso4014",
         hand: Literal["right", "left"] = "right",
         simple: bool = True,
         rotation: RotationLike = (0, 0, 0),
@@ -2204,8 +2410,7 @@ class HexHeadWithFlangeScrew(Screw):
 
     DIN 1662 and DIN 1665 define common types of flanged hex screws:
     - DIN 1662: Hex flange screws with a partially threaded shank.
-    - DIN 1665: Hex flange screws that are fully threaded, offering continuous engagement over the
-    entire shaft.
+    - DIN 1665: Heavy-series hex flange screws with a partially threaded shank.
 
     These screws are frequently used in automotive, structural, and industrial applications where
     secure fastening, reduced part count, and simplified assembly are important. The integrated flange
@@ -2230,6 +2435,8 @@ class HexHeadWithFlangeScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "hex_head_with_flange_parameters.csv"
     )
+
+    calculate_thread_length = Screw.iso888_thread_length
 
     def __init__(
         self,
@@ -2330,6 +2537,12 @@ class PanHeadScrew(Screw):
 
     fastener_data = read_fastener_parameters_from_csv("pan_head_parameters.csv")
 
+    def calculate_thread_length(self) -> float:
+        """Apply the thread-length rule for the selected product standard."""
+        if self.fastener_type in {"iso1580", "iso14583"}:
+            return self.machine_screw_thread_length()
+        return self.asme_b18_6_3_thread_length()
+
     def __init__(
         self,
         size: str,
@@ -2401,6 +2614,8 @@ class PanHeadWithCollarScrew(Screw):
         "pan_head_with_collar_parameters.csv"
     )
 
+    calculate_thread_length = Screw.machine_screw_thread_length
+
     def __init__(
         self,
         size: str,
@@ -2470,6 +2685,8 @@ class RaisedCheeseHeadScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "raised_cheese_head_parameters.csv"
     )
+
+    calculate_thread_length = Screw.machine_screw_thread_length
 
     def __init__(
         self,
@@ -2547,6 +2764,14 @@ class RaisedCounterSunkOvalHeadScrew(Screw):
     fastener_data = read_fastener_parameters_from_csv(
         "raised_countersunk_oval_head_parameters.csv"
     )
+
+    def calculate_thread_length(self) -> float:
+        """Apply rules verified by the available product standards."""
+        return (
+            self.machine_screw_thread_length()
+            if self.fastener_type in {"iso2010", "iso7047", "iso14584"}
+            else self.default_thread_length()
+        )
 
     def __init__(
         self,
@@ -2731,6 +2956,15 @@ class SocketHeadCapScrew(Screw):
     """
 
     fastener_data = read_fastener_parameters_from_csv("socket_head_cap_parameters.csv")
+
+    def calculate_thread_length(self) -> float:
+        """Use the ISO 4762 reference thread length; preserve ASME full threads."""
+        if self.fastener_type == "iso4762":
+            return min(
+                self.max_thread_length,
+                2 * self.thread_diameter + 12 * MM,
+            )
+        return self.asme_b18_3_thread_length()
 
     def __init__(
         self,

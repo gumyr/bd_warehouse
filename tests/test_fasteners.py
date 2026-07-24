@@ -31,13 +31,23 @@ import random
 
 import pytest
 from bd_warehouse.fastener import (
+    ButtonHeadScrew,
+    ButtonHeadWithCollarScrew,
+    CheeseHeadScrew,
     ClearanceHole,
+    CounterSunkScrew,
     DomedCapNut,
     HeatSetNut,
+    HexHeadScrew,
+    HexHeadWithFlangeScrew,
     HexNut,
     HexNutWithFlange,
     InsertHole,
     Nut,
+    PanHeadScrew,
+    PanHeadWithCollarScrew,
+    RaisedCheeseHeadScrew,
+    RaisedCounterSunkOvalHeadScrew,
     Screw,
     SetScrew,
     SocketHeadCapScrew,
@@ -47,7 +57,7 @@ from bd_warehouse.fastener import (
     UnchamferedHexagonNut,
     Washer,
 )
-from build123d import Align, Axis, Box, BuildPart, Compound, Locations
+from build123d import IN, Align, Axis, Box, BuildPart, Compound, Locations
 
 
 def test_csv_reading_uses_explicit_utf8_encoding():
@@ -260,6 +270,262 @@ def test_screws(screw_class: Screw, screw_type: str, screw_size: str):
             with Locations((-25, 0)):
                 TapHole(screw)
     assert hole_tests.part.volume < 100 * 100 * screw_min_length
+
+
+@pytest.mark.parametrize(
+    "size,length,expected_thread_length",
+    [
+        ("M8-1.25", 16, 16),
+        ("M8-1.25", 50, 28),
+        ("M24-3", 130, 60),
+        ("M42-4.5", 220, 96),
+    ],
+)
+def test_iso4762_thread_and_grip_lengths(size, length, expected_thread_length):
+    """ISO 4762 screws use the fixed reference thread length b = 2d + 12."""
+    screw = SocketHeadCapScrew(size, length, "iso4762")
+
+    assert screw.thread_length == pytest.approx(expected_thread_length)
+    assert screw.grip_length == pytest.approx(length - expected_thread_length)
+    assert screw.thread_length + screw.grip_length == pytest.approx(
+        screw.max_thread_length
+    )
+
+    profile = screw.shank_profile()
+    if screw.grip_length == 0:
+        assert profile is None
+    else:
+        assert profile is not None
+        assert profile.bounding_box().size.X == pytest.approx(
+            screw.thread_diameter / 2
+        )
+        assert profile.bounding_box().size.Z == pytest.approx(screw.grip_length)
+
+
+def test_non_iso4762_screw_remains_fully_threaded():
+    """The existing ASME screw remains fully threaded."""
+    screw = SocketHeadCapScrew("1/4-20", 2, "asme_b18.3")
+
+    assert screw.thread_length == pytest.approx(screw.max_thread_length)
+    assert screw.grip_length == pytest.approx(0)
+    assert screw.shank_profile() is None
+
+
+@pytest.mark.parametrize(
+    "screw_class,fastener_type",
+    [
+        (HexHeadScrew, "din931"),
+        (HexHeadScrew, "iso4014"),
+        (HexHeadWithFlangeScrew, "din1662"),
+        (HexHeadWithFlangeScrew, "din1665"),
+    ],
+)
+@pytest.mark.parametrize(
+    "length,expected_thread_length",
+    [
+        (20, 20),
+        (125, 22),
+        (126, 28),
+        (200, 28),
+        (201, 41),
+    ],
+)
+def test_iso888_thread_length_bands(
+    screw_class, fastener_type, length, expected_thread_length
+):
+    """Partially threaded bolts select the ISO 888 band from total length."""
+    screw = screw_class("M8-1.25", length, fastener_type)
+
+    assert screw.thread_length == pytest.approx(expected_thread_length)
+    assert screw.grip_length == pytest.approx(length - expected_thread_length)
+
+
+def test_iso4017_remains_fully_threaded():
+    """ISO 4017 hexagon head screws retain their full thread."""
+    screw = HexHeadScrew("M8-1.25", 50, "iso4017")
+
+    assert screw.thread_length == pytest.approx(screw.max_thread_length)
+    assert screw.grip_length == pytest.approx(0)
+    assert screw.shank_profile() is None
+
+
+def test_din931_and_iso4014_select_independent_dimensions():
+    """DIN 931 and ISO 4014 retain their own dimensional table columns."""
+    din_screw = HexHeadScrew("M2-0.4", 20, "din931")
+    iso_screw = HexHeadScrew("M2-0.4", 20, "iso4014")
+
+    assert din_screw.screw_data["k"] == pytest.approx(1.4)
+    assert din_screw.screw_data["s"] == pytest.approx(3.82)
+    assert iso_screw.screw_data["k"] == pytest.approx(1.6)
+    assert iso_screw.screw_data["s"] == pytest.approx(4)
+
+
+@pytest.mark.parametrize(
+    "screw_class,fastener_type",
+    [
+        (ButtonHeadScrew, "iso7380_1"),
+        (ButtonHeadWithCollarScrew, "iso7380_2"),
+    ],
+)
+@pytest.mark.parametrize(
+    "size,length,expected_thread_length",
+    [
+        ("M8-1.25", 20, 20),
+        ("M8-1.25", 50, 28),
+        ("M16-2", 90, 48),
+    ],
+)
+def test_iso7380_thread_lengths(
+    screw_class, fastener_type, size, length, expected_thread_length
+):
+    """ISO 7380 uses 2d + 12, with a 3d exception for M16."""
+    screw = screw_class(size, length, fastener_type)
+
+    assert screw.thread_length == pytest.approx(expected_thread_length)
+    assert screw.grip_length == pytest.approx(length - expected_thread_length)
+
+
+@pytest.mark.parametrize(
+    "screw_class,fastener_type",
+    [
+        (ButtonHeadScrew, "iso7380_1"),
+        (ButtonHeadWithCollarScrew, "iso7380_2"),
+    ],
+)
+def test_iso7380_2022_nominal_lengths(screw_class, fastener_type):
+    """The 2022 standards extend M10, M12, and M16 through 100 mm."""
+    assert 100 in screw_class("M10-1.5", 100, fastener_type).nominal_lengths
+    assert 100 in screw_class("M12-1.75", 100, fastener_type).nominal_lengths
+    assert 100 in screw_class("M16-2", 100, fastener_type).nominal_lengths
+    assert 100 not in screw_class("M8-1.25", 80, fastener_type).nominal_lengths
+
+
+@pytest.mark.parametrize(
+    "screw_class,fastener_type",
+    [
+        (CheeseHeadScrew, "iso1207"),
+        (CheeseHeadScrew, "iso7048"),
+        (CheeseHeadScrew, "iso14580"),
+        (CounterSunkScrew, "iso2009"),
+        (CounterSunkScrew, "iso7046"),
+        (CounterSunkScrew, "iso14581"),
+        (PanHeadScrew, "iso1580"),
+        (PanHeadScrew, "iso14583"),
+        (PanHeadWithCollarScrew, "din967"),
+        (RaisedCheeseHeadScrew, "iso7045"),
+        (RaisedCounterSunkOvalHeadScrew, "iso2010"),
+        (RaisedCounterSunkOvalHeadScrew, "iso7047"),
+        (RaisedCounterSunkOvalHeadScrew, "iso14584"),
+    ],
+)
+def test_machine_screws_threaded_to_head(screw_class, fastener_type):
+    """Complete machine-screw threads stop at the 2P incomplete thread."""
+    screw = screw_class("M4-0.7", 20, fastener_type)
+
+    assert screw.thread_length == pytest.approx(screw.max_thread_length - 1.4)
+    assert screw.grip_length == pytest.approx(1.4)
+
+
+@pytest.mark.parametrize(
+    "screw_class,fastener_type,length",
+    [
+        (CheeseHeadScrew, "iso1207", 45),
+        (CheeseHeadScrew, "iso7048", 45),
+        (CheeseHeadScrew, "iso14580", 45),
+        (CounterSunkScrew, "iso2009", 50),
+        (CounterSunkScrew, "iso7046", 45),
+        (CounterSunkScrew, "iso14581", 45),
+        (PanHeadScrew, "iso1580", 45),
+        (PanHeadScrew, "iso14583", 45),
+        (PanHeadWithCollarScrew, "din967", 45),
+        (RaisedCheeseHeadScrew, "iso7045", 45),
+        (RaisedCounterSunkOvalHeadScrew, "iso2010", 50),
+        (RaisedCounterSunkOvalHeadScrew, "iso7047", 45),
+        (RaisedCounterSunkOvalHeadScrew, "iso14584", 45),
+    ],
+)
+def test_long_machine_screws_use_iso888(screw_class, fastener_type, length):
+    """Machine screws beyond their table cutoff use ISO 888 thread lengths."""
+    screw = screw_class("M4-0.7", length, fastener_type)
+
+    assert screw.thread_length == pytest.approx(14)
+    assert screw.grip_length == pytest.approx(screw.max_thread_length - 14)
+
+
+@pytest.mark.parametrize(
+    "size,length",
+    [
+        ("M3-0.5", 8),
+        ("M8-1.25", 50),
+        ("M10-1.5", 100),
+    ],
+)
+@pytest.mark.parametrize("fastener_type", ["iso10642", "iso14582"])
+def test_iso_countersunk_reference_thread_length(fastener_type, size, length):
+    """ISO 10642 and ISO 14582 use reference thread length b = 2d + 12."""
+    screw = CounterSunkScrew(size, length, fastener_type)
+    expected_thread_length = min(
+        screw.max_thread_length, 2 * screw.thread_diameter + 12
+    )
+
+    assert screw.thread_length == pytest.approx(expected_thread_length)
+    assert screw.grip_length == pytest.approx(
+        screw.max_thread_length - expected_thread_length
+    )
+
+
+@pytest.mark.parametrize(
+    "size,length,expected_thread_length",
+    [
+        ("#5-40", 3 * 0.125 * IN, (3 * 0.125 - 1 / 40) * IN),
+        ("#5-40", (3 * 0.125 + 0.001) * IN, (3 * 0.125 + 0.001 - 2 / 40) * IN),
+        ("#5-40", 1.125 * IN, (1.125 - 2 / 40) * IN),
+        ("#5-40", 1.126 * IN, 1 * IN),
+        ("#6-32", 3 * 0.138 * IN, (3 * 0.138 - 1 / 32) * IN),
+        ("#6-32", (3 * 0.138 + 0.001) * IN, (3 * 0.138 + 0.001 - 2 / 32) * IN),
+        ("#6-32", 2 * IN, (2 - 2 / 32) * IN),
+        ("#6-32", 2.001 * IN, 1.5 * IN),
+    ],
+)
+def test_asme_b18_6_3_thread_length(size, length, expected_thread_length):
+    """ASME B18.6.3 changes rules at 3D and by numbered screw size."""
+    screw = PanHeadScrew(size, length, "asme_b_18.6.3")
+
+    assert screw.thread_length == pytest.approx(expected_thread_length)
+    assert screw.grip_length == pytest.approx(length - expected_thread_length)
+
+
+@pytest.mark.parametrize(
+    "size,length,expected_thread_length",
+    [
+        ("#3-56", 0.75 * IN, (0.75 - 2 / 56) * IN),
+        ("#3-56", 0.88 * IN, 0.62 * IN),
+        ("#4-40", 1.00 * IN, 0.75 * IN),
+        ("1/4-20", 2.00 * IN, 1.00 * IN),
+        ("1/2-13", 3.00 * IN, 1.50 * IN),
+        ("5/8-11", 4.00 * IN, 1.75 * IN),
+        ("3/4-10", 2.50 * IN, 2.50 * IN),
+        ("3/4-10", 4.00 * IN, 2.00 * IN),
+        ("1-8", 4.00 * IN, 2.50 * IN),
+    ],
+)
+def test_asme_b18_3_thread_length(size, length, expected_thread_length):
+    """ASME B18.3 uses its minimum thread lengths for partial screws."""
+    screw = SocketHeadCapScrew(size, length, "asme_b18.3")
+
+    assert screw.thread_length == pytest.approx(expected_thread_length)
+    assert screw.grip_length == pytest.approx(length - expected_thread_length)
+
+
+@pytest.mark.parametrize("simple", [True, False])
+def test_iso4762_partial_thread_geometry_spans_nominal_length(simple):
+    """Simple and detailed partial threads both join the shank at the screw tip."""
+    screw = SocketHeadCapScrew("M8-1.25", 50, "iso4762", simple=simple)
+
+    assert screw.bounding_box().min.Z == pytest.approx(-50)
+    assert screw.bounding_box().max.Z == pytest.approx(screw.head_height)
+    assert screw.volume > 0
+
 
 @pytest.mark.parametrize(
     "nut_class, nut_type, nut_size",
