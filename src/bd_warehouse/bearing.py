@@ -55,7 +55,7 @@ from build123d.operations_sketch import make_face
 from build123d.topology import Compound, Edge, Face, Shell, Solid, Wire, Part
 from bd_materials.materials.metals import alloy_steel, AlloySteel, mild_steel
 from bd_materials.materials.plastics import rubber
-from bd_materials.finishes import electropolish, black_oxide
+from bd_materials.finishes import black_oxide
 from bd_warehouse.fastener import (
     evaluate_parameter_dict,
     isolate_fastener_type,
@@ -260,7 +260,7 @@ class Bearing(ABC, BasePartObject):
         else:
             roller = self.roller()
             roller.label = "Roller"
-            roller.material = alloy_steel(grade=AlloySteel.G52100_THROUGH_HARDENED)
+            roller.material = alloy_steel(grade=AlloySteel.G52100_HARDENED_LOW_TEMPERED)
             locs = PolarLocations(self.race_center_radius, self.roller_count).locations
             bearing_pieces.extend(
                 [locs[0] * roller] + [l * copy.copy(roller) for l in locs[1:]]
