@@ -1482,6 +1482,17 @@ class Screw(ABC, BasePartObject):
         """Each derived class must provide the profile of a countersink cutter"""
         return NotImplementedError
 
+    def make_body_hole(
+        self, hole_radius: float, depth: float, head_offset: float = 0
+    ) -> Solid:
+        """Return the cylindrical cutter for the screw body."""
+        del head_offset
+        return Solid.make_cylinder(
+            radius=hole_radius,
+            height=depth,
+            plane=Plane(Vector(0, 0, 0), z_dir=Vector(0, 0, -1)),
+        )
+
     @classmethod
     def select_by_size(cls, size: str) -> dict[str:float]:
         """Return a dictionary of list of fastener types of this size"""
@@ -1653,6 +1664,18 @@ class Screw(ABC, BasePartObject):
 
     calculate_thread_length = default_thread_length
 
+    def default_shank_length(self) -> float:
+        """Return the unthreaded body length within the nominal screw length."""
+        return self.max_thread_length - self.thread_length
+
+    calculate_shank_length = default_shank_length
+
+    def default_thread_offset(self) -> float:
+        """Return the axial gap between the shank and the full-form thread."""
+        return 0
+
+    calculate_thread_offset = default_thread_offset
+
     def default_shank_profile(self) -> Face | None:
         """Return the radial profile of the unthreaded shank, if present."""
         if self.grip_length <= 0:
@@ -1782,7 +1805,12 @@ class Screw(ABC, BasePartObject):
                 f"Invalid thread length {self.thread_length} for screw body "
                 f"length {self.max_thread_length}"
             )
-        self.grip_length = self.max_thread_length - self.thread_length
+        self.grip_length = self.calculate_shank_length()
+        if self.grip_length < 0:
+            raise ValueError(f"Invalid shank length {self.grip_length} for screw body")
+        self.thread_offset = self.calculate_thread_offset()
+        if self.thread_offset < 0:
+            raise ValueError(f"Invalid thread offset {self.thread_offset}")
         head = self.make_head()
 
         if head is None:  # A fully custom screw
@@ -1794,7 +1822,7 @@ class Screw(ABC, BasePartObject):
             head_bb = head.bounding_box()
             self.head_height = head_bb.max.Z
             self.head_diameter = 2 * max(head_bb.max.X, head_bb.max.Y)
-            ends = ("fade", "raw")
+            ends = ("fade", "fade" if self.thread_offset > 0 else "raw")
             head = head.translate((0, 0, -self.length_offset()))
 
         thread = IsoThread(
@@ -1807,12 +1835,14 @@ class Screw(ABC, BasePartObject):
             simple=self.simple,
             # ).locate(Pos(Z=-self.length))
         )
+        thread_base = -length_offset - self.grip_length - self.thread_offset
+        thread_tip = thread_base - self.thread_length
         if not self.simple:
-            thread = thread.locate(Pos(Z=-self.length))
+            thread = thread.locate(Pos(Z=thread_tip))
         thread.label = "thread"
 
         thread_core = Solid.make_cylinder(
-            thread.min_radius, self.thread_length, Plane.XY.offset(-self.length)
+            thread.min_radius, self.thread_length, Plane.XY.offset(thread_tip)
         )
         shank_profile = self.shank_profile()
         unthreaded_shank = (
@@ -2927,6 +2957,184 @@ class SetScrew(Screw):
         return None
 
 
+class ShoulderScrew(Screw):
+    """Shoulder Screw
+
+    ISO 7379 defines metric hexagon socket head shoulder screws with a precision
+    cylindrical shoulder between the head and the threaded portion. The shoulder has
+    a controlled f9 diameter tolerance and provides an accurately located bearing or
+    guide surface, while the smaller threaded end retains the screw in the assembly.
+    The internal hexagon socket permits installation where clearance around the head
+    is limited.
+
+    Shoulder screws are commonly used as pivot pins, guide pins, axles, stops, and
+    bearing or linkage supports in machinery, fixtures, dies, and automation equipment.
+    Their close-tolerance shoulder can locate or support a moving component while still
+    allowing it to rotate or slide independently of the clamping force applied by the
+    threaded portion. Because the thread is smaller than the shoulder, the permissible
+    tightening torque is limited by the transition between these diameters rather than
+    solely by the screw's material property class.
+
+    Args:
+        size (str): thread size specification, e.g. "M6-1"
+        length (float): shoulder length measured from beneath the head to the start of
+            the threaded portion
+        fastener_type (Literal["iso7379"], optional): Defaults to "iso7379".
+            iso7379 - Hexagon socket head shoulder screws
+        hand (Literal["right","left"], optional): thread direction. Defaults to "right".
+        simple (bool, optional): simplify by not creating thread. Defaults to True.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment.
+            Defaults to None.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+    """
+
+    fastener_data = read_fastener_parameters_from_csv("shoulder_screw.csv")
+
+    def calculate_thread_length(self) -> float:
+        """Return the full-form thread length within the reduced end."""
+        return self.screw_data["b"] - self.screw_data["g2"]
+
+    def calculate_shank_length(self) -> float:
+        """Return the nominal shoulder length."""
+        return self.length
+
+    def calculate_thread_offset(self) -> float:
+        """Return the ISO 7379 recess length between shoulder and thread."""
+        return self.screw_data["g2"]
+
+    def min_hole_depth(self, counter_sunk: bool = True) -> float:
+        """Return the depth needed for the shoulder and reduced threaded end."""
+        head_offset = self.screw_data["k"] if counter_sunk else 0
+        return head_offset + self.length + self.screw_data["b"]
+
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        fastener_type: Literal["iso7379"] = "iso7379",
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+        if fastener_type not in self.types():
+            raise ValueError(f"{fastener_type} invalid, must be one of {self.types()}")
+        nominal_lengths = Screw.nominal_length_range[fastener_type]
+        size_data = evaluate_parameter_dict(
+            isolate_fastener_type(fastener_type, self.fastener_data).get(size, {})
+        )
+        if not size_data:
+            raise ValueError(
+                f"{size} invalid, must be one of {self.sizes(fastener_type)}"
+            )
+        valid_lengths = [
+            nominal_length
+            for nominal_length in nominal_lengths
+            if size_data.get("short", math.inf)
+            <= nominal_length
+            <= size_data.get("long", -math.inf)
+        ]
+        if length not in valid_lengths:
+            raise ValueError(
+                f"{length} invalid shoulder length for {size}; "
+                f"must be one of {valid_lengths}"
+            )
+        self.length = length
+        super().__init__(
+            size,
+            length,
+            fastener_type,
+            hand,
+            simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
+
+    def head_profile(self):
+        """Return the ISO 7379 head profile."""
+        dk, k = (self.screw_data[p] for p in ["dk", "k"])
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(dk / 2, k, align=Align.MIN)
+            fillet(
+                profile.vertices().group_by(Axis.Y)[-1].sort_by(Axis.X)[-1], k * 0.075
+            )
+        return profile.sketch.face()
+
+    head_recess = Screw.default_head_recess
+
+    def shank_profile(self) -> Face:
+        """Return the ISO 7379 shoulder profile."""
+        ds, dk, k, s, g1, g2, r1, r2, dg1, dg2 = (
+            self.screw_data[p]
+            for p in [
+                "ds",
+                "dk",
+                "k",
+                "s",
+                "g1",
+                "g2",
+                "r1",
+                "r2",
+                "dg1",
+                "dg2",
+            ]
+        )
+        d = self.thread_diameter
+        rs = 0.15 if s <= 10 else 0.2
+        with BuildSketch(Plane.XZ) as profile:
+            with BuildLine() as perimeter:
+                Polyline(
+                    (0, k),
+                    (dk / 2, k),
+                    (dk / 2, 0),
+                    (dg1 / 2, 0),
+                    (dg1 / 2, -g1),
+                    (ds / 2, -g1 - (ds - dg1) / 2),
+                    (ds / 2, -self.length),
+                    (dg2 / 2, -self.length),
+                    (dg2 / 2, -self.length - g2),
+                    (0, -self.length - g2),
+                    close=True,
+                )
+                fillet(perimeter.vertices().group_by(Axis.Y)[-2].sort_by(Axis.X)[0], r1)
+                fillet(perimeter.vertices().group_by(Axis.Y)[1].sort_by(Axis.X)[-1], rs)
+                fillet(perimeter.vertices().group_by(Axis.Y)[1].sort_by(Axis.X)[0], r2)
+            make_face()
+            split(bisect_by=Plane.XZ)
+        return profile.sketch.face()
+
+    def countersink_profile(self, fit: Literal["Close", "Normal", "Loose"]) -> Face:
+        """Return a cutter profile for an ISO 7379 shoulder screw."""
+        try:
+            clearance_hole_diameter = self.clearance_hole_diameters[fit]
+        except KeyError as e:
+            raise ValueError(
+                f"{fit} invalid, must be one of {list(self.clearance_hole_diameters.keys())}"
+            ) from e
+        k = self.screw_data["k"]
+
+        width = clearance_hole_diameter - self.thread_diameter + self.screw_data["dk"]
+
+        with BuildSketch(Plane.XZ) as profile:
+            Rectangle(width / 2, k, align=Align.MIN)
+        return profile.sketch.face()
+
+    def make_body_hole(
+        self, hole_radius: float, depth: float, head_offset: float = 0
+    ) -> Solid:
+        """Return a stepped cutter for the precision shoulder and threaded end."""
+        thread_hole = super().make_body_hole(hole_radius, depth, head_offset)
+        shoulder_hole = Solid.make_cylinder(
+            radius=self.screw_data["ds"] / 2,
+            height=min(head_offset + self.length, depth),
+            plane=Plane(Vector(0, 0, 0), z_dir=Vector(0, 0, -1)),
+        )
+        return shoulder_hole.fuse(thread_hole)
+
+
 class SocketHeadCapScrew(Screw):
     """Socket Head Cap Screw
 
@@ -3540,8 +3748,14 @@ def _make_fastener_hole(
                 f"{key} invalid, must be one of {list(hole_diameters.keys())}"
             ) from e
 
-    shank_hole = Solid.make_cylinder(
-        radius=hole_radius, height=depth, plane=Plane(origin, z_dir=bore_direction)
+    shank_hole = (
+        fastener.make_body_hole(hole_radius, depth, head_offset)
+        if isinstance(fastener, Screw)
+        else Solid.make_cylinder(
+            radius=hole_radius,
+            height=depth,
+            plane=Plane(origin, z_dir=bore_direction),
+        )
     )
     if counter_sunk and not countersink_profile is None:
         fastener_hole = countersink_cutter.fuse(shank_hole)
@@ -3800,13 +4014,10 @@ class ThreadedHole(BasePartObject):
                     f"countersink depth of {head_depth}"
                 )
 
-            cutter_solids = [
-                Solid.make_cylinder(
-                    radius=core_diameter / 2,
-                    height=self.hole_depth,
-                    plane=Plane.XY.offset(-self.hole_depth),
-                )
-            ]
+            body_hole = fastener.make_body_hole(
+                core_diameter / 2, self.hole_depth, head_depth
+            )
+            cutter_solids = body_hole.solids()
 
             if counter_sunk and head_profile is not None:
                 head_cutter = Solid.revolve(

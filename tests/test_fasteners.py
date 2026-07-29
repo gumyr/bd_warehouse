@@ -27,6 +27,7 @@ license:
 """
 
 import io
+import math
 import random
 
 import pytest
@@ -50,6 +51,7 @@ from bd_warehouse.fastener import (
     RaisedCounterSunkOvalHeadScrew,
     Screw,
     SetScrew,
+    ShoulderScrew,
     SocketHeadCapScrew,
     SquareNut,
     TapHole,
@@ -57,7 +59,7 @@ from bd_warehouse.fastener import (
     UnchamferedHexagonNut,
     Washer,
 )
-from build123d import IN, Align, Axis, Box, BuildPart, Compound, Locations
+from build123d import IN, Align, Axis, Box, BuildPart, Compound, Locations, Plane
 
 
 def test_csv_reading_uses_explicit_utf8_encoding():
@@ -309,6 +311,42 @@ def test_non_iso4762_screw_remains_fully_threaded():
     assert screw.thread_length == pytest.approx(screw.max_thread_length)
     assert screw.grip_length == pytest.approx(0)
     assert screw.shank_profile() is None
+
+
+def test_iso7379_shoulder_and_thread_lengths():
+    """ISO 7379 thread length b extends beyond the nominal shoulder length."""
+    screw = ShoulderScrew("M6-1", 12)
+
+    assert screw.grip_length == pytest.approx(12)
+    assert screw.thread_offset == pytest.approx(2.5)
+    assert screw.thread_length == pytest.approx(8.5)
+    assert screw.bounding_box().min.Z == pytest.approx(-23)
+
+
+def test_iso7379_body_hole_has_shoulder_bore():
+    """Shoulder screws cut a precision shoulder bore above the thread hole."""
+    screw = ShoulderScrew("M6-1", 12)
+    head_offset = screw.screw_data["k"]
+    body_hole = screw.make_body_hole(
+        screw.clearance_hole_diameters["Normal"] / 2, 30, head_offset
+    )
+
+    thread_hole_diameter = screw.clearance_hole_diameters["Normal"]
+    shoulder_bore_depth = head_offset + screw.length
+    expected_volume = math.pi * (
+        (screw.screw_data["ds"] / 2) ** 2 * shoulder_bore_depth
+        + (thread_hole_diameter / 2) ** 2 * (30 - shoulder_bore_depth)
+    )
+    assert body_hole.bounding_box().size.X == pytest.approx(8)
+    assert body_hole.volume == pytest.approx(expected_volume)
+
+
+def test_iso7379_min_hole_depth_includes_threaded_end():
+    """Shoulder-screw hole depth includes the head, shoulder, and length b."""
+    screw = ShoulderScrew("M6-1", 12)
+
+    assert screw.min_hole_depth(counter_sunk=True) == pytest.approx(28.5)
+    assert screw.min_hole_depth(counter_sunk=False) == pytest.approx(23)
 
 
 @pytest.mark.parametrize(
