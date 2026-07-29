@@ -196,8 +196,6 @@ class SpurGearPlan(BaseSketchObject):
         self.base_radius = gear_tooth.base_radius
         self.addendum_radius = gear_tooth.addendum_radius
         self.root_radius = gear_tooth.root_radius
-        if self.base_radius < self.root_radius:
-            raise ValueError("Invalid configuration, try changing the pressure angle")
         gear_teeth = PolarLocations(0, tooth_count) * gear_tooth
         gear_wire = Wire([e for tooth in gear_teeth for e in tooth.edges()])
         gear_face = Face(gear_wire)

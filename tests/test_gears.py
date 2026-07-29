@@ -54,21 +54,14 @@ def test_spur_gear_plan():
     assert spur_gear_plan.face().normal_at() == pytest.approx(Vector(0, 0, 1), abs=1e-5)
 
 
-def test_invalid_spur_gear():
+def test_invalid_spur_gear_root_fillet():
     # Too large root fillet
     with pytest.raises(Exception):
-        spur_gear_plan = SpurGearPlan(
+        SpurGearPlan(
             module=1,
             tooth_count=100,
             pressure_angle=14.5,
             root_fillet=0.5,
-        )
-    # Too many teeth for pressure angle
-    with pytest.raises(Exception):
-        spur_gear_plan = SpurGearPlan(
-            module=1,
-            tooth_count=100,
-            pressure_angle=14.5,
         )
 
 
@@ -91,16 +84,19 @@ def test_spur_gear():
 
 
 def test_normal_module_helical_gear():
+    """Match McMaster-Carr 3598N299 catalogue pitch and outside diameters."""
     gear = HelicalGear(
         module=1,
-        tooth_count=13,
+        tooth_count=30,
         pressure_angle=20,
         helix_angle=45,
         thickness=10,
         module_system="normal",
     )
 
-    assert 2 * gear.pitch_radius == pytest.approx(18.3847763)
+    assert gear.base_radius < gear.root_radius
+    assert 2 * gear.pitch_radius == pytest.approx(42.4264069)
+    assert 2 * gear.addendum_radius == pytest.approx(44.4264069)
     assert gear.addendum_radius - gear.pitch_radius == pytest.approx(1)
     assert gear.normal_module == pytest.approx(1)
     assert gear.transverse_module == pytest.approx(2**0.5)
