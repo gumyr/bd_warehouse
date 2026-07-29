@@ -26,8 +26,10 @@ license:
 
 """
 
+import math
+
 import pytest
-from bd_warehouse.gear import SpurGear, SpurGearPlan
+from bd_warehouse.gear import HelicalGear, SpurGear, SpurGearPlan
 from build123d import Edge, GeomType, Vector
 
 
@@ -86,6 +88,47 @@ def test_spur_gear():
     assert bbox.size == pytest.approx(
         Vector(2 * addendum_radius, 2 * addendum_radius, thickness), abs=1e-5
     )
+
+
+def test_normal_module_helical_gear():
+    gear = HelicalGear(
+        module=1,
+        tooth_count=13,
+        pressure_angle=20,
+        helix_angle=45,
+        thickness=10,
+        module_system="normal",
+    )
+
+    assert 2 * gear.pitch_radius == pytest.approx(18.3847763)
+    assert gear.addendum_radius - gear.pitch_radius == pytest.approx(1)
+    assert gear.normal_module == pytest.approx(1)
+    assert gear.transverse_module == pytest.approx(2**0.5)
+
+
+def test_transverse_module_helical_gear():
+    gear = HelicalGear(
+        module=1,
+        tooth_count=20,
+        pressure_angle=20,
+        helix_angle=21.5,
+        thickness=8,
+        module_system="transverse",
+    )
+
+    assert 2 * gear.pitch_radius == pytest.approx(20)
+    assert 2 * gear.addendum_radius == pytest.approx(22)
+    assert gear.transverse_module == pytest.approx(1)
+
+
+def test_zero_angle_helical_gear_matches_spur_gear():
+    helical = HelicalGear(2, 12, 20, 0, 5)
+    spur = SpurGear(2, 12, 20, 5)
+
+    assert helical.twist_angle == pytest.approx(0)
+    assert math.isinf(helical.lead)
+    assert helical.volume == pytest.approx(spur.volume)
+    assert helical.bounding_box().size == pytest.approx(spur.bounding_box().size)
 
 
 if __name__ == "__main__":

@@ -1,30 +1,32 @@
 """
 
-Gears - parametric, involute gears of all types
+Gears - parametric involute spur and helical gears
 
 name: gear.py
 by:   Gumyr
 date: July 14nd 2024
 
-This module can be used to create a wide variety of involute spur gears,
-either standard ISO (metric) or fully custom.  Involute gears have
-the property of continually meshing at a specific angle (the pressure angle)
-thus avoiding the stutter of non-involute gears as the teeth lose
-contact with each other. Imagine a telescope mount: involute gears would
-allow the telescope to smoothly follow a star as it moves across the night
-sky, while non-involute gears would introduce a shake that would blur the
-image of a long exposure.
+This module can be used to create a wide variety of metric-module involute spur
+and helical gears, either standard ISO profiles or fully custom. ``SpurGear`` creates
+straight teeth parallel to the gear axis, while ``HelicalGear`` creates twisted
+teeth and supports both normal- and transverse-module specifications. Involute
+gears have the property of continually meshing at a specific angle (the pressure
+angle), thus avoiding the stutter of non-involute gears as the teeth lose contact
+with each other. Imagine a telescope mount: involute gears would allow the
+telescope to smoothly follow a star as it moves across the night sky, while
+non-involute gears would introduce a shake that would blur the image of a long
+exposure.
 
 Gears are art pieces unless they mesh with each other. To ensure two
 gears can mesh, follow these guidelines:
-    - Meshing gears need the same tooth shape and size, so use a common
-      module (for metric gears) or diametral pitch value (for imperial gears).
-      For fully custom gears, the base, pitch and outer radii will all
-      need to be calculated appropriately.
+    - Meshing gears need the same tooth shape and size, so use a common module
+      and pressure angle. For fully custom gears, the base, pitch and outer
+      radii will all need to be calculated appropriately.
     - When positioning two gears to mesh, they need to be separated by the
-      sum of their pitch radii. For ISO metric gears this is very easy to
-      do - simply multiply the gear module by the sum of the tooth count and
-      divide by two (in mm), or: separation = module*(n0 + n1)/2 [mm]
+      sum of their pitch radii. For spur gears and transverse-module helical
+      gears, this is ``module * (n0 + n1) / 2``. For normal-module helical
+      gears, the transverse pitch radii calculated by ``HelicalGear`` should be
+      used.
 
 license:
 
@@ -43,10 +45,12 @@ license:
     limitations under the License.
 """
 
-from math import sin, cos, tan, acos, radians, degrees
-from typing import Optional, Union
+from math import sin, cos, tan, acos, atan, radians, degrees, pi, inf
+from typing import Literal
 from build123d import *
 from OCP.StdFail import StdFail_NotDone
+from bd_materials.materials.metals import alloy_steel, AlloySteel
+from bd_materials.finishes import black_oxide
 
 
 class InvoluteToothProfile(BaseLineObject):
@@ -78,9 +82,9 @@ class InvoluteToothProfile(BaseLineObject):
         module: float,
         tooth_count: int,
         pressure_angle: float,
-        root_fillet: Optional[float] = None,
-        addendum: Optional[float] = None,
-        dedendum: Optional[float] = None,
+        root_fillet: float | None = None,
+        addendum: float | None = None,
+        dedendum: float | None = None,
         closed: bool = False,
         mode: Mode = Mode.ADD,
     ):
@@ -108,13 +112,10 @@ class InvoluteToothProfile(BaseLineObject):
 
         with BuildLine() as tooth:
             rotated_pnts = [
-                Vector(*point).rotate(Axis.Z, -half_pitch_angle)
-                for point in pnts
+                Vector(*point).rotate(Axis.Z, -half_pitch_angle) for point in pnts
             ]
             l1 = Spline(*rotated_pnts)
-            root_flank = Vector(self.root_radius, 0).rotate(
-                Axis.Z, -half_pitch_angle
-            )
+            root_flank = Vector(self.root_radius, 0).rotate(Axis.Z, -half_pitch_angle)
             l2 = Line(rotated_pnts[0], root_flank)
             root = RadiusArc(
                 l2 @ 1,
@@ -169,8 +170,8 @@ class SpurGearPlan(BaseSketchObject):
             the bottom of the gear tooth space. It defines the depth of the space
             between gear teeth below the pitch circle. Defaults to None (calculated).
         closed (bool, optional): create a closed wire. Defaults to False.
-        align (Union[None, Align, tuple[Align, Align]], optional): align min, center,
-            or max of object. Defaults to (Align.CENTER, Align.CENTER).
+        align (Align | tuple[Align, Align], optional): align min, center, or max
+            of object. Defaults to (Align.CENTER, Align.CENTER).
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
@@ -181,11 +182,11 @@ class SpurGearPlan(BaseSketchObject):
         module: float,
         tooth_count: int,
         pressure_angle: float,
-        root_fillet: Optional[float] = None,
-        addendum: Optional[float] = None,
-        dedendum: Optional[float] = None,
+        root_fillet: float | None = None,
+        addendum: float | None = None,
+        dedendum: float | None = None,
         rotation: float = 0,
-        align: Union[Align, tuple[Align, Align]] = (Align.CENTER, Align.CENTER),
+        align: Align | tuple[Align, Align] = (Align.CENTER, Align.CENTER),
         mode: Mode = Mode.ADD,
     ):
         gear_tooth = InvoluteToothProfile(
@@ -225,7 +226,7 @@ class SpurGear(BasePartObject):
             the bottom of the gear tooth space. It defines the depth of the space
             between gear teeth below the pitch circle. Defaults to None (calculated).
         closed (bool, optional): create a closed wire. Defaults to False.
-        align (Union[None, Align, tuple[Align, Align, Align]], optional): align min,
+        align (Align | tuple[Align, Align, Align] | None, optional): align min,
             center, or max of object. Defaults to Align.CENTER.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
@@ -238,11 +239,11 @@ class SpurGear(BasePartObject):
         tooth_count: int,
         pressure_angle: float,
         thickness: float,
-        root_fillet: Optional[float] = None,
-        addendum: Optional[float] = None,
-        dedendum: Optional[float] = None,
+        root_fillet: float | None = None,
+        addendum: float | None = None,
+        dedendum: float | None = None,
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = Align.CENTER,
+        align: Align | tuple[Align, Align, Align] | None = Align.CENTER,
         mode: Mode = Mode.ADD,
     ):
         gear_plan = SpurGearPlan(
@@ -258,12 +259,147 @@ class SpurGear(BasePartObject):
             align,
             mode,
         )
+        self.material = alloy_steel(
+            grade=AlloySteel.G4140_QUENCHED_TEMPERED, finish=black_oxide()
+        )
+
+
+class HelicalGear(BasePartObject):
+    """A cylindrical involute gear with helical teeth.
+
+    Helical-gear module and pressure angle can be specified in either of two
+    measurement planes:
+
+    * ``"normal"`` means the plane perpendicular (normal) to the direction of a
+      tooth helix. Here, "normal" is a geometric term and does not mean ordinary
+      or default. Normal-system dimensions correspond to the rack or cutting-tool
+      profile commonly used to manufacture the gear.
+    * ``"transverse"`` means the plane perpendicular to the gear axis, equivalent
+      to looking directly at the circular end of the gear. The transverse module
+      determines pitch diameter directly: ``pitch_diameter = module * tooth_count``.
+
+    For a helix angle ``β``, the modules are related by
+    ``transverse_module = normal_module / cos(β)``. The pressure angle is also
+    converted between the selected normal or transverse plane. Catalogue gears may
+    use either convention, so ``module_system`` should match the convention used by
+    the source dimensions.
+
+    A positive helix angle produces a positive rotation about the Z axis through
+    the gear thickness; a negative angle produces the opposite hand.
+
+    Args:
+        module (float): normal or transverse module, as selected by
+            ``module_system``.
+        tooth_count (int): number of teeth.
+        pressure_angle (float): normal or transverse pressure angle, as selected
+            by ``module_system``.
+        helix_angle (float): signed helix angle in degrees.
+        thickness (float): gear face width.
+        module_system (Literal["normal", "transverse"], optional): measurement
+            plane for both ``module`` and ``pressure_angle``. ``"normal"`` is
+            perpendicular to the tooth helix; ``"transverse"`` is perpendicular
+            to the gear axis. Defaults to "normal".
+        root_fillet (float, optional): radius of the tooth-root fillet.
+        addendum (float, optional): radial addendum. When omitted, the module in
+            the selected reference system is used.
+        dedendum (float, optional): radial dedendum. When omitted, 1.25 times the
+            module in the selected reference system is used.
+        rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
+        align (Align | tuple[Align, Align, Align] | None, optional): object
+            alignment. Defaults to Align.CENTER.
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        module: float,
+        tooth_count: int,
+        pressure_angle: float,
+        helix_angle: float,
+        thickness: float,
+        module_system: Literal["normal", "transverse"] = "normal",
+        root_fillet: float | None = None,
+        addendum: float | None = None,
+        dedendum: float | None = None,
+        rotation: RotationLike = (0, 0, 0),
+        align: Align | tuple[Align, Align, Align] | None = Align.CENTER,
+        mode: Mode = Mode.ADD,
+    ):
+        if module <= 0:
+            raise ValueError("module must be greater than zero")
+        if tooth_count <= 0:
+            raise ValueError("tooth_count must be greater than zero")
+        if thickness <= 0:
+            raise ValueError("thickness must be greater than zero")
+        if not 0 <= pressure_angle < 90:
+            raise ValueError("pressure_angle must be in the range [0, 90)")
+        if not -90 < helix_angle < 90:
+            raise ValueError("helix_angle must be in the range (-90, 90)")
+        if module_system not in ("normal", "transverse"):
+            raise ValueError("module_system must be either 'normal' or 'transverse'")
+
+        beta = radians(helix_angle)
+        reference_addendum = module if addendum is None else addendum
+        reference_dedendum = 1.25 * module if dedendum is None else dedendum
+
+        if module_system == "normal":
+            self.normal_module = module
+            self.transverse_module = module / cos(beta)
+            self.normal_pressure_angle = pressure_angle
+            self.transverse_pressure_angle = degrees(
+                atan(tan(radians(pressure_angle)) / cos(beta))
+            )
+        else:
+            self.transverse_module = module
+            self.normal_module = module * cos(beta)
+            self.transverse_pressure_angle = pressure_angle
+            self.normal_pressure_angle = degrees(
+                atan(tan(radians(pressure_angle)) * cos(beta))
+            )
+
+        gear_plan = SpurGearPlan(
+            module=self.transverse_module,
+            tooth_count=tooth_count,
+            pressure_angle=self.transverse_pressure_angle,
+            root_fillet=root_fillet,
+            addendum=reference_addendum,
+            dedendum=reference_dedendum,
+        )
+        self.module = module
+        self.module_system = module_system
+        self.tooth_count = tooth_count
+        self.pressure_angle = pressure_angle
+        self.helix_angle = helix_angle
+        self.thickness = thickness
+        self.pitch_radius = gear_plan.pitch_radius
+        self.base_radius = gear_plan.base_radius
+        self.addendum_radius = gear_plan.addendum_radius
+        self.root_radius = gear_plan.root_radius
+        self.twist_angle = degrees(thickness * tan(beta) / self.pitch_radius)
+        self.lead = (
+            2 * pi * self.pitch_radius / abs(tan(beta)) if helix_angle != 0 else inf
+        )
+
+        gear = (
+            extrude(gear_plan, amount=thickness)
+            if helix_angle == 0
+            else Solid.extrude_linear_with_rotation(
+                section=gear_plan.face(),
+                center=(0, 0, 0),
+                normal=(0, 0, thickness),
+                angle=self.twist_angle,
+            )
+        )
+        gear.material = alloy_steel(
+            grade=AlloySteel.G4140_QUENCHED_TEMPERED, finish=black_oxide()
+        )
+        super().__init__(gear, rotation, align, mode)
 
 
 if __name__ == "__main__":
-    # from ocp_vscode import show, set_defaults, Camera
-
-    # set_defaults(reset_camera=Camera.CENTER)
+    from ocp_vscode import show
 
     gear_tooth = InvoluteToothProfile(
         module=2,
@@ -286,4 +422,8 @@ if __name__ == "__main__":
         root_fillet=0.5 * MM,
         thickness=5 * MM,
     )
-    # show(pack([gear_tooth, gear_profile, spur_gear], 5))
+
+    helical_gear = HelicalGear(
+        module=2, tooth_count=13, pressure_angle=20, helix_angle=45, thickness=10 * MM
+    )
+    show(pack([gear_tooth, gear_profile, spur_gear, helical_gear], 5))
