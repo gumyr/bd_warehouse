@@ -1121,6 +1121,9 @@ class RouterSpindleMount(BasePartObject):
             RigidJoint(f"top_{label}", self, -pos)
         for label, pos in zip(["a", "b", "c", "d"], top_mount_centers):
             RigidJoint(f"bottom_{label}", self, pos * Pos(0, 0, -thickness))
+        RigidJoint(
+            "back_mount", self, self.faces().sort_by(Axis.Y)[0].location_at(0.5, 0.5)
+        )
 
 
 class ShimWasher(BasePartObject):
