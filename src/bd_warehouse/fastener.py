@@ -100,7 +100,7 @@ from build123d.topology import (
     Wire,
 )
 from bd_materials.materials.metals import mild_steel
-from bd_materials.finishes import zinc_plate
+from bd_materials.finishes import zinc_plate, black_oxide
 
 # ISO standards use single variable dimension labels which are used extensively
 # pylint: disable=invalid-name
@@ -3261,6 +3261,7 @@ class LowProfileScrew(Screw):
             align=align,
             mode=mode,
         )
+        self.material = mild_steel(finish=[zinc_plate(), black_oxide()])
 
     def head_profile(self):
         """Low Profile Screws"""
