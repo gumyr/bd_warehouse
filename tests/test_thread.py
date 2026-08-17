@@ -55,6 +55,19 @@ class TestThread(unittest.TestCase):
                 end_finishes=("not", "supported"),
             )
 
+    def test_long_trapezoidal_thread_does_not_recurse(self):
+        """A CNC-length detailed thread should not recurse while copying joints."""
+        thread = TrapezoidalThread(
+            7.8 * MM,
+            2 * MM,
+            30,
+            2400,
+            starts=4,
+            end_finishes=("chamfer", "chamfer"),
+        )
+
+        self.assertTrue(thread.is_valid)
+
 
 class TestIsoThread(unittest.TestCase):
     end_finishes = ["raw", "fade", "square", "chamfer"]

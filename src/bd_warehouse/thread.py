@@ -209,8 +209,12 @@ class Thread(BasePartObject):
                 last_loop.label = "partial"
                 loops.append(last_loop)
             loops[0].locate(Location((0, 0, cylindrical_thread_displacement)))
+            # Connect each loop temporarily to position it, then remove the
+            # connection before boolean operations. Keeping the full chain
+            # connected makes deepcopy recurse through every loop.
             for i in range(1, len(loops)):
                 loops[i - 1].joints["1"].connect_to(loops[i].joints["0"])
+                loops[i - 1].joints["1"].connected_to = None
 
             bd_object = Compound(label="thread", children=loops)
 
@@ -222,7 +226,6 @@ class Thread(BasePartObject):
             if end_finishes[0] == "fade":
                 start_tip = self._make_fade_end(True)
                 start_tip.label = "bottom_tip"
-                loops[0].joints["0"].connect_to(start_tip.joints["0"])
                 bd_object.children = list(bd_object.children) + [start_tip]
             elif end_finishes[0] in ["square", "chamfer"]:
                 children = list(bd_object.children)
@@ -241,7 +244,6 @@ class Thread(BasePartObject):
             if end_finishes[1] == "fade":
                 end_tip = self._make_fade_end(False)
                 end_tip.label = "top_tip"
-                loops[-1].joints["1"].connect_to(end_tip.joints["1"])
                 bd_object.children = list(bd_object.children) + [end_tip]
             elif end_finishes[1] in ["square", "chamfer"]:
                 children = list(bd_object.children)
@@ -278,6 +280,21 @@ class Thread(BasePartObject):
                     if last_square:
                         break
                 bd_object.children = children + top_loops
+
+            # Locate the final loop objects in axial order so fade tips can be
+            # positioned without retaining a link to the long loop chain.
+            final_loops = [
+                child
+                for child in bd_object.children
+                if child.label in ("loop", "partial")
+            ]
+            final_loops.sort(key=lambda loop: loop.bounding_box().min.Z)
+            if end_finishes[0] == "fade":
+                final_loops[0].joints["0"].connect_to(start_tip.joints["0"])
+                final_loops[0].joints["0"].connected_to = None
+            if end_finishes[1] == "fade":
+                final_loops[-1].joints["1"].connect_to(end_tip.joints["1"])
+                final_loops[-1].joints["1"].connected_to = None
 
             super().__init__(
                 part=bd_object,
