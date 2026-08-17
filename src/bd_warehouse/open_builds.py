@@ -31,10 +31,9 @@ import copy
 import math
 from build123d import *
 from build123d import tuplify
-from typing import Union, Literal
+from typing import Literal
 from bd_warehouse.bearing import SingleRowCappedDeepGrooveBallBearing
 from bd_warehouse.fastener import (
-    ClearanceHole,
     HexNut,
     LowProfileScrew,
     SetScrew,
@@ -78,7 +77,7 @@ class AcmeAntiBacklashNutBlock8mm(BasePartObject):
 
     Args:
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
     """
@@ -88,7 +87,7 @@ class AcmeAntiBacklashNutBlock8mm(BasePartObject):
     def __init__(
         self,
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        align: None | Align | tuple[Align, Align, Align] = None,
         mode: Mode = Mode.ADD,
     ):
 
@@ -129,6 +128,7 @@ class AcmeAntiBacklashNutBlock8mm(BasePartObject):
         for label, loc in zip(["nut_a", "nut_b"], mounts):
             RigidJoint(label, self, loc * Location((0, 0, -6), (0, 0, 1), 30))
         RigidJoint("screw", self, screw_hole.locations[0])
+        RigidJoint("bottom", self, Pos(Z=-6))
 
 
 class AcmeAntiBacklashNutBlock8mmAssembly(Compound):
@@ -152,13 +152,13 @@ class AcmeAntiBacklashNutBlock8mmAssembly(Compound):
         nut0 = HexNut("M5-0.8")
         nut1 = copy.copy(nut0)
         acme_nut = Rot(Z=-90) * AcmeAntiBacklashNutBlock8mm()
+        acme_nut.joints["nut_a"].connect_to(nut0.joints["a"])
+        acme_nut.joints["nut_b"].connect_to(nut1.joints["a"])
+        acme_nut.joints["screw"].connect_to(screw.joints["a"])
         s0 = AluminumSpacer("6mm")
         s1 = copy.copy(s0)
         acme_nut.joints["a"].connect_to(s0.joints["a"])
         acme_nut.joints["b"].connect_to(s1.joints["a"])
-        acme_nut.joints["nut_a"].connect_to(nut0.joints["a"])
-        acme_nut.joints["nut_b"].connect_to(nut1.joints["a"])
-        acme_nut.joints["screw"].connect_to(screw.joints["a"])
 
         self.children = [acme_nut, s0, s1, nut0, nut1, screw]
         self.label = "AcmeAntiBacklashNutBlock8mmAssembly"
@@ -187,7 +187,7 @@ class AluminumSpacer(BasePartObject):
         length (Literal['3mm', '1/8in', '6mm', '1/4in', '9mm', '10mm', '13.2mm', '20mm', '35mm', '1-1/2in', '40mm']):
             valid lengths
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
 
@@ -213,7 +213,7 @@ class AluminumSpacer(BasePartObject):
             "40mm",
         ],
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        align: None | Align | tuple[Align, Align, Align] = None,
         mode: Mode = Mode.ADD,
     ):
 
@@ -246,9 +246,249 @@ class AluminumSpacer(BasePartObject):
         super().__init__(spacer.part, rotation=rotation, align=align, mode=mode)
         self.material = metals.aluminum()
         self.label = f"AluminumSpacer-{length}"
+        # "a" and "b" are the bottom and top mounting faces, respectively.
         RigidJoint("a", self, Location())
         RigidJoint("b", self, Pos(Z=spacer_length))
+        # "center" is the top-face mounting/rotation axis used by wheel assemblies;
+        # it is not the geometric midpoint of the spacer.
         RigidJoint("center", self, Pos(Z=spacer_length))
+
+
+class CBeamAssembly(Compound):
+    """Assembly: OpenBuilds C-Beam Linear Actuator Assembly
+
+    Complete C-Beam linear actuator assembly consisting of a C-Beam rail, lead screw,
+    motorized end assembly, and optional end plate and XLarge C-Beam gantry.
+
+    Product Features:
+        - Combines linear motion and structural framing components
+        - Supports an optional adjustable gantry position
+        - Provides a linear joint for positioning along the lead screw axis
+        - Includes mounting joints for the rear, front, and cross-front rail faces
+
+    Product Specifications:
+        - C-Beam Linear Rail
+        - Metric Tr8*8-2p lead screw
+        - Optional XLarge C-Beam Gantry
+        - Optional C-Beam End Mount and bearing
+
+    Args:
+        rail_length (float): length of the C-Beam rail
+        gantry_position (float, optional): position of the gantry along the rail.
+            Defaults to None.
+        screw_length (float, optional): lead screw length. If omitted, the length is
+            calculated from the end assemblies when possible. Defaults to None.
+        end_plate (bool, optional): include the additional C-Beam end plate and bearing.
+            Defaults to True.
+        simple (bool, optional): use a simplified lead screw representation. Defaults to True.
+    """
+
+    def __init__(
+        self,
+        rail_length: float,
+        gantry_position: float | None = None,
+        screw_length: float | None = None,
+        end_plate: bool = True,
+        simple: bool = True,
+    ):
+        super().__init__()
+
+        rail = Rot(X=-90) * CBeamLinearRail(length=rail_length)
+        end_assembly = CBeamEndAssembly()
+        components = [rail, end_assembly]
+        if end_plate:
+            end_plate = Pos(Y=rail_length) * (
+                Rot(X=-90, Z=-90) * CBeamEndMount(align=Align.NONE)
+            )
+            bearing = SingleRowCappedDeepGrooveBallBearing(size="M8-16-5")
+            end_plate.joints["bearing"].connect_to(bearing.joints["b"])
+            lm5s = [s := LowProfileScrew("M5-0.8", 25 * MM)] + [
+                copy.copy(s) for _ in range(3)
+            ]
+            for i in range(4):
+                end_plate.joints[f"screw-{i}"].connect_to(lm5s[i].joints["a"])
+            if screw_length is None:
+                screw_length = (
+                    end_plate.joints["bearing"].location.position.Y
+                    - end_assembly.joints["screw"].location.position.Y
+                )
+            components.extend([end_plate, bearing] + lm5s)
+        elif screw_length is None:
+            screw_length = rail_length
+
+        screw = MetricLeadScrew(screw_length, simple=simple)
+        end_assembly.joints["screw"].connect_to(screw.joints["axis"])
+        components.append(screw)
+
+        if gantry_position is not None:
+            gantry = XLargeCBeamGantry(6)
+            rail.joints["screw_axis"].connect_to(
+                gantry.joints["nut"], position=gantry_position
+            )
+            components.append(gantry)
+
+        self.children = components
+        if gantry_position is not None:
+            gantry_top_center = (
+                gantry.faces().sort_by(Axis.X)[-1].without_holes().center()
+            )
+            RigidJoint(
+                "gantry_center",
+                self,
+                Location(Plane(gantry_top_center, x_dir=(0, 1, 0), z_dir=(1, 0, 0))),
+            )
+        rail_bbox = rail.bounding_box()
+        RigidJoint(
+            "rail_back",
+            self,
+            Location(
+                Plane(
+                    (rail_bbox.min.X, rail_length / 2, 0),
+                    x_dir=(0, 1, 0),
+                    z_dir=(1, 0, 0),
+                )
+            ),
+        )
+        RigidJoint(
+            "rail_front",
+            self,
+            Location(
+                Plane(
+                    (rail_bbox.max.X, rail_length / 2, 0),
+                    x_dir=(0, 1, 0),
+                    z_dir=(-1, 0, 0),
+                )
+            ),
+        )
+        RigidJoint(
+            "rail_cross_front",
+            self,
+            Location(
+                Plane(
+                    (rail_bbox.max.X, rail_length / 2, 0),
+                    x_dir=(0, 0, -1),
+                    z_dir=(1, 0, 0),
+                )
+            ),
+        )
+        LinearJoint(
+            "screw_axis",
+            self,
+            Axis(rail.joints["screw_axis"].location.position, (0, 1, 0)),
+            linear_range=(0, rail_length),
+        )
+        self.label = "CBeam Assembly"
+
+
+class CBeamCapped(Compound):
+    """Assembly: OpenBuilds C-Beam Capped Linear Rail
+
+    C-Beam Linear Rail assembly with a C-Beam End Mount and bearing at each end. The
+    end mounts are secured with M5 low-profile screws and provide end support for a
+    separately modeled lead screw.
+
+    Product Features:
+        - End-mounted bearings for lead screw support
+        - Capped ends for a compact C-Beam assembly
+        - Rigid joints for the top and bottom rail centers
+
+    Product Specifications:
+        - C-Beam Linear Rail
+        - Two C-Beam End Mounts
+        - Two M8-16-5 capped deep-groove ball bearings
+        - Eight M5 low-profile screws
+
+    The bearings provide end support for a separately modeled lead screw; this
+    assembly does not include the lead screw itself.
+
+    Args:
+        length (float): length of the C-Beam rail
+    """
+
+    def __init__(
+        self,
+        length: float,
+    ):
+        lm5s = [s := LowProfileScrew("M5-0.8", 25 * MM)] + [
+            copy.copy(s) for _ in range(7)
+        ]
+        rail = Rot(X=-90) * CBeamLinearRail(length=length)
+        bearings = [
+            b := SingleRowCappedDeepGrooveBallBearing(size="M8-16-5"),
+            copy.copy(b),
+        ]
+        end_plates = [
+            Pos(Y=l) * (Rot(X=a, Z=-90) * CBeamEndMount(align=Align.NONE))
+            for a, l in ((-90, length), (90, 0))
+        ]
+        for i in range(2):
+            for j in range(4):
+                end_plates[i].joints[f"screw-{j}"].connect_to(
+                    lm5s[i * 4 + j].joints["a"]
+                )
+            end_plates[i].joints["bearing"].connect_to(bearings[i].joints["b"])
+
+        super().__init__()
+        self.children = [rail] + end_plates + bearings + lm5s
+        self.label = "CBeamCapped"
+        RigidJoint(
+            "bottom_center",
+            self,
+            Location(Plane((-20, length / 2, 0), x_dir=(0, 1, 0), z_dir=(1, 0, 0))),
+        )
+        RigidJoint(
+            "top_center",
+            self,
+            Location(Plane((20, length / 2, 0), x_dir=(0, 0, 1), z_dir=(1, 0, 0))),
+        )
+
+
+class CBeamEndAssembly(Compound):
+    """Assembly: OpenBuilds C-Beam End Assembly
+
+    Motorized end assembly for driving an OpenBuilds C-Beam lead screw. The assembly
+    combines a C-Beam End Mount, NEMA 23 stepper motor, flexible coupler, bearing,
+    mounting spacers, and the required fasteners.
+
+    Product Features:
+        - Supports and drives a C-Beam lead screw
+        - Includes motor mounting spacers for alignment
+        - Provides a rigid joint at the coupler's lead screw connection
+
+    Product Specifications:
+        - NEMA 23 stepper motor
+        - 8mm flexible coupler
+        - M8-16-5 capped deep-groove ball bearing
+        - Two 40mm aluminum spacers
+        - Four M5 low-profile screws
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        lm5s = [s := LowProfileScrew("M5-0.8", 25 * MM)] + [
+            copy.copy(s) for _ in range(3)
+        ]
+        end_plate = Rot(X=90, Z=-90) * CBeamEndMount(align=Align.NONE)
+        for i in range(4):
+            end_plate.joints[f"screw-{i}"].connect_to(lm5s[i].joints["a"])
+        bearing = SingleRowCappedDeepGrooveBallBearing(size="M8-16-5")
+        end_plate.joints["bearing"].connect_to(bearing.joints["b"])
+        stand_off = AluminumSpacer("40mm")
+        stand_offs: list[AluminumSpacer] = []
+        for i in range(2):
+            s = copy.copy(stand_off)
+            end_plate.joints[f"motor_mount-{i}"].connect_to(s.joints["a"])
+            stand_offs.append(s)
+
+        motor = StepperMotor("Nema23")
+        stand_offs[0].joints["b"].connect_to(motor.joints["c"])
+        stand_offs[1].joints["b"].connect_to(motor.joints["d"])
+        coupler = FlexibleCoupler("8mm")
+        motor.joints["shaft"].connect_to(coupler.joints["a"])
+        self.children = [end_plate, motor, coupler, bearing] + stand_offs + lm5s
+        self.label = "CBeam End Assembly"
+        RigidJoint("screw", self, -coupler.joints["b"].location)
 
 
 class CBeamEndMount(BasePartObject):
@@ -266,7 +506,7 @@ class CBeamEndMount(BasePartObject):
 
     Args:
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
     """
@@ -276,7 +516,7 @@ class CBeamEndMount(BasePartObject):
     def __init__(
         self,
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = (
+        align: None | Align | tuple[Align, Align, Align] = (
             Align.CENTER,
             Align.CENTER,
             Align.MIN,
@@ -292,10 +532,10 @@ class CBeamEndMount(BasePartObject):
                 with GridLocations(47.14, 0, 2, 1) as motor_mounts:
                     ThreadedHole(m5, counter_sunk=False)
             with Locations((0, 10 - 25, 6)):
-                with GridLocations(20, 0, 2, 1):
+                with GridLocations(20, 0, 2, 1) as h1:
                     CounterBoreHole(2.6, 4.6, 1.55)
             with Locations((0, 5, 6)):
-                with GridLocations(60, 0, 2, 1):
+                with GridLocations(60, 0, 2, 1) as h2:
                     CounterBoreHole(2.6, 4.6, 1.55)
             with Locations(Plane(plate.faces().sort_by(Axis.Y)[-1], x_dir=(1, 0, 0))):
                 with GridLocations(20, 0, 2, 1):
@@ -303,6 +543,8 @@ class CBeamEndMount(BasePartObject):
 
         for i, motor_mount in enumerate(motor_mounts):
             RigidJoint(f"motor_mount-{i}", plate.part, motor_mount)
+        for i, screw_hole in enumerate(h1.locations + h2.locations):
+            RigidJoint(f"screw-{i}", plate.part, screw_hole * Pos(Z=-1.55))
 
         super().__init__(plate.part.moved(Pos(0, 5, 6)), rotation, align, mode)
         self.label = "CBeamEndMount"
@@ -318,8 +560,6 @@ class CBeamEndMount(BasePartObject):
             .sort_by(Edge.radius)[-1]
         )
         RigidJoint("bearing", self, Pos(bearing_circle.arc_center))
-        # show_all()
-        # exit()
 
 
 class CBeamLinearRailProfile(BaseSketchObject):
@@ -327,7 +567,7 @@ class CBeamLinearRailProfile(BaseSketchObject):
 
     Args:
         rotation (float, optional): angles to rotate objects. Defaults to 0.
-        align (Union[Align, tuple[Align, Align]], optional): align min, center, or max
+        align (Align | tuple[Align, Align], optional): align min, center, or max
             of object. Defaults to (Align.CENTER, Align.CENTER).
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
@@ -417,14 +657,13 @@ class CBeamLinearRail(BasePartObject):
         - Tee Nut channel
         - Smooth v-groove for linear motion
         - M5 tap-ready holes
-        - Anodized 6035 T-5 aluminum
-        - Available in Sleek Silver or Industrial Black
+        - Aluminum extrusion
         - Sizes: 80x40
 
     Args:
         length (float): rail length
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
     """
@@ -435,7 +674,7 @@ class CBeamLinearRail(BasePartObject):
         self,
         length: float,
         rotation: RotationLike = (0, 0, 0),
-        align: Union[Align, tuple[Align, Align, Align]] = (
+        align: Align | tuple[Align, Align, Align] = (
             Align.CENTER,
             Align.CENTER,
             Align.MIN,
@@ -450,7 +689,7 @@ class CBeamLinearRail(BasePartObject):
 
         # RigidJoint("test1", self, Location((10, 0, 0), (0, 90, 0)))
         # RigidJoint("test2", self, Location((0, -10, 50), (90, 0, 0)))
-        self.label = "CBeamLinearRail"
+        self.label = f"CBeamLinearRailx{length}"
         LinearJoint(
             "screw_axis", self, Axis((10, 0, 0), (0, 0, 1)), linear_range=(0, length)
         )
@@ -490,7 +729,7 @@ class CBeamGantryPlate(BasePartObject):
 
     Args:
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
     """
@@ -500,7 +739,7 @@ class CBeamGantryPlate(BasePartObject):
     def __init__(
         self,
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        align: None | Align | tuple[Align, Align, Align] = None,
         mode: Mode = Mode.ADD,
     ):
 
@@ -566,7 +805,7 @@ class CBeamGantryPlateXLarge(BasePartObject):
 
     Args:
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
     """
@@ -576,7 +815,7 @@ class CBeamGantryPlateXLarge(BasePartObject):
     def __init__(
         self,
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        align: None | Align | tuple[Align, Align, Align] = None,
         mode: Mode = Mode.ADD,
     ):
         with BuildPart() as plate:
@@ -629,6 +868,7 @@ class CBeamGantryPlateXLarge(BasePartObject):
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
         self.label = "CBeamGantryPlateXLarge"
+        self.thickness = 6 * MM
         for label, loc in zip(["a", "b", "c"], eccentric_mounts):
             RigidJoint(label, self, Pos(*(loc.position - Vector(0, 0, 6))))
         for label, loc in zip(["d", "e", "f"], fixed_mounts):
@@ -659,7 +899,7 @@ class CBeamRiserPlate(BasePartObject):
 
     Args:
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
     """
@@ -669,7 +909,7 @@ class CBeamRiserPlate(BasePartObject):
     def __init__(
         self,
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        align: None | Align | tuple[Align, Align, Align] = None,
         mode: Mode = Mode.ADD,
     ):
 
@@ -715,12 +955,12 @@ class EccentricSpacer(BasePartObject):
         - 6mm or 1/4" CAM Height
         - 5mm Bore
         - Rim fits into a 7.12mm Hole
-        - Stainless Steel
-        - Color: Steel
+        - Aluminum
 
     Args:
+        cam_height (Literal["6mm", "1/4in"]): cam height. Defaults to "6mm".
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
     """
@@ -729,9 +969,9 @@ class EccentricSpacer(BasePartObject):
 
     def __init__(
         self,
-        cam_height=Literal["6mm", "1/4in"],
+        cam_height: Literal["6mm", "1/4in"] = "6mm",
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        align: None | Align | tuple[Align, Align, Align] = None,
         mode: Mode = Mode.ADD,
     ):
 
@@ -779,8 +1019,10 @@ class EccentricSpacer(BasePartObject):
         )
         self.material = metals.aluminum()
         self.label = f"EccentricSpacer-{cam_height}"
+        # "a" and "b" are the bottom and top mounting faces, respectively.
         RigidJoint("a", self, Location())
-        RigidJoint("b", self, Pos(Z=2.5 * MM + cam_length))
+        RigidJoint("b", self, Pos(Z=2.5 * MM + cam_length - 2.5 * MM))
+        # "center" identifies the eccentric mounting/rotation axis at the top face.
         RigidJoint("center", self, Pos(0, -0.79 * MM, cam_length))
 
 
@@ -800,7 +1042,7 @@ class FlexibleCoupler(BasePartObject):
     Args:
         shaft_diameter (Literal["8mm", "1/4in"]): load shaft diameter
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
 
@@ -814,7 +1056,7 @@ class FlexibleCoupler(BasePartObject):
         self,
         shaft_diameter: Literal["8mm", "1/4in"],
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        align: None | Align | tuple[Align, Align, Align] = None,
         mode: Mode = Mode.ADD,
     ):
         valid_diameters = {
@@ -875,6 +1117,61 @@ class FlexibleCoupler(BasePartObject):
             self.label = f"FlexibleCoupler-{shaft_diameter}"
             RigidJoint("a", self, Pos(Z=12.5 * MM))
             RigidJoint("b", self, Location((0, 0, 12.5 * MM), (1, 0, 0), 180))
+
+
+class LBracket(BasePartObject):
+    """Part Object: OpenBuilds LBracket
+
+    Right-angle mounting bracket for joining OpenBuilds plates, profiles, and other
+    components. The two perpendicular flanges provide elongated mounting slots for
+    positional adjustment during assembly.
+
+    Product Features:
+        - Two perpendicular mounting flanges
+        - Elongated slots for adjustable component positioning
+        - Suitable for OpenBuilds modular assemblies
+
+    Specifications:
+        - 3mm thick brushed aluminum anodize black
+        - 20mm flange width
+        - 14.5mm flange depth
+        - 3.5mm wide slots with 5.5mm center-to-center spacing
+
+    Args:
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
+            or max of object. Defaults to Align.NONE.
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        rotation: RotationLike = (0, 0, 0),
+        align: Align | tuple[Align, Align, Align] = Align.NONE,
+        mode: Mode = Mode.ADD,
+    ):
+        with BuildPart() as bracket:
+            for c, pln in ((15, Plane.XY), (10, -Plane.ZY)):
+                with BuildSketch(pln):
+                    Rectangle(20, 14.5, align=(Align.MIN, Align.CENTER))
+                    with Locations((c, 0)):
+                        SlotCenterToCenter(1.75, 5.5, rotation=90, mode=Mode.SUBTRACT)
+                extrude(amount=3)
+
+        super().__init__(part=bracket.part, rotation=rotation, align=align, mode=mode)
+        self.material = metals.aluminum(
+            finish=[finishes.brushed(), finishes.anodize("black")]
+        )
+        RigidJoint("corner", self, -Location())
+        RigidJoint("screw_a", self, Pos(15, 0, 3))
+        RigidJoint("screw_b", self, Location(Plane((3, 0, 10), z_dir=(1, 0, 0))))
+        RigidJoint("nut_a", self, Pos(15, 0, 0) * Rot(Z=90))
+        RigidJoint(
+            "nut_b", self, Location(Plane((0, 0, 10), x_dir=(0, 1, 0), z_dir=(1, 0, 0)))
+        )
+        self.label = "LBracket"
 
 
 class LockCollar(Compound):
@@ -988,7 +1285,7 @@ class MetricLeadScrew(Compound):
 
         self.material = metals.stainless()
         RigidJoint("axis", self, Location())
-        self.label = f"8mm lead screw"
+        self.label = f"8mm lead screw x {length}"
 
 
 class RouterSpindleMount(BasePartObject):
@@ -1010,7 +1307,7 @@ class RouterSpindleMount(BasePartObject):
         parts (Literal["base", "faceplate", "both"], optional): parts to be created.
             Defaults to "both".
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to None.
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
 
@@ -1024,7 +1321,7 @@ class RouterSpindleMount(BasePartObject):
         self,
         parts: Literal["base", "faceplate", "both"] = "both",
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        align: None | Align | tuple[Align, Align, Align] = None,
         mode: Mode = Mode.ADD,
     ):
         m5 = SocketHeadCapScrew("M5-0.8", 20 * MM)
@@ -1106,7 +1403,7 @@ class RouterSpindleMount(BasePartObject):
         elif parts == "base":
             mount = base.part
         elif parts == "faceplate":
-            mount == faceplate.part
+            mount = faceplate.part
         else:
             raise ValueError(
                 f"the parts parameter must one of 'base', 'faceplate' or 'both' "
@@ -1122,7 +1419,9 @@ class RouterSpindleMount(BasePartObject):
         for label, pos in zip(["a", "b", "c", "d"], top_mount_centers):
             RigidJoint(f"bottom_{label}", self, pos * Pos(0, 0, -thickness))
         RigidJoint(
-            "back_mount", self, self.faces().sort_by(Axis.Y)[0].location_at(0.5, 0.5)
+            "back_mount",
+            self,
+            self.faces().sort_by(Axis.Y)[0].location_at(0.5, 0.5, x_dir=(-1, 0, 0)),
         )
 
 
@@ -1137,7 +1436,7 @@ class ShimWasher(BasePartObject):
         shim_type (Literal['MiniVWheel', '10x5x1', '12x8x1', 'SlotWasher', 'FlatWasher']):
             shim / washer
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
 
@@ -1153,7 +1452,7 @@ class ShimWasher(BasePartObject):
             "MiniVWheel", "10x5x1", "12x8x1", "SlotWasher", "FlatWasher"
         ],
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        align: None | Align | tuple[Align, Align, Align] = None,
         mode: Mode = Mode.ADD,
     ):
         # OD, ID, Thickness
@@ -1206,7 +1505,7 @@ class SpacerBlock(BasePartObject):
 
     Args:
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
     """
@@ -1216,7 +1515,7 @@ class SpacerBlock(BasePartObject):
     def __init__(
         self,
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        align: None | Align | tuple[Align, Align, Align] = None,
         mode: Mode = Mode.ADD,
     ):
 
@@ -1234,7 +1533,65 @@ class SpacerBlock(BasePartObject):
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
-        self.label = "CBeamRiserPlate"
+        self.label = "SpacerBlock"
+
+
+class TNut(BasePartObject):
+    """Part Object: OpenBuilds TNut
+
+    T-nut for attaching components to the OpenBuilds V-Slot linear rail. The nut
+    slides into the rail's tee slot and provides an M5 tapped mounting point.
+
+    Product Features:
+        - Slides into OpenBuilds V-Slot extrusion
+        - M5 tapped hole for component mounting
+        - Chamfered leading edge for easier insertion
+
+    Specifications:
+        - M5 x 0.8 tapped hole
+        - 5.9mm wide
+        - 10mm long
+        - Mild steel
+
+    Args:
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
+            or max of object. Defaults to Align.NONE.
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD.
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        rotation: RotationLike = (0, 0, 0),
+        align: Align | tuple[Align, Align, Align] = Align.NONE,
+        mode: Mode = Mode.ADD,
+    ):
+        with BuildPart() as nut_builder:
+            with BuildSketch(Plane.XZ) as profile:
+                Rectangle(w := 5.9, h := 4, align=(Align.CENTER, Align.MAX))
+                with Locations((0, -0.8)):
+                    Rectangle(l := 10, 3.2, align=(Align.CENTER, Align.MAX))
+                chamfer(profile.vertices().group_by(Axis.Y)[0], 1.6)
+            extrude(amount=5.9 / 2, both=True)
+            with BuildSketch() as plan:
+                Rectangle(l, w)
+                corners = [
+                    plan.vertices().group_by(Axis.Y)[0].sort_by(Axis.X)[0],
+                    plan.vertices().group_by(Axis.Y)[-1].sort_by(Axis.X)[-1],
+                ]
+                fillet(corners, w / 2)
+            extrude(amount=-h, mode=Mode.INTERSECT)
+            TapHole(m5, counter_sunk=False)
+
+        super().__init__(
+            part=nut_builder.part, rotation=rotation, align=align, mode=mode
+        )
+        self.material = metals.mild_steel()
+        RigidJoint("a", self, Pos(Z=1))
+        RigidJoint("b", self, Pos(Z=0))
+        self.label = "TNut"
 
 
 class _VSlotGroove(BaseSketchObject):
@@ -1242,7 +1599,7 @@ class _VSlotGroove(BaseSketchObject):
 
     Args:
         rotation (float, optional): angles to rotate objects. Defaults to 0.
-        align (Union[Align, tuple[Align, Align]], optional): align min, center, or
+        align (Align | tuple[Align, Align], optional): align min, center, or
             max of object. Defaults to (Align.CENTER, Align.CENTER).
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
@@ -1278,7 +1635,7 @@ class _VSlotInternalCavity(BaseSketchObject):
 
     Args:
         rotation (float, optional): angles to rotate objects. Defaults to 0.
-        align (Union[Align, tuple[Align, Align]], optional): align min, center, or
+        align (Align | tuple[Align, Align], optional): align min, center, or
             max of object. Defaults to (Align.CENTER, Align.CENTER).
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
@@ -1311,7 +1668,7 @@ class VSlotLinearRailProfile(BaseSketchObject):
 
     Args:
         rotation (float, optional): angles to rotate objects. Defaults to 0.
-        align (Union[Align, tuple[Align, Align]], optional): align min, center, or
+        align (Align | tuple[Align, Align], optional): align min, center, or
             max of object. Defaults to (Align.CENTER, Align.CENTER).
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
@@ -1433,15 +1790,13 @@ class VSlotLinearRail(BasePartObject):
         - Tee Nut channel
         - Smooth v-groove for linear motion
         - M5 tap-ready holes
-        - Anodized 6035 T-5 aluminum
-        - Available in Sleek Silver or Industrial Black
+        - Aluminum extrusion
         - Sizes: 20x20, 20x40, 20x60, 20x80, and 40x40
 
     Args:
         rail_size (Literal["20x20", "20x40", "20x60", "20x80", "40x40"]): size in mm
-        length (float): rail length
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
 
@@ -1456,7 +1811,7 @@ class VSlotLinearRail(BasePartObject):
         rail_size: Literal["20x20", "20x40", "20x60", "20x80", "40x40"],
         length: float,
         rotation: RotationLike = (0, 0, 0),
-        align: Union[Align, tuple[Align, Align, Align]] = (
+        align: Align | tuple[Align, Align, Align] = (
             Align.CENTER,
             Align.CENTER,
             Align.MIN,
@@ -1473,9 +1828,7 @@ class VSlotLinearRail(BasePartObject):
             part=rail, rotation=rotation, align=tuplify(align, 3), mode=mode
         )
         self.material = metals.aluminum()
-        # RigidJoint("test1", self, Location((10, 0, 0), (0, 90, 0)))
-        # RigidJoint("test2", self, Location((0, -10, 50), (90, 0, 0)))
-        self.label = f"{rail_size} VSlot Rail"
+        self.label = f"VSlot Rail {rail_size}x{length}"
 
 
 class XLargeCBeamGantry(Compound):
@@ -1535,6 +1888,7 @@ class XLargeCBeamGantry(Compound):
         self.label = "XLargeCBeamGantry"
         self.children = [plate, acme_nut_assembly] + wheels
         RigidJoint("nut", self, Location((0, 0, -12.5 * MM), (0, 1, 0), -90))
+        RigidJoint("top_center", self, plate.joints["top_center"].location)
 
 
 class XtremeSolidVWheel(BasePartObject):
@@ -1556,9 +1910,8 @@ class XtremeSolidVWheel(BasePartObject):
         - Easily assembled and maintained
 
     Args:
-        length (float): rail length
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
-        align (Union[Align, tuple[Align, Align, Align]], optional): align min, center,
+        align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to Align.CENTER.
         mode (Mode, optional): combine mode. Defaults to Mode.ADD.
     """
@@ -1568,7 +1921,7 @@ class XtremeSolidVWheel(BasePartObject):
     def __init__(
         self,
         rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = Align.CENTER,
+        align: None | Align | tuple[Align, Align, Align] = Align.CENTER,
         mode: Mode = Mode.ADD,
     ):
         with BuildPart() as wheel:
@@ -1585,7 +1938,7 @@ class XtremeSolidVWheel(BasePartObject):
         self.material = plastics.pc(
             color=Color("white"), thickness_mm=2, opacity=0.1, roughness=0.45
         )
-        self.label = "XtremeSolidVWHeel"
+        self.label = "XtremeSolidVWheel"
         RigidJoint("a", self, Pos(Z=-11 / 2))
         RigidJoint("b", self, Pos(Z=+11 / 2))
 
@@ -1594,7 +1947,7 @@ class XtremeSolidVWheelAssembly(Compound):
     """Assembly: OpenBuilds Xtreme Solid V Wheel Assembly
 
     All of the components in a Xtreme Solid V Wheel assembly:
-        - Xtreme Solid V WHeel x 1
+        - Xtreme Solid V Wheel x 1
         - M5-16-5 bearing x 2
         - 10x5x1 Shim x 2
         - Aluminum Spacer or Eccentric Spacer
@@ -1622,10 +1975,12 @@ class XtremeSolidVWheelAssembly(Compound):
         tire.joints["b"].connect_to(b1.joints["b"])
         b1.joints["b"].connect_to(shim1.joints["a"])
         shim1.joints["b"].connect_to(spacer.joints["a"])
-
+        screw = LowProfileScrew("M5-0.8", 30, simple=False)
+        screw.position += (0, 0, spacer.joints["b"].location.position.Z + 6 - 1.55)
         super().__init__()
-        self.label = "XtremeSolidVWHeelAssembly"
-        self.children = [tire, b0, shim0, shim1, b1, spacer, nut]
+        self.label = "XtremeSolidVWheelAssembly"
+        self.children = [tire, b0, shim0, shim1, b1, spacer, nut, screw]
+        # The spacer's "center" joint is the wheel assembly's mounting axis.
         RevoluteJoint(
             "mount", self, Axis(spacer.joints["center"].location.position, (0, 0, 1))
         )
@@ -1669,7 +2024,7 @@ class StepperMotor(Compound):
 
     Args:
         motor_type (Literal["Nema17", "Nema23", "Nema23HighTorque"]): steppers
-        motor_length (Union[float, None], optional): The length of the motor body
+        motor_length (float | None, optional): The length of the motor body
             in the axis of the shaft. If None, uses a standard length for the
             specified motor type. Defaults to None.
 
@@ -1680,7 +2035,7 @@ class StepperMotor(Compound):
     def __init__(
         self,
         motor_type: Literal["Nema17", "Nema23", "Nema23HighTorque"],
-        motor_length: Union[float, None] = None,
+        motor_length: float | None = None,
     ):
         motor_data = {
             "Nema17": (48, 5, 2, 9, 24),
@@ -1780,6 +2135,15 @@ class StepperMotor(Compound):
 if __name__ == "__main__":
     from ocp_vscode import show, show_all, set_defaults, Camera
 
+    w = XtremeSolidVWheelAssembly(True)
+    s = EccentricSpacer("6mm")
+    show(w, s, render_joints=True)
+    exit()
+
+    n = TNut()
+    l = LBracket()
+    show(n, l)
+    exit()
     # AluminumSpacer("6mm")  # 2
     # AluminumSpacer("40mm")  # 2
     # FlexibleCoupler("1/4in")  # 1
