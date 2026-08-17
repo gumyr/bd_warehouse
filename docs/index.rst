@@ -64,6 +64,7 @@ Table Of Contents
 
     installation.rst
     bearing.rst
+    bushing.rst
     fastener.rst
     flange.rst
     gear.rst
