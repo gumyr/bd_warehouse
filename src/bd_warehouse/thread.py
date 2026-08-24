@@ -35,7 +35,7 @@ import copy
 import csv
 import re
 from importlib import resources
-from math import copysign, radians, tan
+from math import copysign, cos, radians, sin, tan
 from typing import Literal, Optional, Tuple, Union
 
 import bd_warehouse
@@ -47,7 +47,7 @@ from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
 from build123d.geometry import Axis, Location, Plane, Rot, RotationLike, Vector
 from build123d.joints import RigidJoint
-from build123d.objects_curve import Helix, Polyline
+from build123d.objects_curve import CenterArc, Helix, Line, Polyline
 from build123d.objects_part import BasePartObject
 from build123d.operations_generic import add, mirror, scale, split
 from build123d.operations_part import loft
@@ -121,27 +121,40 @@ _PCO1881_DATA = {
 }
 
 
-class Thread(BasePartObject):
-    """Helical thread
+def _read_bspp_thread_csv() -> list[dict[str, str]]:
+    """Read the ISO 228-1 BSPP thread parameter table."""
+    data_resource = resources.files(bd_warehouse) / "data/iso_228_1.csv"
+    with data_resource.open(encoding="utf-8", newline="") as csvfile:
+        return list(csv.DictReader(csvfile))
 
-    The most general thread class used to build all of the other threads.
-    Creates right or left hand helical thread with the given
-    root and apex radii.
+
+_ISO_228_1_DATA = {
+    row["size"]: {
+        "tpi": int(row["tpi"]),
+        **{
+            key: float(value)
+            for key, value in row.items()
+            if key not in ("size", "tpi")
+        },
+    }
+    for row in _read_bspp_thread_csv()
+}
+
+
+class _ThreadSweep(BasePartObject):
+    """Create a helical thread from a completed two-dimensional profile.
+
+    This private geometry engine owns the helical sweep and end-finish
+    implementation. Public thread classes are responsible for constructing the
+    profile face and supplying its radial extents.
 
     Args:
         apex_radius: Radius at the narrow tip of the thread.
-        apex_width: Width at the narrow tip of the thread.
+        thread_profile: Thread profile in the axial/radial sketch plane.
         root_radius: Radius at the wide base of the thread.
-        root_width: Thread base width.
         pitch: Length of 360° of thread rotation.
         length: End to end length of the thread.
-        apex_offset: Asymmetric thread apex offset from center. Defaults to 0.0.
-        interference: Amount the thread will overlap with nut or bolt core. Used
-            to help create valid threaded objects where the thread must fuse
-            with another object. For threaded objects built as Compounds, this
-            value could be set to 0.0. Defaults to 0.2.
         hand: Twist direction. Defaults to "right".
-        taper_angle: Cone angle for tapered thread. Defaults to None.
         end_finishes: Profile of each end, one of:
 
             "raw"
@@ -157,93 +170,36 @@ class Thread(BasePartObject):
                 into a nut
 
             Defaults to ("raw","raw").
-        simple: Stop at thread calculation, don't create thread. Defaults to False.
-
-    Raises:
-        ValueError: if end_finishes not in ["raw", "square", "fade", "chamfer"]:
     """
-
-    _applies_to = [BuildPart._tag]
 
     def __init__(
         self,
+        thread_profile: Face,
         apex_radius: float,
-        apex_width: float,
         root_radius: float,
-        root_width: float,
         pitch: float,
         length: float,
-        apex_offset: float = 0.0,
-        interference: float = 0.2,
         hand: Literal["right", "left"] = "right",
-        taper_angle: Optional[float] = None,
         end_finishes: Tuple[
             Literal["raw", "square", "fade", "chamfer"],
             Literal["raw", "square", "fade", "chamfer"],
         ] = ("raw", "raw"),
-        simple: bool = False,
-        rotation: RotationLike = (0, 0, 0),
-        align: Union[None, Align, tuple[Align, Align, Align]] = None,
-        mode: Mode = Mode.ADD,
     ):
-        """Store the parameters and create the thread object"""
-        for finish in end_finishes:
-            if finish not in ["raw", "square", "fade", "chamfer"]:
-                raise ValueError(
-                    'end_finishes invalid, must be tuple() of "raw, square, fade, or chamfer"'
-                )
-        if taper_angle is not None:
-            raise ValueError("taper_angle is not currently supported")
+        """Store the sweep parameters and create the thread object."""
         self.external = apex_radius > root_radius
         self.apex_radius = apex_radius
-        self.apex_width = apex_width
         self.root_radius = root_radius
-        self.root_width = root_width
         self.pitch = pitch
         self.length = length
-        self.apex_offset = apex_offset
-        self.interference = interference
         self.right_hand = hand == "right"
         self.end_finishes = end_finishes
         self.tooth_height = abs(self.apex_radius - self.root_radius)
-        self.taper = 0 if taper_angle is None else taper_angle
-        self.simple = simple
+        self.thread_profile = thread_profile
         self.thread_loops = None
 
-        # Create the thread profile
-        with BuildSketch(mode=Mode.PRIVATE) as thread_face:
-            height = self.apex_radius - self.root_radius
-            overlap = -interference * copysign(1, height)
-            with BuildLine():  # thread profile
-                if overlap == 0:
-                    Polyline(
-                        (self.root_width / 2, 0),
-                        (self.apex_width / 2 + self.apex_offset, height),
-                        (-self.apex_width / 2 + self.apex_offset, height),
-                        (-self.root_width / 2, 0),
-                        close=True,
-                    )
-                else:
-                    Polyline(
-                        (self.root_width / 2, overlap),
-                        (self.root_width / 2, 0),
-                        (self.apex_width / 2 + self.apex_offset, height),
-                        (-self.apex_width / 2 + self.apex_offset, height),
-                        (-self.root_width / 2, 0),
-                        (-self.root_width / 2, overlap),
-                        close=True,
-                    )
-                if not self.right_hand:
-                    mirror(about=Plane.XZ, mode=Mode.REPLACE)
-            make_face()
-        self.thread_profile = thread_face.sketch_local.faces()[0]
-
-        if simple:
-            # Initialize with a valid shape then nullify
-            super().__init__(part=Solid.make_box(1, 1, 1))
-            self.wrapped = TopoDS_Shape()
-        else:
-            # Create base cylindrical thread
+        # Create base cylindrical thread. The guard keeps construction in one
+        # block while making the engine's one-shot lifecycle explicit.
+        if self.thread_loops is None:
             number_faded_ends = self.end_finishes.count("fade")
             cylindrical_thread_length = length + pitch * (1 - 1 * number_faded_ends)
             self.thread_loops = cylindrical_thread_length / pitch
@@ -290,8 +246,11 @@ class Thread(BasePartObject):
                     bottom_loop = bottom_loop.intersect(chamfer_shape)
                     if isinstance(bottom_loop, list):
                         bottom_loop = bottom_loop[0]
-                bottom_loop.label = label
-                bd_object.children = [bottom_loop] + children
+                if bottom_loop is None:
+                    bd_object.children = children
+                else:
+                    bottom_loop.label = label
+                    bd_object.children = [bottom_loop] + children
 
             # Top
             if end_finishes[1] == "fade":
@@ -327,6 +286,8 @@ class Thread(BasePartObject):
                         top_loop = top_loop.intersect(chamfer_shape)
                         if isinstance(top_loop, list):
                             top_loop = top_loop[0]
+                        if top_loop is None:
+                            continue
                     if top_loop.volume != 0:
                         top_loop.label = label
                         top_loops.append(top_loop)
@@ -349,12 +310,7 @@ class Thread(BasePartObject):
                 final_loops[-1].joints["1"].connect_to(end_tip.joints["1"])
                 final_loops[-1].joints["1"].connected_to = None
 
-            super().__init__(
-                part=bd_object,
-                rotation=rotation,
-                align=tuplify(align, 3),
-                mode=mode,
-            )
+            super().__init__(part=bd_object, mode=Mode.PRIVATE)
 
     def _make_thread_loop(self, loop_height: float) -> Solid:
         """make_thread_loop
@@ -484,6 +440,473 @@ class Thread(BasePartObject):
                     )[0:1],
                 )
         return chamfer_shape
+
+
+class Thread(BasePartObject):
+    """Helical thread
+
+    The most general thread class used to build all of the other threads.
+    Creates right or left hand helical thread with the given root and apex
+    radii.
+
+    Args:
+        apex_radius: Radius at the narrow tip of the thread.
+        apex_width: Width at the narrow tip of the thread.
+        root_radius: Radius at the wide base of the thread.
+        root_width: Thread base width.
+        pitch: Length of 360° of thread rotation.
+        length: End to end length of the thread.
+        apex_offset: Asymmetric thread apex offset from center. Defaults to 0.0.
+        interference: Amount the thread will overlap with nut or bolt core. Used
+            to help create valid threaded objects where the thread must fuse
+            with another object. For threaded objects built as Compounds, this
+            value could be set to 0.0. Defaults to 0.2.
+        hand: Twist direction. Defaults to "right".
+        taper_angle: Cone angle for tapered thread. Defaults to None.
+        end_finishes: Profile of each end, one of "raw", "fade", "square", or
+            "chamfer". Defaults to ("raw", "raw").
+        simple: Stop at thread calculation, don't create thread. Defaults to False.
+
+    Raises:
+        ValueError: if end_finishes not in ["raw", "square", "fade", "chamfer"]:
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        apex_radius: float,
+        apex_width: float,
+        root_radius: float,
+        root_width: float,
+        pitch: float,
+        length: float,
+        apex_offset: float = 0.0,
+        interference: float = 0.2,
+        hand: Literal["right", "left"] = "right",
+        taper_angle: Optional[float] = None,
+        end_finishes: Tuple[
+            Literal["raw", "square", "fade", "chamfer"],
+            Literal["raw", "square", "fade", "chamfer"],
+        ] = ("raw", "raw"),
+        simple: bool = False,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+    ):
+        """Store the parameters, create the profile, and sweep the thread."""
+        for finish in end_finishes:
+            if finish not in ["raw", "square", "fade", "chamfer"]:
+                raise ValueError(
+                    'end_finishes invalid, must be tuple() of "raw, square, fade, or chamfer"'
+                )
+        if taper_angle is not None:
+            raise ValueError("taper_angle is not currently supported")
+
+        self.external = apex_radius > root_radius
+        self.apex_radius = apex_radius
+        self.apex_width = apex_width
+        self.root_radius = root_radius
+        self.root_width = root_width
+        self.pitch = pitch
+        self.length = length
+        self.apex_offset = apex_offset
+        self.interference = interference
+        self.right_hand = hand == "right"
+        self.end_finishes = end_finishes
+        self.tooth_height = abs(self.apex_radius - self.root_radius)
+        self.taper = 0 if taper_angle is None else taper_angle
+        self.simple = simple
+        self.thread_loops = None
+
+        with BuildSketch(mode=Mode.PRIVATE) as thread_face:
+            height = self.apex_radius - self.root_radius
+            overlap = -interference * copysign(1, height)
+            with BuildLine():
+                if overlap == 0:
+                    Polyline(
+                        (self.root_width / 2, 0),
+                        (self.apex_width / 2 + self.apex_offset, height),
+                        (-self.apex_width / 2 + self.apex_offset, height),
+                        (-self.root_width / 2, 0),
+                        close=True,
+                    )
+                else:
+                    Polyline(
+                        (self.root_width / 2, overlap),
+                        (self.root_width / 2, 0),
+                        (self.apex_width / 2 + self.apex_offset, height),
+                        (-self.apex_width / 2 + self.apex_offset, height),
+                        (-self.root_width / 2, 0),
+                        (-self.root_width / 2, overlap),
+                        close=True,
+                    )
+                if not self.right_hand:
+                    mirror(about=Plane.XZ, mode=Mode.REPLACE)
+            make_face()
+        self.thread_profile = thread_face.sketch_local.faces()[0]
+
+        if simple:
+            # Initialize with a valid shape then nullify
+            super().__init__(part=Solid.make_box(1, 1, 1))
+            self.wrapped = TopoDS_Shape()
+            return
+
+        thread_sweep = _ThreadSweep(
+            thread_profile=self.thread_profile,
+            apex_radius=self.apex_radius,
+            root_radius=self.root_radius,
+            pitch=self.pitch,
+            length=self.length,
+            hand=hand,
+            end_finishes=self.end_finishes,
+        )
+        self.thread_loops = thread_sweep.thread_loops
+        super().__init__(
+            part=thread_sweep,
+            rotation=rotation,
+            align=tuplify(align, 3),
+            mode=mode,
+        )
+
+
+class WhitworthThread(BasePartObject):
+    """Full- or truncated-form 55° Whitworth thread.
+
+    Creates the rounded crest and root profile used as the basic thread form by
+    standards including ISO 228. The full profile has tangent circular arcs at
+    both the crest and roots. A truncated profile is made by splitting this
+    full profile at the requested radial crest depth before it is swept.
+
+    Args:
+        major_diameter: Basic major diameter of the thread.
+        pitch: Length of 360° of thread rotation.
+        length: End-to-end length of the thread.
+        external: External or internal thread selector. Defaults to True.
+        hand: Twist direction. Defaults to "right".
+        end_finishes: Profile of the two ends. Defaults to ("fade", "square").
+        interference: Radial overlap with the mating cylindrical core. Defaults
+            to 0.2.
+        simple: Calculate the profile without creating the swept thread.
+            Defaults to False.
+        rotation: Object rotation. Defaults to (0, 0, 0).
+        align: Object alignment. Defaults to None.
+        mode: Combination mode. Defaults to Mode.ADD.
+        crest_truncation: Radial depth removed from the theoretical rounded
+            crest before sweeping. Defaults to 0.0.
+
+    Attributes:
+        thread_angle: Included profile angle of 55°.
+        fundamental_triangle_height: Height H of the fundamental triangle.
+        thread_height: Radial height h of the full-form profile.
+        rounding_radius: Radius r of the rounded crests and roots.
+        crest_diameter: Resulting external major or internal minor diameter.
+    """
+
+    _applies_to = [BuildPart._tag]
+    thread_angle = 55.0
+
+    def __init__(
+        self,
+        major_diameter: float,
+        pitch: float,
+        length: float,
+        external: bool = True,
+        hand: Literal["right", "left"] = "right",
+        end_finishes: Tuple[
+            Literal["raw", "square", "fade", "chamfer"],
+            Literal["raw", "square", "fade", "chamfer"],
+        ] = ("fade", "square"),
+        interference: float = 0.2,
+        simple: bool = False,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+        crest_truncation: float = 0.0,
+    ):
+        if hand not in ["right", "left"]:
+            raise ValueError(f'hand must be one of "right" or "left" not {hand}')
+        for finish in end_finishes:
+            if finish not in ["raw", "square", "fade", "chamfer"]:
+                raise ValueError(
+                    'end_finishes invalid, must be tuple() of "raw, square, fade, or chamfer"'
+                )
+
+        self.major_diameter = major_diameter
+        self.pitch = pitch
+        self.length = length
+        self.external = external
+        self.hand = hand
+        self.end_finishes = end_finishes
+        self.interference = interference
+        self.simple = simple
+        if not 0 <= crest_truncation < 0.640327 * self.pitch:
+            raise ValueError("crest_truncation must be at least 0 and less than h")
+        self.crest_truncation = crest_truncation
+        self.fundamental_triangle_height = 0.960491 * self.pitch
+        self.thread_height = 0.640327 * self.pitch
+        self.rounding_radius = 0.137329 * self.pitch
+        self.minor_diameter = self.major_diameter - 2 * self.thread_height
+        if external:
+            self.apex_radius = self.major_diameter / 2 - self.crest_truncation
+            self.root_radius = self.minor_diameter / 2
+            self.crest_diameter = self.major_diameter - 2 * self.crest_truncation
+        else:
+            self.apex_radius = self.minor_diameter / 2 + self.crest_truncation
+            self.root_radius = self.major_diameter / 2
+            self.crest_diameter = self.minor_diameter + 2 * self.crest_truncation
+        self.tooth_height = self.thread_height - self.crest_truncation
+        self.thread_loops = None
+
+        radial_direction = 1 if external else -1
+        half_angle = self.thread_angle / 2
+        flank_angle = 90 - half_angle
+        crest_arc_angle = 180 - self.thread_angle
+        radius = self.rounding_radius
+        root_center_y = radial_direction * radius
+        crest_center_y = radial_direction * (self.thread_height - radius)
+        flank_x = radius * cos(radians(half_angle))
+        root_tangent_y = radial_direction * (radius - radius * sin(radians(half_angle)))
+        crest_tangent_y = radial_direction * (
+            self.thread_height - radius + radius * sin(radians(half_angle))
+        )
+        right_root_tangent = (self.pitch / 2 - flank_x, root_tangent_y)
+        right_crest_tangent = (flank_x, crest_tangent_y)
+        left_crest_tangent = (-flank_x, crest_tangent_y)
+        left_root_tangent = (-self.pitch / 2 + flank_x, root_tangent_y)
+        right_valley = (self.pitch / 2, 0)
+        left_valley = (-self.pitch / 2, 0)
+        overlap = -interference * radial_direction
+
+        with BuildSketch(mode=Mode.PRIVATE) as thread_face:
+            with BuildLine():
+                CenterArc(
+                    (self.pitch / 2, root_center_y),
+                    radius,
+                    -90 * radial_direction,
+                    -flank_angle * radial_direction,
+                )
+                Line(right_root_tangent, right_crest_tangent)
+                CenterArc(
+                    (0, crest_center_y),
+                    radius,
+                    half_angle * radial_direction,
+                    crest_arc_angle * radial_direction,
+                )
+                Line(left_crest_tangent, left_root_tangent)
+                CenterArc(
+                    (-self.pitch / 2, root_center_y),
+                    radius,
+                    -half_angle * radial_direction,
+                    -flank_angle * radial_direction,
+                )
+                if overlap == 0:
+                    Line(left_valley, right_valley)
+                else:
+                    Polyline(
+                        left_valley,
+                        (-self.pitch / 2, overlap),
+                        (self.pitch / 2, overlap),
+                        right_valley,
+                    )
+            make_face()
+        self.thread_profile = thread_face.sketch_local.faces()[0]
+        if self.crest_truncation > 0:
+            crest_y = radial_direction * self.tooth_height
+            crest_plane = Plane.ZX.offset(crest_y)
+            self.thread_profile = self.thread_profile.split(
+                crest_plane,
+                keep=Keep.BOTTOM if external else Keep.TOP,
+            )
+            if not isinstance(self.thread_profile, Face):
+                raise RuntimeError("Unable to create the truncated Whitworth profile")
+            # A flat crest centred exactly at profile X=0 is coincident with the
+            # bottom end plane and can produce a null OCCT square/chamfer boolean.
+            # A negligible axial phase shift avoids that coincidence.
+            self.thread_profile.move(Location((1e-6, 0, 0)))
+
+        if simple:
+            super().__init__(part=Solid.make_box(1, 1, 1))
+            self.wrapped = TopoDS_Shape()
+            return
+
+        thread_sweep = _ThreadSweep(
+            thread_profile=self.thread_profile,
+            apex_radius=self.apex_radius,
+            root_radius=self.root_radius,
+            pitch=self.pitch,
+            length=self.length,
+            hand=self.hand,
+            end_finishes=self.end_finishes,
+        )
+        self.thread_loops = thread_sweep.thread_loops
+        super().__init__(
+            part=thread_sweep,
+            rotation=rotation,
+            align=tuplify(align, 3),
+            mode=mode,
+        )
+
+
+class BSPPThread(WhitworthThread):
+    """ISO 228-1 G-series British Standard Pipe Parallel thread.
+
+    By default the generated solid uses the nominal full-form Whitworth profile.
+    Supplying a crest diameter within the applicable ISO limits creates the
+    corresponding truncated profile before the thread is swept. Pitch-diameter
+    limits remain independent metadata.
+
+    Args:
+        size: G-series designation, such as ``"G1/2"``. The forms ``"G 1/2"``
+            and ``"1/2"`` are also accepted.
+        length: End-to-end length of the thread.
+        external: External or internal thread selector. Defaults to True.
+        tolerance_class: External pitch-diameter tolerance class ``"A"`` or
+            ``"B"``. Defaults to ``"A"`` for external threads and must be
+            omitted for internal threads.
+        hand: Twist direction. Defaults to "right".
+        end_finishes: Profile of the two ends. Defaults to ("fade", "square").
+        interference: Radial overlap with the mating cylindrical core. Defaults
+            to 0.2.
+        simple: Calculate the profile without creating the swept thread.
+            Defaults to False.
+        rotation: Object rotation. Defaults to (0, 0, 0).
+        align: Object alignment. Defaults to None.
+        mode: Combination mode. Defaults to Mode.ADD.
+        crest_diameter: Selected external major or internal minor diameter.
+            Defaults to the basic full-form diameter.
+
+    Attributes:
+        designation: ISO designation including external class and left hand.
+        tpi: Number of threads in 25.4 mm.
+        basic_major_diameter: Basic ISO major diameter.
+        basic_pitch_diameter: Basic ISO pitch diameter.
+        basic_minor_diameter: Basic ISO minor diameter.
+        pitch_diameter_limits: Minimum and maximum pitch diameters.
+        major_diameter_limits: External major-diameter limits, otherwise None.
+        minor_diameter_limits: Internal minor-diameter limits, otherwise None.
+    """
+
+    @classmethod
+    def sizes(cls) -> list[str]:
+        """Return the canonical ISO 228 G-series designations."""
+        return [f"G{size}" for size in _ISO_228_1_DATA]
+
+    @staticmethod
+    def _normalize_size(size: str) -> str:
+        """Normalize common G-series designation spellings to a table key."""
+        if not isinstance(size, str):
+            raise ValueError("size must be an ISO 228 G-series designation")
+        normalized = size.strip().upper().replace('"', "").replace("″", "")
+        if normalized.startswith("G"):
+            normalized = normalized[1:]
+        return " ".join(normalized.split())
+
+    def __init__(
+        self,
+        size: str,
+        length: float,
+        external: bool = True,
+        tolerance_class: Optional[Literal["A", "B"]] = None,
+        hand: Literal["right", "left"] = "right",
+        end_finishes: Tuple[
+            Literal["raw", "square", "fade", "chamfer"],
+            Literal["raw", "square", "fade", "chamfer"],
+        ] = ("fade", "square"),
+        interference: float = 0.2,
+        simple: bool = False,
+        rotation: RotationLike = (0, 0, 0),
+        align: Union[None, Align, tuple[Align, Align, Align]] = None,
+        mode: Mode = Mode.ADD,
+        crest_diameter: Optional[float] = None,
+    ):
+        normalized_size = self._normalize_size(size)
+        try:
+            data = _ISO_228_1_DATA[normalized_size]
+        except KeyError as exc:
+            raise ValueError(f"size invalid, must be one of {self.sizes()}") from exc
+
+        if external:
+            if tolerance_class is not None and not isinstance(tolerance_class, str):
+                raise ValueError('tolerance_class must be one of "A" or "B"')
+            selected_class = "A" if tolerance_class is None else tolerance_class.upper()
+            if selected_class not in ("A", "B"):
+                raise ValueError('tolerance_class must be one of "A" or "B"')
+        else:
+            if tolerance_class is not None:
+                raise ValueError("internal BSPP threads have one tolerance class")
+            selected_class = None
+
+        self.thread_size = f"G{normalized_size}"
+        self.tpi = data["tpi"]
+        self.tolerance_class = selected_class
+        self.standard = "ISO 228-1:1994"
+        self.basic_major_diameter = data["major_diameter"]
+        self.basic_pitch_diameter = data["pitch_diameter"]
+        self.basic_minor_diameter = data["minor_diameter"]
+
+        designation_class = selected_class if external else ""
+        designation_hand = " LH" if hand == "left" else ""
+        self.designation = f"{self.thread_size}{designation_class}{designation_hand}"
+
+        pitch_tolerance = data["pitch_tolerance"]
+        if external:
+            class_factor = 1 if selected_class == "A" else 2
+            self.pitch_diameter_limits = (
+                self.basic_pitch_diameter - class_factor * pitch_tolerance,
+                self.basic_pitch_diameter,
+            )
+            self.major_diameter_limits = (
+                self.basic_major_diameter - data["external_major_tolerance"],
+                self.basic_major_diameter,
+            )
+            self.minor_diameter_limits = None
+        else:
+            self.pitch_diameter_limits = (
+                self.basic_pitch_diameter,
+                self.basic_pitch_diameter + pitch_tolerance,
+            )
+            self.major_diameter_limits = None
+            self.minor_diameter_limits = (
+                self.basic_minor_diameter,
+                self.basic_minor_diameter + data["internal_minor_tolerance"],
+            )
+
+        crest_limits = (
+            self.major_diameter_limits if external else self.minor_diameter_limits
+        )
+        assert crest_limits is not None
+        selected_crest_diameter = crest_limits[1 if external else 0]
+        if crest_diameter is not None:
+            if not isinstance(crest_diameter, (int, float)):
+                raise ValueError("crest_diameter must be a number")
+            selected_crest_diameter = float(crest_diameter)
+        if not crest_limits[0] <= selected_crest_diameter <= crest_limits[1]:
+            raise ValueError(f"crest_diameter must be within {crest_limits}")
+        if external:
+            crest_truncation = (self.basic_major_diameter - selected_crest_diameter) / 2
+        else:
+            full_form_minor_diameter = self.basic_major_diameter - (
+                2 * 0.640327 * (25.4 * MM / self.tpi)
+            )
+            crest_truncation = max(
+                0.0, (selected_crest_diameter - full_form_minor_diameter) / 2
+            )
+
+        super().__init__(
+            major_diameter=self.basic_major_diameter,
+            pitch=25.4 * MM / self.tpi,
+            length=length,
+            external=external,
+            hand=hand,
+            end_finishes=end_finishes,
+            interference=interference,
+            simple=simple,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+            crest_truncation=crest_truncation,
+        )
 
 
 class IsoThread(BasePartObject):

@@ -8,9 +8,11 @@ thread - parametric helical threads
 
 Helical threads are very common in mechanical designs but can be tricky to
 create in a robust and efficient manner. This sub-package provides classes that
-create three common types of threads:
+create several common types of threads:
 
 * ISO Standard 60° threads found on most fasteners
+* Whitworth 55° threads with rounded crests and roots
+* ISO 228 BSPP (G-series) parallel pipe threads
 * Acme 29° threads found on imperial machine equipment
 * Metric Trapezoidal 30° thread found on metric machine equipment
 
@@ -59,6 +61,18 @@ IsoThread
 *********
 
 .. autoclass:: thread.IsoThread
+
+***************
+WhitworthThread
+***************
+
+.. autoclass:: thread.WhitworthThread
+
+**********
+BSPPThread
+**********
+
+.. autoclass:: thread.BSPPThread
 
 **********
 AcmeThread
