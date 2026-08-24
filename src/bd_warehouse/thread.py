@@ -32,9 +32,13 @@ license:
 # pylint: disable=too-many-lines
 
 import copy
+import csv
 import re
+from importlib import resources
 from math import copysign, radians, tan
 from typing import Literal, Optional, Tuple, Union
+
+import bd_warehouse
 
 from build123d.build_common import IN, MM
 from build123d.build_enums import Align, Keep, Mode, SortBy
@@ -66,6 +70,55 @@ def imperial_str_to_float(measure: str) -> float:
     else:
         result = measure
     return result
+
+
+def _read_plastic_bottle_thread_csv(filename: str) -> list[dict[str, str]]:
+    """Read a plastic bottle thread parameter table."""
+    data_resource = resources.files(bd_warehouse) / f"data/{filename}"
+    with data_resource.open(encoding="utf-8", newline="") as csvfile:
+        return list(csv.DictReader(csvfile))
+
+
+_ASTM_D2911_DIMENSIONS = {
+    int(row["diameter"]): {
+        "diameter_max": float(row["diameter_max"]),
+        "diameter_min": float(row["diameter_min"]),
+        "tpi": int(row["tpi"]),
+    }
+    for row in _read_plastic_bottle_thread_csv(
+        "plastic_bottle_thread_astm_d2911_dimensions.csv"
+    )
+}
+_ASTM_D2911_PROFILES = {
+    (row["style"], int(row["tpi"])): {
+        "root_width": float(row["root_width"]),
+        "thread_height": float(row["thread_height"]),
+    }
+    for row in _read_plastic_bottle_thread_csv(
+        "plastic_bottle_thread_astm_d2911_profiles.csv"
+    )
+}
+_ASTM_D2911_FINISHES = {
+    int(row["finish"]): {
+        "min_turns": float(row["min_turns"]),
+        "diameters": [int(diameter) for diameter in row["diameters"].split()],
+        "angles": {
+            "L": (float(row["l_angle_1"]), float(row["l_angle_2"])),
+            "M": (float(row["m_angle_1"]), float(row["m_angle_2"])),
+        },
+    }
+    for row in _read_plastic_bottle_thread_csv(
+        "plastic_bottle_thread_astm_d2911_finishes.csv"
+    )
+}
+_PCO1881_DATA = {
+    row["size"]: {
+        key: float(value) if key != "starts" else int(value)
+        for key, value in row.items()
+        if key != "size"
+    }
+    for row in _read_plastic_bottle_thread_csv("plastic_bottle_thread_pco1881.csv")
+}
 
 
 class Thread(BasePartObject):
@@ -921,9 +974,10 @@ class MetricTrapezoidalThread(TrapezoidalThread):
 
 
 class PlasticBottleThread(BasePartObject):
-    """ASTM D2911 Plastic Bottle Thread
+    """Plastic bottle thread.
 
-    The `ASTM D2911 Standard <https://www.astm.org/d2911-10.html>`_ Plastic Bottle Thread.
+    ASTM D2911 is selected by default.  PCO1881 is selected with
+    ``bottle_type="pco1881"``.
 
     L Style:
         All-Purpose Thread - trapezoidal shape with 30° shoulders, metal or platsic closures
@@ -936,6 +990,9 @@ class PlasticBottleThread(BasePartObject):
     Args:
         size (str): as defined by the ASTM is specified as
             [L|M][diameter(mm)]SP[100|103|110|200|400|410|415|425|444]
+            for ASTM D2911, or ``"28"`` for PCO1881.
+        bottle_type: Bottle thread standard, either ``"astm_d2911"`` or
+            ``"pco1881"``. Defaults to ``"astm_d2911"``.
         external (bool, optional): external or internal thread selector. Defaults to True.
         hand (Literal[, optional): twist direction. Defaults to "right".
         interference: Amount the thread will overlap with nut or bolt core. Used
@@ -966,91 +1023,26 @@ class PlasticBottleThread(BasePartObject):
 
     """
 
-    # {TPI: [root_width,thread_height]}
-    _l_style_thread_dimensions = {
-        4: [3.18, 1.57],
-        5: [3.05, 1.52],
-        6: [2.39, 1.19],
-        8: [2.13, 1.07],
-        12: [1.14, 0.76],
-    }
-    _m_style_thread_dimensions = {
-        4: [3.18, 1.57],
-        5: [3.05, 1.52],
-        6: [2.39, 1.19],
-        8: [2.13, 1.07],
-        12: [1.29, 0.76],
-    }
+    _bottle_types = ("astm_d2911", "pco1881")
 
-    _thread_angles = {
-        "L100": [30, 30],
-        "M100": [10, 40],
-        "L103": [30, 30],
-        "M103": [10, 40],
-        "L110": [30, 30],
-        "M110": [10, 50],
-        "L200": [30, 30],
-        "M200": [10, 40],
-        "L400": [30, 30],
-        "M400": [10, 45],
-        "L410": [30, 30],
-        "M410": [10, 45],
-        "L415": [30, 30],
-        "M415": [10, 45],
-        "L425": [30, 30],
-        "M425": [10, 45],
-        "L444": [30, 30],
-        "M444": [10, 45],
-    }
+    @classmethod
+    def bottle_types(cls) -> tuple[str, ...]:
+        """Return the supported bottle thread standards."""
+        return cls._bottle_types
 
-    # {finish:[min turns,[diameters,...]]}
-    # fmt: off
-    _finish_data = {
-        100: [1.125,[22,24,28,30,33,35,38]],
-        103: [1.125,[26]],
-        110: [1.125,[28]],
-        200: [1.5,[24.28]],
-        400: [1.0,[18,20,22,24,28,30,33,35,38,40,43,45,48,51,53,58,60,63,66,70,75,77,83,89,100,110,120]],
-        410: [1.5,[18,20,22,24,28]],
-        415: [2.0,[13,15,18,20,22,24,28,30,33]],
-        425: [2.0,[13,15]],
-        444: [1.125,[24,28,30,33,35,38,40,43,45,48,51,53,58,60,63,66,70,75,77,83]]
-    }
-    # fmt: on
-
-    # {thread_size:[max,min,TPI]}
-    _thread_dimensions = {
-        13: [13.06, 12.75, 12],
-        15: [14.76, 14.45, 12],
-        18: [17.88, 17.47, 8],
-        20: [19.89, 19.48, 8],
-        22: [21.89, 21.49, 8],
-        24: [23.88, 23.47, 8],
-        26: [25.63, 25.12, 8],
-        28: [27.64, 27.13, 6],
-        30: [28.62, 28.12, 6],
-        33: [32.13, 31.52, 6],
-        35: [34.64, 34.04, 6],
-        38: [37.49, 36.88, 6],
-        40: [40.13, 39.37, 6],
-        43: [42.01, 41.25, 6],
-        45: [44.20, 43.43, 6],
-        48: [47.50, 46.74, 6],
-        51: [49.99, 49.10, 6],
-        53: [52.50, 51.61, 6],
-        58: [56.49, 55.60, 6],
-        60: [59.49, 58.60, 6],
-        63: [62.51, 61.62, 6],
-        66: [65.51, 64.62, 6],
-        70: [69.49, 68.60, 6],
-        75: [73.99, 73.10, 6],
-        77: [77.09, 76.20, 6],
-        83: [83.01, 82.12, 5],
-        89: [89.18, 88.29, 5],
-        100: [100.00, 99.11, 5],
-        110: [110.01, 109.12, 5],
-        120: [119.99, 119.10, 5],
-    }
+    @classmethod
+    def sizes(cls, bottle_type: str = "astm_d2911") -> list[str]:
+        """Return valid sizes for a bottle thread standard."""
+        if bottle_type == "pco1881":
+            return list(_PCO1881_DATA)
+        if bottle_type != "astm_d2911":
+            raise ValueError(f"bottle_type must be one of {cls._bottle_types}")
+        return [
+            f"{style}{diameter}SP{finish}"
+            for finish, data in _ASTM_D2911_FINISHES.items()
+            for diameter in data["diameters"]
+            for style in ("L", "M")
+        ]
 
     def __init__(
         self,
@@ -1062,13 +1054,68 @@ class PlasticBottleThread(BasePartObject):
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
+        bottle_type: Literal["astm_d2911", "pco1881"] = "astm_d2911",
     ):
         self.thread_size = size
         self.external = external
+        self.bottle_type = bottle_type
+        if bottle_type not in self._bottle_types:
+            raise ValueError(f"bottle_type must be one of {self._bottle_types}")
         if hand not in ["right", "left"]:
             raise ValueError(f'hand must be one of "right" or "left" not {hand}')
         self.hand = hand
         self.interference = interference
+
+        if bottle_type == "pco1881":
+            pco_size = size.lower().removesuffix("mm")
+            if pco_size not in _PCO1881_DATA:
+                raise ValueError(
+                    f"size invalid, must be one of {list(_PCO1881_DATA)} for PCO1881"
+                )
+            data = _PCO1881_DATA[pco_size]
+            self.diameter = data["major_diameter"]
+            self.major_diameter = self.diameter
+            self.minor_diameter = data["minor_diameter"]
+            self.pitch = data["pitch"]
+            self.starts = data["starts"]
+            self.lead = self.pitch * self.starts
+            self.length = data["length"]
+            self.root_width = data["root_width"]
+            self.apex_width = data["apex_width"]
+            self.apex_offset = data["apex_offset"]
+            if not self.external:
+                self.apex_offset = -self.apex_offset
+            compensation = manufacturing_compensation
+            if self.external:
+                self.apex_radius = self.major_diameter / 2 - compensation
+                self.root_radius = self.minor_diameter / 2 - compensation
+            else:
+                self.root_radius = self.major_diameter / 2 + compensation
+                self.apex_radius = self.minor_diameter / 2 + compensation
+            self.tpi = 25.4 * MM / self.pitch
+            self.finish = None
+            self.style = None
+            bd_object = Thread(
+                apex_radius=self.apex_radius,
+                apex_width=self.apex_width,
+                root_radius=self.root_radius,
+                root_width=self.root_width,
+                pitch=self.pitch,
+                length=self.length,
+                apex_offset=self.apex_offset,
+                interference=interference,
+                hand=self.hand,
+                end_finishes=("fade", "fade"),
+            )
+            self.thread_profile = bd_object.thread_profile
+            super().__init__(
+                part=bd_object,
+                rotation=rotation,
+                align=tuplify(align, 3),
+                mode=mode,
+            )
+            return
+
         size_match = re.match(r"([LM])(\d+)SP(\d+)", size)
         if not size_match:
             raise ValueError("size invalid, must match \
@@ -1076,29 +1123,26 @@ class PlasticBottleThread(BasePartObject):
         self.style = size_match.group(1)
         self.diameter = int(size_match.group(2))
         self.finish = int(size_match.group(3))
-        if self.finish not in PlasticBottleThread._finish_data:
+        if self.finish not in _ASTM_D2911_FINISHES:
             raise ValueError(
                 f"finish ({self.finish}) invalid, must be one of"
-                f" {list(PlasticBottleThread._finish_data.keys())}"
+                f" {list(_ASTM_D2911_FINISHES.keys())}"
             )
-        if not self.diameter in PlasticBottleThread._finish_data[self.finish][1]:
+        if not self.diameter in _ASTM_D2911_FINISHES[self.finish]["diameters"]:
             raise ValueError(
                 f"diameter ({self.diameter}) invalid, must be one"
-                f" of {PlasticBottleThread._finish_data[self.finish][1]}"
+                f" of {_ASTM_D2911_FINISHES[self.finish]['diameters']}"
             )
-        diameter_max, diameter_min, self.tpi = PlasticBottleThread._thread_dimensions[
-            self.diameter
-        ]
-        if self.style == "L":
-            (
-                self.root_width,
-                thread_height,
-            ) = PlasticBottleThread._l_style_thread_dimensions[self.tpi]
-        else:
-            (
-                self.root_width,
-                thread_height,
-            ) = PlasticBottleThread._m_style_thread_dimensions[self.tpi]
+        dimensions = _ASTM_D2911_DIMENSIONS[self.diameter]
+        diameter_max = dimensions["diameter_max"]
+        diameter_min = dimensions["diameter_min"]
+        self.tpi = dimensions["tpi"]
+        profile = _ASTM_D2911_PROFILES[(self.style, self.tpi)]
+        self.root_width = profile["root_width"]
+        thread_height = profile["thread_height"]
+        self.major_diameter = diameter_max
+        self.minor_diameter = diameter_min
+        self.starts = 1
         if self.external:
             self.apex_radius = diameter_min / 2 - manufacturing_compensation
             self.root_radius = (
@@ -1109,18 +1153,15 @@ class PlasticBottleThread(BasePartObject):
             self.apex_radius = (
                 diameter_max / 2 - thread_height + manufacturing_compensation
             )
-        self._thread_angles = PlasticBottleThread._thread_angles[
-            self.style + str(self.finish)
-        ]
+        self._thread_angles = _ASTM_D2911_FINISHES[self.finish]["angles"][self.style]
         shoulders = [thread_height * tan(radians(a)) for a in self._thread_angles]
         self.apex_width = self.root_width - sum(shoulders)
         self.apex_offset = shoulders[0] + self.apex_width / 2 - self.root_width / 2
         if not self.external:
             self.apex_offset = -self.apex_offset
         self.pitch = 25.4 * MM / self.tpi
-        self.length = (
-            PlasticBottleThread._finish_data[self.finish][0] + 0.75
-        ) * self.pitch
+        self.length = (_ASTM_D2911_FINISHES[self.finish]["min_turns"] + 0.75) * self.pitch
+        self.lead = self.pitch
         bd_object = Thread(
             apex_radius=self.apex_radius,
             apex_width=self.apex_width,

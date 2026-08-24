@@ -215,6 +215,24 @@ class TestPlasticBottleThread(unittest.TestCase):
         )
         self.assertTrue(bottle_thread.is_valid)
 
+    def test_pco1881_threads(self):
+        """PCO1881 supports both cap and bottle thread orientations."""
+        for external in (True, False):
+            bottle_thread = PlasticBottleThread(
+                size="28", bottle_type="pco1881", external=external
+            )
+            self.assertTrue(bottle_thread.is_valid)
+            self.assertEqual(bottle_thread.bottle_type, "pco1881")
+            self.assertAlmostEqual(bottle_thread.pitch, 2.7)
+            self.assertAlmostEqual(bottle_thread.diameter, 27.4)
+
+    def test_bottle_type_parsing(self):
+        """Reject unknown bottle thread standards and sizes."""
+        with self.assertRaises(ValueError):
+            PlasticBottleThread(size="28", bottle_type="unknown")
+        with self.assertRaises(ValueError):
+            PlasticBottleThread(size="30", bottle_type="pco1881")
+
     def test_exterior_left_thread(self):
         """Simple validity check for an exterior thread"""
 
