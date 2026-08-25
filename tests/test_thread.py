@@ -26,6 +26,7 @@ license:
 
 """
 
+import inspect
 import random
 import unittest
 from bd_warehouse.thread import *
@@ -68,6 +69,57 @@ class TestThread(unittest.TestCase):
         )
 
         self.assertTrue(thread.is_valid)
+
+    def test_manufacturing_compensation(self):
+        """Compensation shifts external threads inward and internal outward."""
+        compensation = 0.2
+        for external in (True, False):
+            with self.subTest(external=external):
+                radii = (5, 4) if external else (4, 5)
+                parameters = dict(
+                    apex_radius=radii[0],
+                    apex_width=0.4,
+                    root_radius=radii[1],
+                    root_width=0.8,
+                    pitch=1,
+                    length=2,
+                    end_finishes=("square", "square"),
+                )
+                nominal = Thread(**parameters)
+                unchanged = Thread(**parameters, manufacturing_compensation=0)
+                compensated = Thread(
+                    **parameters, manufacturing_compensation=compensation
+                )
+                self.assertAlmostEqual(nominal.volume, unchanged.volume)
+                diameter_change = (
+                    compensated.bounding_box().size.X
+                    - nominal.bounding_box().size.X
+                )
+                self.assertAlmostEqual(
+                    diameter_change,
+                    2 * compensation * (-1 if external else 1),
+                )
+
+    def test_all_thread_classes_expose_manufacturing_compensation(self):
+        """Every public thread constructor exposes the common print allowance."""
+        thread_classes = (
+            Thread,
+            WhitworthThread,
+            BSPPThread,
+            IsoThread,
+            TrapezoidalThread,
+            AcmeThread,
+            MetricTrapezoidalThread,
+            PlasticBottleThread,
+        )
+        for thread_class in thread_classes:
+            with self.subTest(thread_class=thread_class.__name__):
+                parameters = inspect.signature(thread_class.__init__).parameters
+                parameter = parameters["manufacturing_compensation"]
+                self.assertEqual(parameter.default, 0.0)
+                self.assertEqual(
+                    list(parameters)[-3:], ["rotation", "align", "mode"]
+                )
 
 
 class TestWhitworthThread(unittest.TestCase):

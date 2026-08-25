@@ -170,6 +170,9 @@ class _ThreadSweep(BasePartObject):
                 into a nut
 
             Defaults to ("raw","raw").
+        manufacturing_compensation: Radial allowance for FDM printing. A positive
+            value moves external threads inward and internal threads outward.
+            Defaults to 0.0.
     """
 
     def __init__(
@@ -184,11 +187,14 @@ class _ThreadSweep(BasePartObject):
             Literal["raw", "square", "fade", "chamfer"],
             Literal["raw", "square", "fade", "chamfer"],
         ] = ("raw", "raw"),
+        manufacturing_compensation: float = 0.0,
     ):
         """Store the sweep parameters and create the thread object."""
         self.external = apex_radius > root_radius
-        self.apex_radius = apex_radius
-        self.root_radius = root_radius
+        radial_shift = manufacturing_compensation * (-1 if self.external else 1)
+        self.apex_radius = apex_radius + radial_shift
+        self.root_radius = root_radius + radial_shift
+        self.manufacturing_compensation = manufacturing_compensation
         self.pitch = pitch
         self.length = length
         self.right_hand = hand == "right"
@@ -466,6 +472,12 @@ class Thread(BasePartObject):
         end_finishes: Profile of each end, one of "raw", "fade", "square", or
             "chamfer". Defaults to ("raw", "raw").
         simple: Stop at thread calculation, don't create thread. Defaults to False.
+        manufacturing_compensation: Radial allowance for vertically printed FDM
+            threads. A positive value moves an external thread inward or an
+            internal thread outward without changing its pitch or profile.
+            Calibrate the value for the printer, material, and print settings.
+            It does not compensate horizontal-print stair stepping or sagging.
+            Defaults to 0.0.
 
     Raises:
         ValueError: if end_finishes not in ["raw", "square", "fade", "chamfer"]:
@@ -490,6 +502,7 @@ class Thread(BasePartObject):
             Literal["raw", "square", "fade", "chamfer"],
         ] = ("raw", "raw"),
         simple: bool = False,
+        manufacturing_compensation: float = 0.0,
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
@@ -517,6 +530,7 @@ class Thread(BasePartObject):
         self.tooth_height = abs(self.apex_radius - self.root_radius)
         self.taper = 0 if taper_angle is None else taper_angle
         self.simple = simple
+        self.manufacturing_compensation = manufacturing_compensation
         self.thread_loops = None
 
         with BuildSketch(mode=Mode.PRIVATE) as thread_face:
@@ -560,6 +574,7 @@ class Thread(BasePartObject):
             length=self.length,
             hand=hand,
             end_finishes=self.end_finishes,
+            manufacturing_compensation=self.manufacturing_compensation,
         )
         self.thread_loops = thread_sweep.thread_loops
         super().__init__(
@@ -594,6 +609,10 @@ class WhitworthThread(BasePartObject):
         mode: Combination mode. Defaults to Mode.ADD.
         crest_truncation: Radial depth removed from the theoretical rounded
             crest before sweeping. Defaults to 0.0.
+        manufacturing_compensation: Radial allowance for vertically printed FDM
+            threads. A positive value moves an external thread inward or an
+            internal thread outward. Calibrate it for the printing process;
+            it does not compensate horizontal-print Z-axis errors. Defaults to 0.0.
 
     Attributes:
         thread_angle: Included profile angle of 55°.
@@ -619,10 +638,11 @@ class WhitworthThread(BasePartObject):
         ] = ("fade", "square"),
         interference: float = 0.2,
         simple: bool = False,
+        crest_truncation: float = 0.0,
+        manufacturing_compensation: float = 0.0,
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
-        crest_truncation: float = 0.0,
     ):
         if hand not in ["right", "left"]:
             raise ValueError(f'hand must be one of "right" or "left" not {hand}')
@@ -640,6 +660,7 @@ class WhitworthThread(BasePartObject):
         self.end_finishes = end_finishes
         self.interference = interference
         self.simple = simple
+        self.manufacturing_compensation = manufacturing_compensation
         if not 0 <= crest_truncation < 0.640327 * self.pitch:
             raise ValueError("crest_truncation must be at least 0 and less than h")
         self.crest_truncation = crest_truncation
@@ -738,6 +759,7 @@ class WhitworthThread(BasePartObject):
             length=self.length,
             hand=self.hand,
             end_finishes=self.end_finishes,
+            manufacturing_compensation=self.manufacturing_compensation,
         )
         self.thread_loops = thread_sweep.thread_loops
         super().__init__(
@@ -775,6 +797,10 @@ class BSPPThread(WhitworthThread):
         mode: Combination mode. Defaults to Mode.ADD.
         crest_diameter: Selected external major or internal minor diameter.
             Defaults to the basic full-form diameter.
+        manufacturing_compensation: Radial allowance for vertically printed FDM
+            threads. A positive value moves an external thread inward or an
+            internal thread outward. Calibrate it for the printing process;
+            it does not compensate horizontal-print Z-axis errors. Defaults to 0.0.
 
     Attributes:
         designation: ISO designation including external class and left hand.
@@ -815,10 +841,11 @@ class BSPPThread(WhitworthThread):
         ] = ("fade", "square"),
         interference: float = 0.2,
         simple: bool = False,
+        crest_diameter: Optional[float] = None,
+        manufacturing_compensation: float = 0.0,
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
-        crest_diameter: Optional[float] = None,
     ):
         normalized_size = self._normalize_size(size)
         try:
@@ -906,6 +933,7 @@ class BSPPThread(WhitworthThread):
             align=align,
             mode=mode,
             crest_truncation=crest_truncation,
+            manufacturing_compensation=manufacturing_compensation,
         )
 
 
@@ -949,6 +977,10 @@ class IsoThread(BasePartObject):
             with another object. For threaded objects built as Compounds, this
             value could be set to 0.0. Defaults to 0.2.
         simple: Stop at thread calculation, don't create thread. Defaults to False.
+        manufacturing_compensation: Radial allowance for vertically printed FDM
+            threads. A positive value moves an external thread inward or an
+            internal thread outward. Calibrate it for the printing process;
+            it does not compensate horizontal-print Z-axis errors. Defaults to 0.0.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
         align (Union[None, Align, tuple[Align, Align, Align]], optional):
             object alignment. Defaults to None.
@@ -988,6 +1020,7 @@ class IsoThread(BasePartObject):
         ] = ("fade", "square"),
         interference: float = 0.2,
         simple: bool = False,
+        manufacturing_compensation: float = 0.0,
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
@@ -1008,6 +1041,7 @@ class IsoThread(BasePartObject):
         self.end_finishes = end_finishes
         self.interference = interference
         self.simple = simple
+        self.manufacturing_compensation = manufacturing_compensation
         self.apex_radius = self.major_diameter / 2 if external else self.min_radius
         apex_width = self.pitch / 8 if external else self.pitch / 4
         self.root_radius = self.min_radius if external else self.major_diameter / 2
@@ -1029,6 +1063,7 @@ class IsoThread(BasePartObject):
                 end_finishes=self.end_finishes,
                 hand=self.hand,
                 simple=simple,
+                manufacturing_compensation=manufacturing_compensation,
             )
             self.thread_profile = bd_object.thread_profile
             super().__init__(
@@ -1080,6 +1115,10 @@ class TrapezoidalThread(BasePartObject):
             to help create valid threaded objects where the thread must fuse
             with another object. For threaded objects built as Compounds, this
             value could be set to 0.0. Defaults to 0.2.
+        manufacturing_compensation: Radial allowance for vertically printed FDM
+            threads. A positive value moves an external thread inward or an
+            internal thread outward. Calibrate it for the printing process;
+            it does not compensate horizontal-print Z-axis errors. Defaults to 0.0.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
         align (Union[None, Align, tuple[Align, Align, Align]], optional):
             object alignment. Defaults to None.
@@ -1110,6 +1149,7 @@ class TrapezoidalThread(BasePartObject):
             Literal["raw", "square", "fade", "chamfer"],
         ] = ("fade", "fade"),
         interference: float = 0.2,
+        manufacturing_compensation: float = 0.0,
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
@@ -1141,6 +1181,7 @@ class TrapezoidalThread(BasePartObject):
                 )
         self.end_finishes = end_finishes
         self.interference = interference
+        self.manufacturing_compensation = manufacturing_compensation
         bd_object = Thread(
             apex_radius=self.apex_radius,
             apex_width=apex_width,
@@ -1151,6 +1192,7 @@ class TrapezoidalThread(BasePartObject):
             interference=interference,
             end_finishes=self.end_finishes,
             hand=self.hand,
+            manufacturing_compensation=manufacturing_compensation,
         )
         self.thread_profile = bd_object.thread_profile
         thread_object = Compound(
@@ -1201,6 +1243,10 @@ class AcmeThread(TrapezoidalThread):
             to help create valid threaded objects where the thread must fuse
             with another object. For threaded objects built as Compounds, this
             value could be set to 0.0. Defaults to 0.2.
+        manufacturing_compensation: Radial allowance for vertically printed FDM
+            threads. A positive value moves an external thread inward or an
+            internal thread outward. Calibrate it for the printing process;
+            it does not compensate horizontal-print Z-axis errors. Defaults to 0.0.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
         align (Union[None, Align, tuple[Align, Align, Align]], optional):
             object alignment. Defaults to None.
@@ -1252,6 +1298,7 @@ class AcmeThread(TrapezoidalThread):
             Literal["raw", "square", "fade", "chamfer"],
         ] = ("fade", "fade"),
         interference: float = 0.2,
+        manufacturing_compensation: float = 0.0,
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
@@ -1274,6 +1321,7 @@ class AcmeThread(TrapezoidalThread):
             rotation=rotation,
             align=align,
             mode=mode,
+            manufacturing_compensation=manufacturing_compensation,
         )
 
 
@@ -1306,6 +1354,10 @@ class MetricTrapezoidalThread(TrapezoidalThread):
             to help create valid threaded objects where the thread must fuse
             with another object. For threaded objects built as Compounds, this
             value could be set to 0.0. Defaults to 0.2.
+        manufacturing_compensation: Radial allowance for vertically printed FDM
+            threads. A positive value moves an external thread inward or an
+            internal thread outward. Calibrate it for the printing process;
+            it does not compensate horizontal-print Z-axis errors. Defaults to 0.0.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
         align (Union[None, Align, tuple[Align, Align, Align]], optional):
             object alignment. Defaults to None.
@@ -1372,6 +1424,7 @@ class MetricTrapezoidalThread(TrapezoidalThread):
             Literal["raw", "square", "fade", "chamfer"],
         ] = ("fade", "fade"),
         interference: float = 0.2,
+        manufacturing_compensation: float = 0.0,
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
@@ -1393,6 +1446,7 @@ class MetricTrapezoidalThread(TrapezoidalThread):
             rotation=rotation,
             align=align,
             mode=mode,
+            manufacturing_compensation=manufacturing_compensation,
         )
 
 
@@ -1422,10 +1476,11 @@ class PlasticBottleThread(BasePartObject):
             to help create valid threaded objects where the thread must fuse
             with another object. For threaded objects built as Compounds, this
             value could be set to 0.0. Defaults to 0.2.
-        manufacturing_compensation (float, optional): used to compensate for over-extrusion of 3D
-            printers. A value of 0.2mm will reduce the radius of an external thread by 0.2mm (and
-            increase the radius of an internal thread) such that the resulting 3D printed part
-            matches the target dimensions. Defaults to 0.0.
+        manufacturing_compensation: Radial allowance for vertically printed FDM
+            threads. A value of 0.2 mm moves an external thread inward by
+            0.2 mm or an internal thread outward by 0.2 mm. Calibrate it for
+            the printer, material, and print settings. It does not compensate
+            horizontal-print stair stepping or sagging. Defaults to 0.0.
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
@@ -1473,11 +1528,11 @@ class PlasticBottleThread(BasePartObject):
         external: bool = True,
         hand: Literal["right", "left"] = "right",
         interference: float = 0.2,
+        bottle_type: Literal["astm_d2911", "pco1881"] = "astm_d2911",
         manufacturing_compensation: float = 0.0,
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
-        bottle_type: Literal["astm_d2911", "pco1881"] = "astm_d2911",
     ):
         self.thread_size = size
         self.external = external
@@ -1488,6 +1543,7 @@ class PlasticBottleThread(BasePartObject):
             raise ValueError(f'hand must be one of "right" or "left" not {hand}')
         self.hand = hand
         self.interference = interference
+        self.manufacturing_compensation = manufacturing_compensation
 
         if bottle_type == "pco1881":
             pco_size = size.lower().removesuffix("mm")
