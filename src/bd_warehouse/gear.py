@@ -45,11 +45,26 @@ license:
     limitations under the License.
 """
 
-from math import sin, cos, tan, acos, atan, radians, degrees, pi, inf
-from typing import Literal
+from math import sin, cos, tan, acos, atan, sqrt, radians, degrees, pi, inf, ceil
+from typing import Callable, Literal
 from build123d import *
+from OCP.BRep import BRep_Tool
+from OCP.BRepBuilderAPI import (
+    BRepBuilderAPI_MakeEdge,
+    BRepBuilderAPI_MakeFace,
+    BRepBuilderAPI_MakeSolid,
+    BRepBuilderAPI_MakeWire,
+    BRepBuilderAPI_Sewing,
+)
+from OCP.BRepFill import BRepFill
+from OCP.BRepLib import BRepLib
+from OCP.BRepTools import BRepTools
+from OCP.GCE2d import GCE2d_MakeSegment
+from OCP.Geom import Geom_CylindricalSurface, Geom_Surface
+from OCP.gp import gp_Ax3, gp_Dir, gp_Pnt, gp_Pnt2d
 from OCP.StdFail import StdFail_NotDone
-from bd_materials.materials.metals import alloy_steel, AlloySteel
+from OCP.TopoDS import TopoDS
+from bd_materials.materials.metals import alloy_steel, AlloySteel, bronze
 from bd_materials.finishes import black_oxide
 
 
@@ -675,6 +690,618 @@ class HelicalGear(BasePartObject):
         super().__init__(gear, rotation, align, mode)
 
 
+# ---------------------------------------------------------------------------
+# Worm gears
+# ---------------------------------------------------------------------------
+
+FlankForm = Literal["ZI", "ZA"]
+Hand = Literal["right", "left"]
+FlankSide = Literal["lower", "upper"]
+
+
+def _involute(angle: float) -> float:
+    """Involute function inv(α) = tan(α) − α, with α in radians."""
+    return tan(angle) - angle
+
+
+def _uv_face(
+    surface: Geom_Surface, corners: list[tuple[float, float]]
+) -> tuple[Face, list[Edge]]:
+    """Face on ``surface`` bounded by straight segments between ``corners`` in its
+    (u, v) parameter space.
+
+    Every worm face has such a domain: helices are straight lines in a cylinder's
+    (angle, z) space, and on a ruled helicoid z is linear in both parameters so
+    z = const trims are straight lines too. Building faces from pcurves avoids
+    surface/surface intersections entirely.
+
+    Returns:
+        the face and its edges in ``corners`` order (edge i runs corner i → i+1)
+    """
+    wire_builder = BRepBuilderAPI_MakeWire()
+    edges = []
+    for (u0, v0), (u1, v1) in zip(corners, corners[1:] + corners[:1]):
+        segment = GCE2d_MakeSegment(gp_Pnt2d(u0, v0), gp_Pnt2d(u1, v1)).Value()
+        edge = BRepBuilderAPI_MakeEdge(segment, surface).Edge()
+        BRepLib.BuildCurves3d_s(edge)
+        wire_builder.Add(edge)
+        edges.append(Edge(edge))
+    face = BRepBuilderAPI_MakeFace(surface, wire_builder.Wire()).Face()
+    return Face(face), edges
+
+
+class _WormGeometry:
+    """Derived dimensions of a cylindrical worm (ISO 54 / DIN 3975 nomenclature).
+
+    The worm axis is Z, the reference tooth (start 0) is centred on the +X axis
+    in the z = 0 transverse plane, and the worm is right handed. Left-handed
+    worms are produced by mirroring the finished geometry.
+
+    Two flank forms are supported, both exact ruled surfaces between two helices
+    of the worm's lead:
+
+    * ``"ZI"`` (involute helicoid): the tangent developable of the base helix.
+      Rulings are tangent to the base cylinder, transverse sections are circle
+      involutes, and the normal pressure angle is constant. This is the only
+      form conjugate to an involute (helical) worm wheel.
+    * ``"ZA"`` (Archimedean helicoid): straight flanks at the axial pressure angle
+      in every axial section (like a trapezoidal thread); transverse sections are
+      Archimedean spirals.
+    """
+
+    def __init__(
+        self,
+        module: float,
+        starts: int,
+        diametral_quotient: float,
+        pressure_angle: float,
+        flank_form: FlankForm,
+        addendum: float | None,
+        dedendum: float | None,
+    ):
+        if module <= 0:
+            raise ValueError("module must be greater than zero")
+        if not isinstance(starts, int) or isinstance(starts, bool) or starts <= 0:
+            raise ValueError("starts must be a positive integer")
+        if diametral_quotient <= 0:
+            raise ValueError("diametral_quotient must be greater than zero")
+        if not 0 < pressure_angle < 90:
+            raise ValueError("pressure_angle must be in the range (0, 90)")
+        if flank_form not in ("ZI", "ZA"):
+            raise ValueError("flank_form must be either 'ZI' or 'ZA'")
+        if addendum is not None and addendum <= 0:
+            raise ValueError("addendum must be greater than zero")
+        if dedendum is not None and dedendum <= 0:
+            raise ValueError("dedendum must be greater than zero")
+
+        self.module = module
+        self.starts = starts
+        self.diametral_quotient = diametral_quotient
+        self.flank_form = flank_form
+        self.normal_pressure_angle = pressure_angle
+        self.addendum = module if addendum is None else addendum
+        self.dedendum = 1.2 * module if dedendum is None else dedendum
+
+        self.pitch_radius = module * diametral_quotient / 2
+        self.addendum_radius = self.pitch_radius + self.addendum
+        self.root_radius = self.pitch_radius - self.dedendum
+        if self.root_radius <= 0:
+            raise ValueError("dedendum must be less than the reference radius")
+        self.axial_pitch = pi * module
+        self.lead = pi * module * starts
+        self._advance = self.lead / (2 * pi)  # axial advance per radian of rotation
+        gamma = atan(starts / diametral_quotient)
+        alpha_n = radians(pressure_angle)
+        self.lead_angle = degrees(gamma)
+        self.axial_pressure_angle = degrees(atan(tan(alpha_n) / cos(gamma)))
+
+        if flank_form == "ZI":
+            # cos γb = cos γ · cos αn relates the base and reference helices of an
+            # involute helicoid; the lead is shared so r·tan(γ_r) is constant.
+            gamma_b = acos(cos(gamma) * cos(alpha_n))
+            self.base_lead_angle: float | None = degrees(gamma_b)
+            self.base_radius: float | None = self._advance / tan(gamma_b)
+            self._alpha_t1 = acos(self.base_radius / self.pitch_radius)
+            self.transverse_pressure_angle: float | None = degrees(self._alpha_t1)
+        else:
+            self.base_lead_angle = None
+            self.base_radius = None
+            self.transverse_pressure_angle = None
+
+        if self.half_thickness_angle(self.addendum_radius) <= 0:
+            raise ValueError(
+                "addendum and pressure_angle produce zero or negative tip width"
+            )
+        if self.half_thickness_angle(self.root_radius) >= pi / starts:
+            raise ValueError(
+                "dedendum and pressure_angle produce zero or negative root space"
+            )
+
+    def half_thickness_angle(self, radius: float) -> float:
+        """Half the angular tooth thickness (radians) in a transverse section."""
+        half_pitch_angle = pi / (2 * self.starts)
+        if self.flank_form == "ZA":
+            return (
+                half_pitch_angle
+                - (radius - self.pitch_radius)
+                * tan(radians(self.axial_pressure_angle))
+                / self._advance
+            )
+        alpha_t = acos(self.base_radius / max(radius, self.base_radius))
+        return half_pitch_angle + _involute(self._alpha_t1) - _involute(alpha_t)
+
+    def flank_helix(self, radius: float, side: int) -> tuple[float, float]:
+        """Phase and axial offset of a flank helix.
+
+        The flank of the tooth centred on angle 0 at z = 0 crosses the cylinder of
+        ``radius`` along the helix ``(radius, phase + z/advance, z + offset)``.
+        ``side`` +1 is the flank facing −Z (lower), −1 the flank facing +Z (upper).
+        """
+        if self.flank_form == "ZA":
+            return (
+                side * pi / (2 * self.starts),
+                side
+                * (radius - self.pitch_radius)
+                * tan(radians(self.axial_pressure_angle)),
+            )
+        # ZI: rulings are tangents of the base helix. The ruling touching the base
+        # helix at angle θ reaches ``radius`` at angle θ + acos(rb/r) and has risen
+        # by sqrt(r² − rb²)·tan(γb). Below the base cylinder the flank continues
+        # radially (a plain helicoid), as an involute is undefined there.
+        base_phase = side * (pi / (2 * self.starts) + _involute(self._alpha_t1))
+        if radius <= self.base_radius:
+            return base_phase, 0.0
+        return (
+            base_phase + side * acos(self.base_radius / radius),
+            side
+            * sqrt(radius**2 - self.base_radius**2)
+            * tan(radians(self.base_lead_angle)),
+        )
+
+    def flank_angle(self, radius: float, side: int, z: float) -> float:
+        """Angle of a flank of the reference tooth at ``radius`` and height ``z``."""
+        phase, offset = self.flank_helix(radius, side)
+        return phase + (z - offset) / self._advance
+
+    def flank_radii(self) -> list[tuple[float, float]]:
+        """Radial spans of the ruled surfaces making up one flank, root to tip."""
+        if self.flank_form == "ZI" and self.root_radius < self.base_radius:
+            return [
+                (self.root_radius, self.base_radius),
+                (self.base_radius, self.addendum_radius),
+            ]
+        return [(self.root_radius, self.addendum_radius)]
+
+    def helix_span(self, length: float) -> tuple[float, float]:
+        """Start height and height of helices covering z ∈ [−length/2, length/2]
+        with margin for the flank offsets, starting a whole number of leads below
+        z = 0 so the phase at z = 0 is unchanged."""
+        start = -self.lead * ceil(length / (2 * self.lead) + 1)
+        return start, -2 * start
+
+    def flank_surfaces(
+        self, side: int, tooth_angle: float, length: float
+    ) -> list[tuple[Geom_Surface, Callable[[float, float], float]]]:
+        """Ruled helicoid surfaces of one flank of the tooth centred on ``tooth_angle``.
+
+        Returns:
+            (surface, u_at) pairs from root to tip where ``u_at(z, v)`` gives the
+            surface u parameter at height ``z`` on the v = const isoline.
+        """
+        z_start, height = self.helix_span(length)
+        total_angle = 2 * pi * height / self.lead
+        surfaces = []
+        for radii in self.flank_radii():
+            helices, offsets = [], []
+            for radius in radii:
+                phase, offset = self.flank_helix(radius, side)
+                helix = Helix(
+                    self.lead, height, radius, center=(0, 0, z_start + offset)
+                )
+                helices.append(helix.rotate(Axis.Z, degrees(tooth_angle + phase)))
+                offsets.append(offset)
+            ruled = BRepFill.Face_s(helices[0].wrapped, helices[1].wrapped)
+            surface = BRep_Tool.Surface_s(ruled)
+            _, u_max, _, _ = BRepTools.UVBounds_s(ruled)
+            # z is linear along the helices (u) and along the rulings (v):
+            # z(u, v) = z_start + advance·total_angle·u/u_max + (1−v)·offset0 + v·offset1
+            u_scale = u_max / (self._advance * total_angle)
+
+            def u_at(z, v, offsets=tuple(offsets), u_scale=u_scale, z_start=z_start):
+                return (z - z_start - (1 - v) * offsets[0] - v * offsets[1]) * u_scale
+
+            surfaces.append((surface, u_at))
+        return surfaces
+
+
+_WORM_ATTRIBUTES = (
+    "module",
+    "starts",
+    "diametral_quotient",
+    "flank_form",
+    "normal_pressure_angle",
+    "axial_pressure_angle",
+    "transverse_pressure_angle",
+    "addendum",
+    "dedendum",
+    "pitch_radius",
+    "addendum_radius",
+    "root_radius",
+    "base_radius",
+    "axial_pitch",
+    "lead",
+    "lead_angle",
+    "base_lead_angle",
+)
+
+
+class WormFlank(Face):
+    """The working flank surface of one worm thread.
+
+    Both supported flank forms are exact ruled surfaces between two helices of
+    the worm's lead, so the face is an OCCT ruled surface rather than a swept or
+    lofted approximation. The tooth is centred on the +X axis at z = 0 and the
+    face spans the axial length ``[-length/2, length/2]``.
+
+    Args:
+        module: Axial module in millimeters (equal to the worm wheel's transverse
+            module).
+        starts: Number of threads.
+        diametral_quotient: q = reference diameter / module (ISO 54). The lead
+            angle follows from ``tan(γ) = starts / q``.
+        length: Axial length of the flank.
+        pressure_angle: Normal pressure angle in degrees. Defaults to 20.
+        flank_form: ``"ZI"`` involute helicoid or ``"ZA"`` Archimedean helicoid.
+            Defaults to ``"ZI"``.
+        hand: Thread hand. Defaults to ``"right"``.
+        side: ``"lower"`` is the flank facing −Z, ``"upper"`` the flank facing +Z.
+            Defaults to ``"lower"``.
+        addendum: Radial addendum. Defaults to ``module``.
+        dedendum: Radial dedendum. Defaults to ``1.2 * module`` (DIN 3975).
+
+    Raises:
+        ValueError: If a parameter is invalid or the tooth proportions are
+            impossible.
+
+    Note:
+        A ZI flank exists only outside the base cylinder. When the root radius is
+        smaller than the base radius the face starts at the base radius;
+        :class:`Worm` closes the tooth below it with a radial helicoid.
+    """
+
+    def __init__(
+        self,
+        module: float,
+        starts: int,
+        diametral_quotient: float,
+        length: float,
+        pressure_angle: float = 20,
+        flank_form: FlankForm = "ZI",
+        hand: Hand = "right",
+        side: FlankSide = "lower",
+        addendum: float | None = None,
+        dedendum: float | None = None,
+    ):
+        if length <= 0:
+            raise ValueError("length must be greater than zero")
+        if hand not in ("right", "left"):
+            raise ValueError("hand must be either 'right' or 'left'")
+        if side not in ("lower", "upper"):
+            raise ValueError("side must be either 'lower' or 'upper'")
+        geometry = _WormGeometry(
+            module,
+            starts,
+            diametral_quotient,
+            pressure_angle,
+            flank_form,
+            addendum,
+            dedendum,
+        )
+        surface, u_at = geometry.flank_surfaces(
+            1 if side == "lower" else -1, 0, length
+        )[-1]
+        z0, z1 = -length / 2, length / 2
+        face, _ = _uv_face(
+            surface,
+            [(u_at(z0, 0), 0), (u_at(z0, 1), 1), (u_at(z1, 1), 1), (u_at(z1, 0), 0)],
+        )
+        if hand == "left":
+            face = face.mirror(Plane.XZ)
+        super().__init__(face.wrapped)
+        self.axial_length = length
+        self.hand = hand
+        self.side = side
+        self.inner_radius = geometry.flank_radii()[-1][0]
+        for attribute in _WORM_ATTRIBUTES:
+            setattr(self, attribute, getattr(geometry, attribute))
+
+
+class Worm(BasePartObject):
+    """A cylindrical worm with ISO 54 / DIN 3975 proportions.
+
+    The worm is built as a single exact boundary representation: ruled-helicoid
+    flanks (see :class:`WormFlank`), cylindrical tip and root surfaces, and planar
+    ends — no sweeps or boolean operations are involved, so construction takes
+    milliseconds and the transverse section matches the analytic tooth profile.
+    The axis is Z, the part is centred on the origin, and thread 0 is centred on
+    the +X axis at z = 0.
+
+    Args:
+        module: Axial module in millimeters (equal to the worm wheel's transverse
+            module).
+        starts: Number of threads.
+        diametral_quotient: q = reference diameter / module (ISO 54); typical
+            values are 8 to 12. The lead angle follows from ``tan(γ) = starts / q``.
+        length: Axial length of the worm.
+        pressure_angle: Normal pressure angle in degrees. Defaults to 20.
+        flank_form: ``"ZI"`` involute helicoid (conjugate to an involute worm
+            wheel) or ``"ZA"`` Archimedean helicoid. Defaults to ``"ZI"``.
+        hand: Thread hand. Defaults to ``"right"``.
+        addendum: Radial addendum. Defaults to ``module``.
+        dedendum: Radial dedendum. Defaults to ``1.2 * module`` (DIN 3975).
+        rotation: Build123d object rotation. Defaults to no rotation.
+        align: Build123d part alignment. Defaults to ``Align.CENTER``.
+        mode: Build123d combination mode. Defaults to ``Mode.ADD``.
+
+    Raises:
+        ValueError: If a parameter is invalid or the tooth proportions are
+            impossible.
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        module: float,
+        starts: int,
+        diametral_quotient: float,
+        length: float,
+        pressure_angle: float = 20,
+        flank_form: FlankForm = "ZI",
+        hand: Hand = "right",
+        addendum: float | None = None,
+        dedendum: float | None = None,
+        rotation: RotationLike = (0, 0, 0),
+        align: Align | tuple[Align, Align, Align] | None = Align.CENTER,
+        mode: Mode = Mode.ADD,
+    ):
+        if length <= 0:
+            raise ValueError("length must be greater than zero")
+        if hand not in ("right", "left"):
+            raise ValueError("hand must be either 'right' or 'left'")
+        geometry = _WormGeometry(
+            module,
+            starts,
+            diametral_quotient,
+            pressure_angle,
+            flank_form,
+            addendum,
+            dedendum,
+        )
+        self.length = length
+        self.hand = hand
+        for attribute in _WORM_ATTRIBUTES:
+            setattr(self, attribute, getattr(geometry, attribute))
+
+        # Every face is split into axial bands no longer than one lead so that
+        # OCCT's fixed-order quadrature stays accurate on the twisted flanks.
+        band_count = ceil(length / geometry.lead)
+        z_lines = [-length / 2 + length * i / band_count for i in range(band_count + 1)]
+        advance = geometry._advance
+        faces: list[Face] = []
+        cap_edges: tuple[list[Edge], list[Edge]] = ([], [])
+
+        def add_bands(surface, corners_at):
+            for i, (z_lo, z_hi) in enumerate(zip(z_lines, z_lines[1:])):
+                face, edges = _uv_face(surface, corners_at(z_lo, z_hi))
+                faces.append(face)
+                if i == 0:
+                    cap_edges[0].append(edges[0])
+                if i == band_count - 1:
+                    cap_edges[1].append(edges[2])
+
+        for start in range(starts):
+            tooth_angle = 2 * pi * start / starts
+            for side in (1, -1):
+                for surface, u_at in geometry.flank_surfaces(side, tooth_angle, length):
+                    add_bands(
+                        surface,
+                        lambda z_lo, z_hi, u_at=u_at: [
+                            (u_at(z_lo, 0), 0),
+                            (u_at(z_lo, 1), 1),
+                            (u_at(z_hi, 1), 1),
+                            (u_at(z_hi, 0), 0),
+                        ],
+                    )
+            # tip strip between this tooth's flanks and root strip to the next tooth
+            tip_lo = tooth_angle + geometry.flank_angle(geometry.addendum_radius, -1, 0)
+            tip_hi = tooth_angle + geometry.flank_angle(geometry.addendum_radius, 1, 0)
+            root_lo = tooth_angle + geometry.flank_angle(geometry.root_radius, 1, 0)
+            root_hi = (
+                tooth_angle
+                + 2 * pi / starts
+                + geometry.flank_angle(geometry.root_radius, -1, 0)
+            )
+            for radius, angle_lo, angle_hi in (
+                (geometry.addendum_radius, tip_lo, tip_hi),
+                (geometry.root_radius, root_lo, root_hi),
+            ):
+                cylinder = Geom_CylindricalSurface(
+                    gp_Ax3(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), radius
+                )
+                add_bands(
+                    cylinder,
+                    lambda z_lo, z_hi, lo=angle_lo, hi=angle_hi: [
+                        (lo + z_lo / advance, z_lo),
+                        (hi + z_lo / advance, z_lo),
+                        (hi + z_hi / advance, z_hi),
+                        (lo + z_hi / advance, z_hi),
+                    ],
+                )
+        faces += [Face(Wire(edges)) for edges in cap_edges]
+
+        # The band edges of adjacent faces are separately approximated copies of
+        # the same helix, so sew with a tolerance above the approximation error.
+        sewing = BRepBuilderAPI_Sewing(1e-5)
+        for face in faces:
+            sewing.Add(face.wrapped)
+        sewing.Perform()
+        if sewing.NbFreeEdges() != 0:
+            raise RuntimeError("worm surfaces did not sew into a closed shell")
+        solid = BRepBuilderAPI_MakeSolid(TopoDS.Shell_s(sewing.SewedShape())).Solid()
+        BRepLib.OrientClosedSolid_s(solid)
+        worm = Solid(solid)
+        if hand == "left":
+            worm = worm.mirror(Plane.XZ)
+
+        super().__init__(worm, rotation, align, mode)
+        self.material = alloy_steel(
+            grade=AlloySteel.G4140_QUENCHED_TEMPERED, finish=black_oxide()
+        )
+
+
+class WormWheel(HelicalGear):
+    """A worm wheel: an involute helical gear matched to a :class:`Worm`.
+
+    For a 90° shaft angle the wheel's transverse module equals the worm's axial
+    module, its helix angle equals the worm's lead angle (same hand), and its
+    transverse pressure angle equals the worm's axial pressure angle. This is a
+    plain (non-throated) wheel, exactly conjugate to a ``"ZI"`` worm.
+
+    Args:
+        module: Worm axial module = wheel transverse module in millimeters.
+        tooth_count: Number of wheel teeth.
+        thickness: Wheel face width.
+        starts: Number of worm threads. Defaults to 1.
+        diametral_quotient: Worm q = reference diameter / module. Defaults to 10.
+        pressure_angle: Normal pressure angle in degrees. Defaults to 20.
+        hand: Hand of the worm and wheel. Defaults to ``"right"``.
+        root_fillet: Optional radius of the tooth-root fillet.
+        addendum: Radial addendum. Defaults to ``module``.
+        dedendum: Radial dedendum. Defaults to ``1.2 * module`` (DIN 3975).
+        rotation: Build123d object rotation. Defaults to no rotation.
+        align: Build123d part alignment. Defaults to ``Align.CENTER``.
+        mode: Build123d combination mode. Defaults to ``Mode.ADD``.
+    """
+
+    def __init__(
+        self,
+        module: float,
+        tooth_count: int,
+        thickness: float,
+        starts: int = 1,
+        diametral_quotient: float = 10,
+        pressure_angle: float = 20,
+        hand: Hand = "right",
+        root_fillet: float | None = None,
+        addendum: float | None = None,
+        dedendum: float | None = None,
+        rotation: RotationLike = (0, 0, 0),
+        align: Align | tuple[Align, Align, Align] | None = Align.CENTER,
+        mode: Mode = Mode.ADD,
+    ):
+        if hand not in ("right", "left"):
+            raise ValueError("hand must be either 'right' or 'left'")
+        worm = _WormGeometry(
+            module, starts, diametral_quotient, pressure_angle, "ZA", addendum, dedendum
+        )
+        super().__init__(
+            module=module,
+            tooth_count=tooth_count,
+            pressure_angle=worm.axial_pressure_angle,
+            helix_angle=worm.lead_angle if hand == "right" else -worm.lead_angle,
+            thickness=thickness,
+            module_system="transverse",
+            root_fillet=root_fillet,
+            addendum=worm.addendum,
+            dedendum=worm.dedendum,
+            rotation=rotation,
+            align=align,
+            mode=mode,
+        )
+        self.starts = starts
+        self.diametral_quotient = diametral_quotient
+        self.hand = hand
+        self.lead_angle = worm.lead_angle
+        self.axial_pressure_angle = worm.axial_pressure_angle
+        self.center_distance = module * (diametral_quotient + tooth_count) / 2
+        self.material = bronze()
+
+
+class WormGear(Compound):
+    """Assembly: a :class:`Worm` meshed with a :class:`WormWheel` at a 90° shaft angle.
+
+    The wheel is centred on the origin with its axis along Z; the worm axis is
+    parallel to Y through ``(center_distance, 0, 0)`` with a thread space facing
+    the wheel tooth on the +X axis. ``RigidJoint`` "wheel" and "worm" mark the
+    two axes.
+
+    Args:
+        module: Worm axial module = wheel transverse module in millimeters.
+        starts: Number of worm threads.
+        diametral_quotient: Worm q = reference diameter / module.
+        tooth_count: Number of wheel teeth.
+        worm_length: Axial length of the worm.
+        wheel_thickness: Wheel face width.
+        pressure_angle: Normal pressure angle in degrees. Defaults to 20.
+        flank_form: Worm flank form. Defaults to ``"ZI"``.
+        hand: Hand of the worm and wheel. Defaults to ``"right"``.
+        root_fillet: Optional wheel tooth-root fillet radius.
+    """
+
+    def __init__(
+        self,
+        module: float,
+        starts: int,
+        diametral_quotient: float,
+        tooth_count: int,
+        worm_length: float,
+        wheel_thickness: float,
+        pressure_angle: float = 20,
+        flank_form: FlankForm = "ZI",
+        hand: Hand = "right",
+        root_fillet: float | None = None,
+    ):
+        super().__init__()
+        worm = Worm(
+            module,
+            starts,
+            diametral_quotient,
+            worm_length,
+            pressure_angle,
+            flank_form,
+            hand,
+        )
+        wheel = WormWheel(
+            module,
+            tooth_count,
+            wheel_thickness,
+            starts,
+            diametral_quotient,
+            pressure_angle,
+            hand,
+            root_fillet,
+        )
+        self.center_distance = wheel.center_distance
+        self.ratio = tooth_count / starts
+        # Thread 0 is centred on the worm's local +X; turn a thread space to face
+        # the wheel (local −X), then stand the worm axis along Y beside the wheel.
+        worm = (
+            Pos(self.center_distance, 0, 0)
+            * Rot(X=-90)
+            * Rot(Z=180 - 180 / starts)
+            * worm
+        )
+        # HelicalGear twists from its bottom face, so undo half the twist to
+        # centre a wheel tooth on +X in the z = 0 mid-plane.
+        wheel = Rot(Z=-wheel.twist_angle / 2) * wheel
+        worm.label = "worm"
+        wheel.label = "wheel"
+        self.children = [worm, wheel]
+        RigidJoint("wheel", self, Location())
+        RigidJoint("worm", self, Pos(self.center_distance, 0, 0) * Rot(X=-90))
+
+
 if __name__ == "__main__":
     from ocp_vscode import show
 
@@ -703,4 +1330,12 @@ if __name__ == "__main__":
     helical_gear = HelicalGear(
         module=2, tooth_count=13, pressure_angle=20, helix_angle=45, thickness=10 * MM
     )
-    show(pack([gear_tooth, gear_profile, spur_gear, helical_gear], 5))
+    worm_gear = WormGear(
+        module=2,
+        starts=2,
+        diametral_quotient=10,
+        tooth_count=30,
+        worm_length=30,
+        wheel_thickness=12,
+    )
+    show(pack([gear_tooth, gear_profile, spur_gear, helical_gear, worm_gear], 5))
