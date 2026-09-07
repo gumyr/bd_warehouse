@@ -49,7 +49,7 @@ from build123d.geometry import Axis, Location, Plane, Rot, RotationLike, Vector
 from build123d.joints import RigidJoint
 from build123d.objects_curve import CenterArc, Helix, Line, Polyline
 from build123d.objects_part import BasePartObject
-from build123d.operations_generic import add, mirror, scale, split
+from build123d.operations_generic import insert, mirror, scale, split
 from build123d.operations_part import loft
 from build123d.operations_sketch import make_face
 from build123d.topology import Compound, Face, Solid, Wire, tuplify
@@ -354,7 +354,7 @@ class _ThreadSweep(BasePartObject):
                         z_dir=z_dir_thread_axis,
                     )
                 ):
-                    add(self.thread_profile)
+                    insert(self.thread_profile)
             loft()
 
         loop = thread_loop.part.solids()[0]
@@ -397,7 +397,7 @@ class _ThreadSweep(BasePartObject):
                         z_dir=z_dir_thread_axis,
                     )
                 ):
-                    add(self.thread_profile)
+                    insert(self.thread_profile)
                     scale(by=(11 - i) / 11)
             loft()
 
@@ -1454,7 +1454,9 @@ class PlasticBottleThread(BasePartObject):
     """Plastic bottle thread.
 
     ASTM D2911 is selected by default.  PCO1881 is selected with
-    ``bottle_type="pco1881"``.
+    ``bottle_type="pco1881"``. The PCO1881 external profile uses the standard
+    bottle-finish diameters, while its internal profile uses a separate
+    empirically fitted closure minor diameter.
 
     L Style:
         All-Purpose Thread - trapezoidal shape with 30° shoulders, metal or platsic closures
@@ -1552,9 +1554,16 @@ class PlasticBottleThread(BasePartObject):
                     f"size invalid, must be one of {list(_PCO1881_DATA)} for PCO1881"
                 )
             data = _PCO1881_DATA[pco_size]
-            self.diameter = data["major_diameter"]
+            self.bottle_major_diameter = data["bottle_major_diameter"]
+            self.bottle_minor_diameter = data["bottle_minor_diameter"]
+            self.closure_minor_diameter = data["closure_minor_diameter"]
+            self.diameter = self.bottle_major_diameter
             self.major_diameter = self.diameter
-            self.minor_diameter = data["minor_diameter"]
+            self.minor_diameter = (
+                self.bottle_minor_diameter
+                if self.external
+                else self.closure_minor_diameter
+            )
             self.pitch = data["pitch"]
             self.starts = data["starts"]
             self.lead = self.pitch * self.starts

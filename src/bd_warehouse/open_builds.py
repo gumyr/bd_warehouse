@@ -622,11 +622,17 @@ class CBeamLinearRailProfile(BaseSketchObject):
                     _VSlotGroove(180, mode=Mode.SUBTRACT)
                 with GridLocations(0, 20, 1, 2):
                     _VSlotGroove(mode=Mode.SUBTRACT)
-            add(cavity, mode=Mode.SUBTRACT)
-            add(cavity.mirror(Plane.XZ), mode=Mode.SUBTRACT)
-            add(cavity.mirror(Plane((20, 0, 0), z_dir=(1, 1, 0))), mode=Mode.SUBTRACT)
-            add(cavity.mirror(Plane((20, 0, 0), z_dir=(1, -1, 0))), mode=Mode.SUBTRACT)
-            add(
+            insert(cavity, mode=Mode.SUBTRACT)
+            insert(cavity.mirror(Plane.XZ), mode=Mode.SUBTRACT)
+            insert(
+                cavity.mirror(Plane((20, 0, 0), z_dir=(1, 1, 0))),
+                mode=Mode.SUBTRACT,
+            )
+            insert(
+                cavity.mirror(Plane((20, 0, 0), z_dir=(1, -1, 0))),
+                mode=Mode.SUBTRACT,
+            )
+            insert(
                 cavity.mirror(Plane.XZ).mirror(Plane((20, 0, 0), z_dir=(1, -1, 0))),
                 mode=Mode.SUBTRACT,
             )
@@ -1105,7 +1111,7 @@ class FlexibleCoupler(BasePartObject):
                 Rectangle(10, 0.7, align=(Align.MIN, Align.MIN))
             spiral_cut = sweep(is_frenet=True, mode=Mode.PRIVATE).rotate(Axis.Z, 90)
             for i in range(0, 10, 2):
-                add(spiral_cut.moved(Pos(Z=i)), mode=Mode.SUBTRACT)
+                insert(spiral_cut.moved(Pos(Z=i)), mode=Mode.SUBTRACT)
 
             super().__init__(
                 coupler.part.rotate(Axis.X, 180),
@@ -1743,9 +1749,9 @@ class VSlotLinearRailProfile(BaseSketchObject):
                     (2.7, 18.2),
                     (-2.7, 18.2),
                 )
-                add(l.rotate(Axis.Z, 90))
-                add(l.rotate(Axis.Z, 180))
-                add(l.rotate(Axis.Z, 270))
+                insert(l.rotate(Axis.Z, 90))
+                insert(l.rotate(Axis.Z, 180))
+                insert(l.rotate(Axis.Z, 270))
             make_face()
 
         if rail_size in ["20x20", "20x40", "20x60", "20x80", "40x40"]:
@@ -1766,7 +1772,7 @@ class VSlotLinearRailProfile(BaseSketchObject):
                 with GridLocations(0, 20, 1, size[1] // 20 - 1):
                     _VSlotInternalCavity(mode=Mode.SUBTRACT)
             elif rail_size == "40x40":
-                add(cavity_40x40, mode=Mode.SUBTRACT)
+                insert(cavity_40x40, mode=Mode.SUBTRACT)
         super().__init__(obj=vslot.sketch, rotation=rotation, align=align, mode=mode)
 
 
@@ -2073,9 +2079,9 @@ class StepperMotor(Compound):
                         mirror(about=Plane.XZ)
                     make_face()
                 extrude(amount=-skt1_length)
-                add(Face(skt1.wire().offset_2d(-0.1)))
+                insert(Face(skt1.wire().offset_2d(-0.1)))
                 extrude(amount=-len + skt1_length)
-                add(skt1.face().located(Pos(Z=-len + skt1_length)))
+                insert(skt1.face().located(Pos(Z=-len + skt1_length)))
                 extrude(amount=-skt1_length)
                 with BuildSketch() as skt2:
                     RectangleRounded(28.2 * 2, 28.2 * 2, 4.6)
@@ -2095,7 +2101,7 @@ class StepperMotor(Compound):
                     Rectangle(21.109 * 2, 21.109 * 2)
                     Circle(25, mode=Mode.INTERSECT)
                 extrude(amount=-len)
-                add(skt1.face().located(Pos(Z=-len + skt1_length)))
+                insert(skt1.face().located(Pos(Z=-len + skt1_length)))
                 extrude(amount=-skt1_length)
                 with GridLocations(15.5 * 2, 15.5 * 2, 2, 2) as mount_holes:
                     Hole(1.5, 6)

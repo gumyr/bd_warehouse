@@ -1,2 +1,2 @@
-size,major_diameter,minor_diameter,pitch,starts,length,apex_width,root_width,apex_offset
-28,27.40,25.07,2.70,1,7.79,1.70,1.66,0.00
+size,bottle_major_diameter,bottle_minor_diameter,closure_minor_diameter,pitch,starts,length,apex_width,root_width,apex_offset
+28,27.40,24.20,25.20,2.70,1,7.79,0.80,1.66,-0.15

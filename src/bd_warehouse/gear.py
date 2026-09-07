@@ -151,6 +151,285 @@ class InvoluteToothProfile(BaseLineObject):
         super().__init__(Wire.combine(tooth.line.edges() + close)[0], mode=mode)
 
 
+class RackGearPlan(BaseSketchObject):
+    """Create a finite metric basic-rack profile in the transverse XY plane.
+
+    A rack tooth does not have a finite involute curve. It is the infinite-radius
+    limiting form of an involute gear tooth, so each flank is a straight line at
+    the transverse pressure angle. End boundaries lie on tooth-space centerlines,
+    giving an exact pitch length of ``tooth_count * pi * transverse_module``.
+
+    Args:
+        module: Normal or transverse metric module in millimeters, selected by
+            ``module_system``.
+        tooth_count: Number of complete teeth in the finite rack.
+        pressure_angle: Normal or transverse pressure angle in degrees, selected
+            by ``module_system``.
+        helix_angle: Signed rack tooth angle in degrees. Defaults to 0.
+        module_system: Measurement plane for ``module`` and ``pressure_angle``.
+            Defaults to ``"normal"``.
+        root_fillet: Optional radius of each concave tooth-root fillet. A value
+            of zero leaves the roots unfilleted.
+        addendum: Tooth height above the pitch line. Defaults to ``module``.
+        dedendum: Tooth depth below the pitch line. Defaults to ``1.25 * module``.
+        base_height: Material below the root line. Defaults to ``2 * module``.
+        rotation: In-plane rotation in degrees. Defaults to 0.
+        align: Build123d sketch alignment. Defaults to Y=0 at the pitch line.
+        mode: Build123d combination mode. Defaults to ``Mode.ADD``.
+
+    Raises:
+        ValueError: If a dimension, angle, module system, or resulting tooth
+            proportion is invalid.
+    """
+
+    @staticmethod
+    def _validate_parameters(
+        module: float,
+        tooth_count: int,
+        pressure_angle: float,
+        helix_angle: float,
+        module_system: Literal["normal", "transverse"],
+        root_fillet: float | None,
+        addendum: float | None,
+        dedendum: float | None,
+        base_height: float,
+    ) -> None:
+        """Validate values shared by the rack plan and solid."""
+        if module <= 0:
+            raise ValueError("module must be greater than zero")
+        if (
+            not isinstance(tooth_count, int)
+            or isinstance(tooth_count, bool)
+            or tooth_count <= 0
+        ):
+            raise ValueError("tooth_count must be a positive integer")
+        if not 0 <= pressure_angle < 90:
+            raise ValueError("pressure_angle must be in the range [0, 90)")
+        if not -90 < helix_angle < 90:
+            raise ValueError("helix_angle must be in the range (-90, 90)")
+        if module_system not in ("normal", "transverse"):
+            raise ValueError("module_system must be either 'normal' or 'transverse'")
+        if root_fillet is not None and root_fillet < 0:
+            raise ValueError("root_fillet must be non-negative")
+        if addendum is not None and addendum <= 0:
+            raise ValueError("addendum must be greater than zero")
+        if dedendum is not None and dedendum <= 0:
+            raise ValueError("dedendum must be greater than zero")
+        if base_height <= 0:
+            raise ValueError("base_height must be greater than zero")
+
+    @staticmethod
+    def _reference_values(
+        module: float,
+        pressure_angle: float,
+        helix_angle: float,
+        module_system: Literal["normal", "transverse"],
+    ) -> tuple[float, float, float, float]:
+        """Return normal/transverse module and pressure-angle values."""
+        beta = radians(helix_angle)
+        if module_system == "normal":
+            normal_module = module
+            transverse_module = module / cos(beta)
+            normal_pressure_angle = pressure_angle
+            transverse_pressure_angle = degrees(
+                atan(tan(radians(pressure_angle)) / cos(beta))
+            )
+        else:
+            transverse_module = module
+            normal_module = module * cos(beta)
+            transverse_pressure_angle = pressure_angle
+            normal_pressure_angle = degrees(
+                atan(tan(radians(pressure_angle)) * cos(beta))
+            )
+        return (
+            normal_module,
+            transverse_module,
+            normal_pressure_angle,
+            transverse_pressure_angle,
+        )
+
+    def __init__(
+        self,
+        module: float,
+        tooth_count: int,
+        pressure_angle: float,
+        helix_angle: float = 0,
+        module_system: Literal["normal", "transverse"] = "normal",
+        root_fillet: float | None = None,
+        addendum: float | None = None,
+        dedendum: float | None = None,
+        base_height: float | None = None,
+        rotation: float = 0,
+        align: Align | tuple[Align, Align] = Align.NONE,
+        mode: Mode = Mode.ADD,
+    ):
+        resolved_base_height = 2 * module if base_height is None else base_height
+        self._validate_parameters(
+            module,
+            tooth_count,
+            pressure_angle,
+            helix_angle,
+            module_system,
+            root_fillet,
+            addendum,
+            dedendum,
+            resolved_base_height,
+        )
+
+        (
+            self.normal_module,
+            self.transverse_module,
+            self.normal_pressure_angle,
+            self.transverse_pressure_angle,
+        ) = self._reference_values(module, pressure_angle, helix_angle, module_system)
+
+        self.module = module
+        self.module_system = module_system
+        self.tooth_count = tooth_count
+        self.pressure_angle = pressure_angle
+        self.helix_angle = helix_angle
+        self.addendum = module if addendum is None else addendum
+        self.dedendum = 1.25 * module if dedendum is None else dedendum
+        self.root_fillet = root_fillet
+        self.base_height = resolved_base_height
+        self.pitch = pi * self.transverse_module
+        self.pitch_length = tooth_count * self.pitch
+        self.tooth_height = self.addendum + self.dedendum
+
+        alpha_t = radians(self.transverse_pressure_angle)
+        half_pitch_thickness = self.pitch / 4
+        half_tip = half_pitch_thickness - self.addendum * tan(alpha_t)
+        half_root = half_pitch_thickness + self.dedendum * tan(alpha_t)
+        half_space = self.pitch / 2 - half_root
+        if half_tip <= 0:
+            raise ValueError(
+                "addendum and pressure_angle produce zero or negative tip width"
+            )
+        if half_space <= 0:
+            raise ValueError(
+                "dedendum and pressure_angle produce zero or negative root space"
+            )
+
+        # Constructive form: an array of pressure-angle trapezoidal teeth
+        # joined to the rectangular rack body at the root line.
+        tooth_profile = Trapezoid(
+            width=2 * half_root,
+            height=self.tooth_height,
+            left_side_angle=90 - self.transverse_pressure_angle,
+            right_side_angle=90 - self.transverse_pressure_angle,
+            align=(Align.CENTER, Align.MIN),
+        )
+
+        rack_profile = Pos(0, -self.dedendum) * (
+            Rectangle(
+                self.pitch_length, self.base_height, align=(Align.CENTER, Align.MAX)
+            )
+            + GridLocations(self.pitch, 0, tooth_count, 1) * tooth_profile
+        )
+        if root_fillet not in (None, 0):
+            try:
+                root_vertices = (
+                    rack_profile.vertices().group_by(Axis.Y)[1].sort_by(Axis.X)[1:-1]
+                )
+                rack_profile = fillet(root_vertices, root_fillet)
+            except (StdFail_NotDone, ValueError) as err:
+                raise ValueError(
+                    "Invalid root fillet radius, try a smaller value"
+                ) from err
+
+        super().__init__(rack_profile, rotation, align, mode)
+
+
+class RackGear(BasePartObject):
+    """Create a finite straight or helical metric rack gear.
+
+    Args:
+        module: Normal or transverse metric module in millimeters, selected by
+            ``module_system``.
+        tooth_count: Number of complete rack teeth.
+        pressure_angle: Pressure angle in degrees in the selected measurement plane.
+        thickness: Rack face width along Y in millimeters.
+        helix_angle: Signed rack tooth angle in degrees. Defaults to 0.
+        module_system: Measurement plane for ``module`` and ``pressure_angle``.
+            Defaults to ``"normal"``.
+        root_fillet: Optional concave tooth-root fillet radius.
+        addendum: Tooth height above the pitch line. Defaults to ``module``.
+        dedendum: Tooth depth below the pitch line. Defaults to ``1.25 * module``.
+        base_height: Material below the tooth root. Defaults to ``2 * module``.
+        rotation: Build123d object rotation. Defaults to no rotation.
+        align: Build123d part alignment. Defaults to Z=0 at pitch line.
+        mode: Build123d combination mode. Defaults to ``Mode.ADD``.
+
+    Raises:
+        ValueError: If thickness or a rack-plan parameter is invalid.
+    """
+
+    def __init__(
+        self,
+        module: float,
+        tooth_count: int,
+        pressure_angle: float,
+        thickness: float,
+        helix_angle: float = 0,
+        module_system: Literal["normal", "transverse"] = "normal",
+        root_fillet: float | None = None,
+        addendum: float | None = None,
+        dedendum: float | None = None,
+        base_height: float | None = None,
+        rotation: RotationLike = (0, 0, 0),
+        align: Align | tuple[Align, Align, Align] | None = Align.NONE,
+        mode: Mode = Mode.ADD,
+    ):
+        if thickness <= 0:
+            raise ValueError("thickness must be greater than zero")
+
+        rack_plan = RackGearPlan(
+            module=module,
+            tooth_count=tooth_count,
+            pressure_angle=pressure_angle,
+            helix_angle=helix_angle,
+            module_system=module_system,
+            root_fillet=root_fillet,
+            addendum=addendum,
+            dedendum=dedendum,
+            base_height=base_height,
+        )
+        for attribute in (
+            "module",
+            "module_system",
+            "tooth_count",
+            "pressure_angle",
+            "helix_angle",
+            "normal_module",
+            "transverse_module",
+            "normal_pressure_angle",
+            "transverse_pressure_angle",
+            "addendum",
+            "dedendum",
+            "root_fillet",
+            "base_height",
+            "pitch",
+            "pitch_length",
+            "tooth_height",
+        ):
+            setattr(self, attribute, getattr(rack_plan, attribute))
+        self.thickness = thickness
+        self.lateral_offset = thickness * tan(radians(helix_angle))
+
+        if helix_angle == 0:
+            rack = Solid.extrude(rack_plan.face(), Vector(0, 0, thickness))
+        else:
+            # Ruled loft between equivalent planar profiles gives linear tooth traces.
+            top_plan = Pos(self.lateral_offset, 0, thickness) * rack_plan
+            rack = Solid.make_loft(
+                [rack_plan.face().wire(), top_plan.face().wire()], ruled=True
+            )
+
+        super().__init__(
+            Rot(X=90) * Pos(Z=-thickness / 2) * rack, rotation, align, mode
+        )
+
+
 class SpurGearPlan(BaseSketchObject):
     """InvoluteToothProfile
 

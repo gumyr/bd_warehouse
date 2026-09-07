@@ -364,7 +364,7 @@ class Flange(BasePartObject):
     ):
         with BuildPart() as flange_builder:
             with BuildSketch(Plane.XZ):
-                add(flange_section)
+                insert(flange_section)
                 split(bisect_by=Plane.YZ)
             revolve()
             with PolarLocations(bcd / 2, bolt_hole_count):
@@ -613,7 +613,7 @@ class BlindFlange(Flange):
                 Rectangle(O, tf, align=(Align.CENTER, Align.MIN))
             fillet(flange_profile.vertices().group_by(Axis.Y)[-1], tf / 4)
             if face_profile is not None:
-                add(face_profile)
+                insert(face_profile)
             Rectangle(
                 B,
                 face_thickness,
@@ -797,7 +797,7 @@ class LappedFlangeStub(BasePartObject):
 
         with BuildPart() as stub:
             with BuildSketch(Plane.XZ):
-                add(face_profile)
+                insert(face_profile)
                 Rectangle(
                     stub_pipe.id,
                     face_thickness,
@@ -806,7 +806,7 @@ class LappedFlangeStub(BasePartObject):
                 )
                 split(bisect_by=Plane.YZ)
             revolve()
-            add(stub_pipe)
+            insert(stub_pipe)
             self.stub_edges = stub.edges(Select.NEW)
             fillet(stub.edges(Select.NEW), LappedFlangeStub.weld_radius)
             chamfer(
@@ -909,7 +909,7 @@ class SlipOnFlange(Flange):
             ]
             fillet(vertices, (Y - tf) / 4)
             if face_profile is not None:
-                add(face_profile)
+                insert(face_profile)
             Rectangle(
                 B,
                 Y + face_thickness,
@@ -1033,7 +1033,7 @@ class SocketWeldFlange(Flange):
             ]
             fillet(vertices, (Y - tf) / 4)
             if face_profile is not None:
-                add(face_profile)
+                insert(face_profile)
             Rectangle(
                 B13,
                 Y + face_thickness,
@@ -1157,7 +1157,7 @@ class WeldNeckFlange(Flange):
             c = (Ah - B) / 2.5
             chamfer(vertices, c)
             if face_profile is not None:
-                add(face_profile)
+                insert(face_profile)
             Rectangle(
                 B,
                 Y + face_thickness,

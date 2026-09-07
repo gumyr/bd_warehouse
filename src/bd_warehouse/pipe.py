@@ -221,9 +221,9 @@ class Pipe(BasePartObject):
 
         with BuildPart() as pipe:
             for p in path:
-                add(p)
+                insert(p)
                 with BuildSketch(Plane(origin=p @ 0, z_dir=p % 0)):
-                    add(section)
+                    insert(section)
                 sweep()
 
         super().__init__(

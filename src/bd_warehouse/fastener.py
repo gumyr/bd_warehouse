@@ -85,7 +85,7 @@ from build123d.objects_sketch import (
     SlotOverall,
     Trapezoid,
 )
-from build123d.operations_generic import add, chamfer, fillet, split
+from build123d.operations_generic import chamfer, fillet, insert, split
 from build123d.operations_part import extrude, revolve, loft
 from build123d.operations_sketch import make_face
 from build123d.topology import (
@@ -341,7 +341,7 @@ def hexalobular_recess(size: str) -> tuple[Face, float]:
             RadiusArc(*tangent_points, -Ri)
             RadiusArc(tangent_points[1], (sqrt_3 * A / 4, A / 4), Re)
         with PolarLocations(0, 6):
-            add(arc.line)
+            insert(arc.line)
         make_face()
 
     return (plan.face(), 0.6 * A)

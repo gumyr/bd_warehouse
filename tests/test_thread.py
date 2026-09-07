@@ -440,14 +440,52 @@ class TestPlasticBottleThread(unittest.TestCase):
 
     def test_pco1881_threads(self):
         """PCO1881 supports both cap and bottle thread orientations."""
+        threads = {}
         for external in (True, False):
             bottle_thread = PlasticBottleThread(
                 size="28", bottle_type="pco1881", external=external
             )
+            threads[external] = bottle_thread
             self.assertTrue(bottle_thread.is_valid)
             self.assertEqual(bottle_thread.bottle_type, "pco1881")
             self.assertAlmostEqual(bottle_thread.pitch, 2.7)
             self.assertAlmostEqual(bottle_thread.diameter, 27.4)
+            self.assertAlmostEqual(bottle_thread.bottle_major_diameter, 27.4)
+            self.assertAlmostEqual(bottle_thread.bottle_minor_diameter, 24.2)
+            self.assertAlmostEqual(bottle_thread.closure_minor_diameter, 25.2)
+            self.assertAlmostEqual(
+                bottle_thread.minor_diameter, 24.2 if external else 25.2
+            )
+            self.assertAlmostEqual(bottle_thread.root_width, 1.66)
+            self.assertAlmostEqual(bottle_thread.apex_width, 0.8)
+            self.assertAlmostEqual(
+                bottle_thread.apex_offset, -0.15 if external else 0.15
+            )
+
+        self.assertAlmostEqual(
+            threads[True].apex_radius - threads[True].root_radius, 1.6
+        )
+        self.assertAlmostEqual(
+            threads[False].root_radius - threads[False].apex_radius, 1.1
+        )
+
+        compensated_closure = PlasticBottleThread(
+            size="28",
+            bottle_type="pco1881",
+            external=False,
+            manufacturing_compensation=0.15 * MM,
+        )
+        self.assertAlmostEqual(compensated_closure.root_radius, 13.85)
+        self.assertAlmostEqual(compensated_closure.apex_radius, 12.75)
+
+        # The male crest must fit between adjacent female thread roots.
+        root_clearance = (
+            threads[False].pitch
+            - threads[False].root_width
+            - threads[True].apex_width
+        )
+        self.assertAlmostEqual(root_clearance, 0.24)
+        self.assertGreater(root_clearance, 0)
 
     def test_bottle_type_parsing(self):
         """Reject unknown bottle thread standards and sizes."""

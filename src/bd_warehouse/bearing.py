@@ -49,7 +49,7 @@ from build123d.joints import RigidJoint
 from build123d.objects_curve import JernArc, Line, PolarLine, Polyline, Spline
 from build123d.objects_part import BasePartObject, Sphere
 from build123d.objects_sketch import Circle, Rectangle, RectangleRounded
-from build123d.operations_generic import add, fillet, offset, sweep
+from build123d.operations_generic import fillet, insert, offset, sweep
 from build123d.operations_part import extrude, revolve, section
 from build123d.operations_sketch import make_face
 from build123d.topology import Compound, Edge, Face, Shell, Solid, Wire, Part
@@ -625,7 +625,7 @@ class SingleRowTaperedRollerBearing(Bearing):
             # Make a slot around the inner race to capture the rollers
             outside_edge = section.edges().sort_by(Edge.length)[-1]
             self.taper_length = outside_edge.length
-            add(
+            insert(
                 sweep(
                     outside_edge.trim(0.075, 0.925),
                     Edge.make_line(

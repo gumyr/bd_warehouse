@@ -29,7 +29,13 @@ license:
 import math
 
 import pytest
-from bd_warehouse.gear import HelicalGear, SpurGear, SpurGearPlan
+from bd_warehouse.gear import (
+    HelicalGear,
+    RackGear,
+    RackGearPlan,
+    SpurGear,
+    SpurGearPlan,
+)
 from build123d import Edge, GeomType, Vector
 
 
@@ -81,6 +87,152 @@ def test_spur_gear():
     assert bbox.size == pytest.approx(
         Vector(2 * addendum_radius, 2 * addendum_radius, thickness), abs=1e-5
     )
+
+
+def test_rack_gear_plan():
+    module, tooth_count, pressure_angle = (2, 8, 20)
+    rack_plan = RackGearPlan(
+        module=module,
+        tooth_count=tooth_count,
+        pressure_angle=pressure_angle,
+        module_system="transverse",
+    )
+
+    pitch = math.pi * module
+    addendum = module
+    dedendum = 1.25 * module
+    base_height = 2 * module
+    bbox = rack_plan.bounding_box()
+
+    assert rack_plan.is_valid
+    assert rack_plan.pitch == pytest.approx(pitch)
+    assert rack_plan.pitch_length == pytest.approx(tooth_count * pitch)
+    assert rack_plan.tooth_height == pytest.approx(addendum + dedendum)
+    assert bbox.min == pytest.approx(
+        Vector(-rack_plan.pitch_length / 2, -dedendum - base_height, 0)
+    )
+    assert bbox.max == pytest.approx(Vector(rack_plan.pitch_length / 2, addendum, 0))
+    assert rack_plan.face().normal_at() == pytest.approx(Vector(0, 0, 1))
+
+
+def test_straight_rack_gear():
+    module, tooth_count, pressure_angle, thickness = (2, 8, 20, 8)
+    rack_plan = RackGearPlan(
+        module, tooth_count, pressure_angle, module_system="transverse"
+    )
+    rack = RackGear(
+        module,
+        tooth_count,
+        pressure_angle,
+        thickness,
+        module_system="transverse",
+    )
+    pinion = SpurGear(module, 16, pressure_angle, thickness)
+
+    assert rack.is_valid
+    assert rack.lateral_offset == pytest.approx(0)
+    assert rack.volume == pytest.approx(rack_plan.area * thickness)
+    assert rack.bounding_box().size == pytest.approx(
+        Vector(rack.pitch_length, thickness, rack.tooth_height + rack.base_height)
+    )
+    assert rack.bounding_box().min.Z == pytest.approx(-rack.dedendum - rack.base_height)
+    assert rack.bounding_box().max.Z == pytest.approx(rack.addendum)
+    assert rack.pitch == pytest.approx(2 * math.pi * pinion.pitch_radius / 16)
+
+
+def test_normal_module_helical_rack_gear():
+    module, tooth_count, pressure_angle = (2, 8, 20)
+    helix_angle, thickness = (-25, 8)
+    rack_plan = RackGearPlan(
+        module,
+        tooth_count,
+        pressure_angle,
+        helix_angle=helix_angle,
+        module_system="normal",
+        root_fillet=0.5,
+    )
+    rack = RackGear(
+        module,
+        tooth_count,
+        pressure_angle,
+        thickness,
+        helix_angle=helix_angle,
+        module_system="normal",
+        root_fillet=0.5,
+    )
+    pinion = HelicalGear(
+        module,
+        16,
+        pressure_angle,
+        -helix_angle,
+        thickness,
+        module_system="normal",
+    )
+
+    expected_transverse_module = module / math.cos(math.radians(helix_angle))
+    expected_pressure_angle = math.degrees(
+        math.atan(
+            math.tan(math.radians(pressure_angle)) / math.cos(math.radians(helix_angle))
+        )
+    )
+    expected_offset = thickness * math.tan(math.radians(helix_angle))
+
+    assert rack.is_valid
+    assert rack.normal_module == pytest.approx(module)
+    assert rack.transverse_module == pytest.approx(expected_transverse_module)
+    assert rack.transverse_pressure_angle == pytest.approx(expected_pressure_angle)
+    assert rack.pitch == pytest.approx(math.pi * expected_transverse_module)
+    assert rack.lateral_offset == pytest.approx(expected_offset)
+    assert rack.volume == pytest.approx(rack_plan.area * thickness)
+    assert rack.bounding_box().size.X == pytest.approx(
+        rack.pitch_length + abs(expected_offset)
+    )
+    assert rack.transverse_module == pytest.approx(pinion.transverse_module)
+    assert rack.transverse_pressure_angle == pytest.approx(
+        pinion.transverse_pressure_angle
+    )
+    assert rack.pitch == pytest.approx(2 * math.pi * pinion.pitch_radius / 16)
+
+
+def test_rack_root_fillet():
+    unfilleted = RackGearPlan(2, 8, 20)
+    zero_fillet = RackGearPlan(2, 8, 20, root_fillet=0)
+    filleted = RackGearPlan(2, 8, 20, root_fillet=0.5)
+
+    assert zero_fillet.area == pytest.approx(unfilleted.area)
+    assert len(zero_fillet.edges()) == len(unfilleted.edges())
+    assert filleted.area > unfilleted.area
+    assert len(filleted.edges().filter_by(GeomType.CIRCLE)) == 2 * 8
+
+    with pytest.raises(ValueError, match="Invalid root fillet radius"):
+        RackGearPlan(2, 8, 20, root_fillet=1)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"module": 0},
+        {"tooth_count": 0},
+        {"tooth_count": 1.5},
+        {"pressure_angle": 90},
+        {"helix_angle": 90},
+        {"module_system": "invalid"},
+        {"root_fillet": -0.1},
+        {"addendum": 0},
+        {"dedendum": 0},
+        {"base_height": 0},
+    ],
+)
+def test_invalid_rack_gear_plan_parameters(overrides):
+    parameters = {"module": 2, "tooth_count": 8, "pressure_angle": 20}
+    parameters.update(overrides)
+    with pytest.raises(ValueError):
+        RackGearPlan(**parameters)
+
+
+def test_invalid_rack_gear_thickness():
+    with pytest.raises(ValueError, match="thickness must be greater than zero"):
+        RackGear(2, 8, 20, 0)
 
 
 def test_normal_module_helical_gear():
