@@ -31,7 +31,7 @@ import copy
 import math
 from build123d import *
 from build123d import tuplify
-from typing import Literal
+from typing import Literal, cast
 from bd_warehouse.bearing import SingleRowCappedDeepGrooveBallBearing
 from bd_warehouse.fastener import (
     HexNut,
@@ -116,7 +116,9 @@ class AcmeAntiBacklashNutBlock8mm(BasePartObject):
                 with Locations((10, 0)) as screw_hole:
                     ThreadedHole(m5, depth=10, counter_sunk=False)
 
-        super().__init__(block.part, rotation=rotation, align=align, mode=mode)
+        super().__init__(
+            cast(Part, block.part), rotation=rotation, align=align, mode=mode
+        )
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
@@ -243,7 +245,9 @@ class AluminumSpacer(BasePartObject):
                 Circle(2.6, mode=Mode.SUBTRACT)
             extrude(amount=spacer_length)
 
-        super().__init__(spacer.part, rotation=rotation, align=align, mode=mode)
+        super().__init__(
+            cast(Part, spacer.part), rotation=rotation, align=align, mode=mode
+        )
         self.material = metals.aluminum()
         self.label = f"AluminumSpacer-{length}"
         # "a" and "b" are the bottom and top mounting faces, respectively.
@@ -463,7 +467,7 @@ class CBeamEndAssembly(Compound):
         - Four M5 low-profile screws
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
         lm5s = [s := LowProfileScrew("M5-0.8", 25 * MM)] + [
@@ -546,7 +550,9 @@ class CBeamEndMount(BasePartObject):
         for i, screw_hole in enumerate(h1.locations + h2.locations):
             RigidJoint(f"screw-{i}", plate.part, screw_hole * Pos(Z=-1.55))
 
-        super().__init__(plate.part.moved(Pos(0, 5, 6)), rotation, align, mode)
+        super().__init__(
+            cast(Part, plate.part).moved(Pos(0, 5, 6)), rotation, align, mode
+        )
         self.label = "CBeamEndMount"
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
@@ -779,7 +785,9 @@ class CBeamGantryPlate(BasePartObject):
             with Locations((-10, -10), (-10, 10), (10, 0)):
                 Hole(2.55)
 
-        super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
+        super().__init__(
+            cast(Part, plate.part), rotation=rotation, align=align, mode=mode
+        )
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
@@ -869,7 +877,9 @@ class CBeamGantryPlateXLarge(BasePartObject):
                 with GridLocations(50.3, 0, 3, 1) as fixed_mounts:
                     CounterBoreHole(2.55, 4.5675, 1.6, 6)
 
-        super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
+        super().__init__(
+            cast(Part, plate.part), rotation=rotation, align=align, mode=mode
+        )
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
@@ -935,7 +945,9 @@ class CBeamRiserPlate(BasePartObject):
                 with GridLocations(60, 0, 2, 1):
                     ThreadedHole(m5, counter_sunk=False, depth=8 * MM)
 
-        super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
+        super().__init__(
+            cast(Part, plate.part), rotation=rotation, align=align, mode=mode
+        )
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
@@ -1018,7 +1030,7 @@ class EccentricSpacer(BasePartObject):
             extrude(amount=-0.1 * MM, mode=Mode.SUBTRACT)
 
         super().__init__(
-            spacer.part.locate(Pos(0, -0.79 * MM, 0)),
+            cast(Part, spacer.part).locate(Pos(0, -0.79 * MM, 0)),
             rotation=rotation,
             align=align,
             mode=mode,
@@ -1114,7 +1126,7 @@ class FlexibleCoupler(BasePartObject):
                 insert(spiral_cut.moved(Pos(Z=i)), mode=Mode.SUBTRACT)
 
             super().__init__(
-                coupler.part.rotate(Axis.X, 180),
+                cast(Part, coupler.part).rotate(Axis.X, 180),
                 rotation=rotation,
                 align=align,
                 mode=mode,
@@ -1166,7 +1178,9 @@ class LBracket(BasePartObject):
                         SlotCenterToCenter(1.75, 5.5, rotation=90, mode=Mode.SUBTRACT)
                 extrude(amount=3)
 
-        super().__init__(part=bracket.part, rotation=rotation, align=align, mode=mode)
+        super().__init__(
+            part=cast(Part, bracket.part), rotation=rotation, align=align, mode=mode
+        )
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
@@ -1229,9 +1243,10 @@ class LockCollar(Compound):
             extrude(amount=h)
             with Locations(Location((0, od / 2, h / 2), (1, 0, 0), -90)):
                 ThreadedHole(setscrew, depth=od / 2)
-        collar.part.color = Color(0x020202)
-        collar.part.label = "Collar"
-        self.children = [collar.part, setscrew.locate(setscrew.hole_locations[0])]
+        collar_part = cast(Part, collar.part)
+        collar_part.color = Color(0x020202)
+        collar_part.label = "Collar"
+        self.children = [collar_part, setscrew.locate(setscrew.hole_locations[0])]
         self.label = f"LockCollar{inside_diameter}"
         RigidJoint("a", self, Location())
         RigidJoint("b", self, -Location((0, 0, h)))
@@ -1367,7 +1382,9 @@ class RouterSpindleMount(BasePartObject):
                 ):
                     with Locations((10.6, 0), (-29.4, 0)):
                         ThreadedHole(m5, counter_sunk=False, depth=9 * MM)
-                with Locations(-Plane.XZ.offset(-base.part.bounding_box().max.Y)):
+                with Locations(
+                    -Plane.XZ.offset(-cast(Part, base.part).bounding_box().max.Y)
+                ):
                     with GridLocations(36.8 * 2, 0, 2, 1):
                         ThreadedHole(m5, counter_sunk=False, depth=13 * MM)
 
@@ -1404,12 +1421,13 @@ class RouterSpindleMount(BasePartObject):
                     Text("OPENBUILDS", 7.5 * MM, font_style=FontStyle.BOLD)
                 extrude(amount=0.1 * MM)
 
+        base_part, faceplate_part = cast(Part, base.part), cast(Part, faceplate.part)
         if parts == "both":
-            mount = base.part + faceplate.part
+            mount = base_part + faceplate_part
         elif parts == "base":
-            mount = base.part
+            mount = base_part
         elif parts == "faceplate":
-            mount = faceplate.part
+            mount = faceplate_part
         else:
             raise ValueError(
                 f"the parts parameter must one of 'base', 'faceplate' or 'both' "
@@ -1483,7 +1501,9 @@ class ShimWasher(BasePartObject):
             extrude(amount=thickness)
             fillet(shim.edges().group_by(SortBy.LENGTH)[-1], thickness / 5)
 
-        super().__init__(shim.part, rotation=rotation, align=align, mode=mode)
+        super().__init__(
+            cast(Part, shim.part), rotation=rotation, align=align, mode=mode
+        )
         self.material = metals.aluminum()
         self.label = f"ShimWasher-{shim_type}"
         RigidJoint("a", self, Location())
@@ -1535,7 +1555,9 @@ class SpacerBlock(BasePartObject):
                 with GridLocations(40, 0, 2, 1):
                     ThreadedHole(m5, counter_sunk=False, depth=12)
 
-        super().__init__(plate.part, rotation=rotation, align=align, mode=mode)
+        super().__init__(
+            cast(Part, plate.part), rotation=rotation, align=align, mode=mode
+        )
         self.material = metals.aluminum(
             finish=[finishes.brushed(), finishes.anodize("black")]
         )
@@ -1592,7 +1614,7 @@ class TNut(BasePartObject):
             TapHole(m5, counter_sunk=False)
 
         super().__init__(
-            part=nut_builder.part, rotation=rotation, align=align, mode=mode
+            part=cast(Part, nut_builder.part), rotation=rotation, align=align, mode=mode
         )
         self.material = metals.mild_steel()
         RigidJoint("a", self, Pos(Z=1))
@@ -1688,7 +1710,7 @@ class VSlotLinearRailProfile(BaseSketchObject):
         align: tuple[Align, Align] = (Align.CENTER, Align.CENTER),
         mode: Mode = Mode.ADD,
     ):
-        grooves: dict[str, list[tuple[tuple[int, int], list[int]]]] = {
+        grooves: dict[str, tuple[list[tuple[int, int]], list[int]]] = {
             "20x20": ([(0, 0), (0, 0), (0, 0), (0, 0)], [0, 90, 180, 270]),
             "20x40": (
                 [(0, 10), (0, 10), (0, 10), (0, -10), (0, -10), (0, -10)],
@@ -1755,21 +1777,21 @@ class VSlotLinearRailProfile(BaseSketchObject):
             make_face()
 
         if rail_size in ["20x20", "20x40", "20x60", "20x80", "40x40"]:
-            size = [int(v) for v in rail_size.split("x")]
+            width, height = (int(v) for v in rail_size.split("x"))
         else:
             raise ValueError(
                 f"The rail_size of {rail_size} isn't valid"
                 f" - must be one of 20x20, 20x40, 20x60, 20x80, or 40x40"
             )
         with BuildSketch() as vslot:
-            RectangleRounded(*size, FILLET_RADIUS)
-            with GridLocations(20, 20, size[0] // 20, size[1] // 20):
+            RectangleRounded(width, height, FILLET_RADIUS)
+            with GridLocations(20, 20, width // 20, height // 20):
                 Circle(CAVITY_RADIUS, mode=Mode.SUBTRACT)
             for pos, angle in zip(*grooves[rail_size]):
                 with Locations(pos):
                     _VSlotGroove(angle, mode=Mode.SUBTRACT)
             if rail_size in ["20x40", "20x60", "20x80"]:
-                with GridLocations(0, 20, 1, size[1] // 20 - 1):
+                with GridLocations(0, 20, 1, height // 20 - 1):
                     _VSlotInternalCavity(mode=Mode.SUBTRACT)
             elif rail_size == "40x40":
                 insert(cavity_40x40, mode=Mode.SUBTRACT)
@@ -1939,7 +1961,10 @@ class XtremeSolidVWheel(BasePartObject):
             revolve()
 
         super().__init__(
-            part=wheel.part, rotation=rotation, align=tuplify(align, 3), mode=mode
+            part=cast(Part, wheel.part),
+            rotation=rotation,
+            align=tuplify(align, 3),
+            mode=mode,
         )
         self.material = plastics.pc(
             color=Color("white"), thickness_mm=2, opacity=0.1, roughness=0.45
@@ -2043,13 +2068,13 @@ class StepperMotor(Compound):
         motor_type: Literal["Nema17", "Nema23", "Nema23HighTorque"],
         motor_length: float | None = None,
     ):
-        motor_data = {
+        motor_data: dict[str, tuple[float, float, float, float, float]] = {
             "Nema17": (48, 5, 2, 9, 24),
             "Nema23": (56, IN / 4, 2.675, 5.6, 20.6),
             "Nema23HighTorque": (86, IN / 4, 2.675, 5.6, 20.6),
         }
         try:
-            len, shaft_d, flat, shaft_l1, shaft_l2 = motor_data[motor_type]
+            length, shaft_d, flat, shaft_l1, shaft_l2 = motor_data[motor_type]
         except KeyError:
             raise ValueError(
                 f"{motor_type} is invalid, must be one of {motor_data.keys()}"
@@ -2060,14 +2085,14 @@ class StepperMotor(Compound):
                 raise ValueError(
                     f"Expected motor_length greater than 0, got {motor_length}"
                 )
-            len = motor_length
+            length = motor_length
 
         m3 = SocketHeadCapScrew("M3-0.5", 20)
 
         with BuildPart() as stepper:
             if motor_type in ["Nema23", "Nema23HighTorque"]:
-                skt1_length = min(len / 2, 11)
-                skt2_length = min(len, 4.8)
+                skt1_length = min(length / 2, 11)
+                skt2_length = min(length, 4.8)
                 with BuildSketch() as skt1:
                     with BuildLine():
                         l1 = Line((28.2, 0), (28.2, 16.07))
@@ -2080,8 +2105,8 @@ class StepperMotor(Compound):
                     make_face()
                 extrude(amount=-skt1_length)
                 insert(Face(skt1.wire().offset_2d(-0.1)))
-                extrude(amount=-len + skt1_length)
-                insert(skt1.face().located(Pos(Z=-len + skt1_length)))
+                extrude(amount=-length + skt1_length)
+                insert(skt1.face().located(Pos(Z=-length + skt1_length)))
                 extrude(amount=-skt1_length)
                 with BuildSketch() as skt2:
                     RectangleRounded(28.2 * 2, 28.2 * 2, 4.6)
@@ -2092,7 +2117,7 @@ class StepperMotor(Compound):
                     Circle(19.05)
                 extrude(amount=1.6)
             else:
-                skt1_length = min(len / 2, 8.75)
+                skt1_length = min(length / 2, 8.75)
                 with BuildSketch() as skt1:
                     Rectangle(21.209 * 2, 21.209 * 2)
                     Circle(26.5, mode=Mode.INTERSECT)
@@ -2100,8 +2125,8 @@ class StepperMotor(Compound):
                 with BuildSketch() as skt2:
                     Rectangle(21.109 * 2, 21.109 * 2)
                     Circle(25, mode=Mode.INTERSECT)
-                extrude(amount=-len)
-                insert(skt1.face().located(Pos(Z=-len + skt1_length)))
+                extrude(amount=-length)
+                insert(skt1.face().located(Pos(Z=-length + skt1_length)))
                 extrude(amount=-skt1_length)
                 with GridLocations(15.5 * 2, 15.5 * 2, 2, 2) as mount_holes:
                     Hole(1.5, 6)
@@ -2125,12 +2150,13 @@ class StepperMotor(Compound):
                     )
             extrude(amount=shaft_l2)
 
-        stepper.part.color = Color(0x020202)
-        shaft.part.color = Color(0xC0C0C0)
+        stepper_part, shaft_part = cast(Part, stepper.part), cast(Part, shaft.part)
+        stepper_part.color = Color(0x020202)
+        shaft_part.color = Color(0xC0C0C0)
 
         super().__init__()
         self.label = f"StepperMotor-{motor_type}"
-        self.children = [stepper.part, shaft.part]
+        self.children = [stepper_part, shaft_part]
         for label, loc in zip(["a", "b", "c", "d"], mount_holes.locations):
             RigidJoint(label, self, -loc)
         RigidJoint(

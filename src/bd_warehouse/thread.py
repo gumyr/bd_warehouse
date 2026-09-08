@@ -36,7 +36,7 @@ import csv
 import re
 from importlib import resources
 from math import copysign, cos, radians, sin, tan
-from typing import Literal, Optional, Tuple, Union
+from typing import Literal, Optional, Tuple, TypedDict, Union
 
 import bd_warehouse
 
@@ -52,8 +52,8 @@ from build123d.objects_part import BasePartObject
 from build123d.operations_generic import insert, mirror, scale, split
 from build123d.operations_part import loft
 from build123d.operations_sketch import make_face
-from build123d.topology import Compound, Face, Solid, Wire, tuplify
-from OCP.TopoDS import TopoDS_Shape
+from build123d.topology import Compound, Face, Shape, Solid, Wire, tuplify
+from OCP.TopoDS import TopoDS_Compound
 
 
 def is_safe(value: str) -> bool:
@@ -75,11 +75,23 @@ def imperial_str_to_float(measure: str) -> float:
 def _read_plastic_bottle_thread_csv(filename: str) -> list[dict[str, str]]:
     """Read a plastic bottle thread parameter table."""
     data_resource = resources.files(bd_warehouse) / f"data/{filename}"
-    with data_resource.open(encoding="utf-8", newline="") as csvfile:
+    with data_resource.open(encoding="utf-8", newline="") as csvfile:  # type: ignore[call-overload]  # typeshed omits newline= on Traversable.open
         return list(csv.DictReader(csvfile))
 
 
-_ASTM_D2911_DIMENSIONS = {
+class _AstmD2911Dimensions(TypedDict):
+    diameter_max: float
+    diameter_min: float
+    tpi: int
+
+
+class _AstmD2911Finish(TypedDict):
+    min_turns: float
+    diameters: list[int]
+    angles: dict[str, tuple[float, float]]
+
+
+_ASTM_D2911_DIMENSIONS: dict[int, _AstmD2911Dimensions] = {
     int(row["diameter"]): {
         "diameter_max": float(row["diameter_max"]),
         "diameter_min": float(row["diameter_min"]),
@@ -98,7 +110,7 @@ _ASTM_D2911_PROFILES = {
         "plastic_bottle_thread_astm_d2911_profiles.csv"
     )
 }
-_ASTM_D2911_FINISHES = {
+_ASTM_D2911_FINISHES: dict[int, _AstmD2911Finish] = {
     int(row["finish"]): {
         "min_turns": float(row["min_turns"]),
         "diameters": [int(diameter) for diameter in row["diameters"].split()],
@@ -124,7 +136,7 @@ _PCO1881_DATA = {
 def _read_bspp_thread_csv() -> list[dict[str, str]]:
     """Read the ISO 228-1 BSPP thread parameter table."""
     data_resource = resources.files(bd_warehouse) / "data/iso_228_1.csv"
-    with data_resource.open(encoding="utf-8", newline="") as csvfile:
+    with data_resource.open(encoding="utf-8", newline="") as csvfile:  # type: ignore[call-overload]  # typeshed omits newline= on Traversable.open
         return list(csv.DictReader(csvfile))
 
 
@@ -246,17 +258,18 @@ class _ThreadSweep(BasePartObject):
                 children = list(bd_object.children)
                 bottom_loop = children.pop(0)
                 label = bottom_loop.label
+                kept: Shape | None
                 if end_finishes[0] == "square":
-                    bottom_loop = split(bottom_loop, bisect_by=Plane.XY, keep=Keep.TOP)
+                    kept = split(bottom_loop, bisect_by=Plane.XY, keep=Keep.TOP)
                 else:
-                    bottom_loop = bottom_loop.intersect(chamfer_shape)
-                    if isinstance(bottom_loop, list):
-                        bottom_loop = bottom_loop[0]
-                if bottom_loop is None:
+                    # A null boolean leaves nothing of this loop to keep
+                    pieces = bottom_loop.intersect(chamfer_shape)
+                    kept = None if pieces is None else pieces[0]
+                if kept is None:
                     bd_object.children = children
                 else:
-                    bottom_loop.label = label
-                    bd_object.children = [bottom_loop] + children
+                    kept.label = label
+                    bd_object.children = [kept] + children
 
             # Top
             if end_finishes[1] == "fade":
@@ -265,7 +278,7 @@ class _ThreadSweep(BasePartObject):
                 bd_object.children = list(bd_object.children) + [end_tip]
             elif end_finishes[1] in ["square", "chamfer"]:
                 children = list(bd_object.children)
-                top_loops = []
+                top_loops: list[Shape] = []
                 last_square = False
                 for _ in range(3):
                     if not children:
@@ -277,26 +290,24 @@ class _ThreadSweep(BasePartObject):
                     bbox = top_loop.bounding_box()
                     if bbox.min.Z > self.length:
                         continue
+                    kept = top_loop
                     if end_finishes[1] == "square":
                         # If this loop is entirely BELOW the plane
                         # Keep without splitting, stop checking future loops
                         if bbox.max.Z < self.length:
                             last_square = True
                         else:
-                            top_loop = split(
+                            kept = split(
                                 top_loop,
                                 bisect_by=Plane.XY.offset(self.length),
                                 keep=Keep.BOTTOM,
                             )
                     else:
-                        top_loop = top_loop.intersect(chamfer_shape)
-                        if isinstance(top_loop, list):
-                            top_loop = top_loop[0]
-                        if top_loop is None:
-                            continue
-                    if top_loop.volume != 0:
-                        top_loop.label = label
-                        top_loops.append(top_loop)
+                        pieces = top_loop.intersect(chamfer_shape)
+                        kept = None if pieces is None else pieces[0]
+                    if kept is not None and kept.volume != 0:
+                        kept.label = label
+                        top_loops.append(kept)
                     if last_square:
                         break
                 bd_object.children = children + top_loops
@@ -357,7 +368,7 @@ class _ThreadSweep(BasePartObject):
                     insert(self.thread_profile)
             loft()
 
-        loop = thread_loop.part.solids()[0]
+        loop = thread_loop.solids()[0]
         for i in range(2):
             RigidJoint(str(i), loop, thread_path_wire.location_at(i))
         return loop
@@ -401,7 +412,7 @@ class _ThreadSweep(BasePartObject):
                     scale(by=(11 - i) / 11)
             loft()
 
-        tip = fade_tip.part.solids()[0]
+        tip = fade_tip.solids()[0]
 
         RigidJoint(
             "0",
@@ -558,12 +569,12 @@ class Thread(BasePartObject):
                 if not self.right_hand:
                     mirror(about=Plane.XZ, mode=Mode.REPLACE)
             make_face()
-        self.thread_profile = thread_face.sketch_local.faces()[0]
+        self.thread_profile = thread_face.faces()[0]
 
         if simple:
             # Initialize with a valid shape then nullify
             super().__init__(part=Solid.make_box(1, 1, 1))
-            self.wrapped = TopoDS_Shape()
+            self.wrapped = TopoDS_Compound()
             return
 
         thread_sweep = _ThreadSweep(
@@ -731,16 +742,17 @@ class WhitworthThread(BasePartObject):
                         right_valley,
                     )
             make_face()
-        self.thread_profile = thread_face.sketch_local.faces()[0]
+        self.thread_profile = thread_face.faces()[0]
         if self.crest_truncation > 0:
             crest_y = radial_direction * self.tooth_height
             crest_plane = Plane.ZX.offset(crest_y)
-            self.thread_profile = self.thread_profile.split(
+            truncated = self.thread_profile.split(
                 crest_plane,
                 keep=Keep.BOTTOM if external else Keep.TOP,
             )
-            if not isinstance(self.thread_profile, Face):
+            if not isinstance(truncated, Face):
                 raise RuntimeError("Unable to create the truncated Whitworth profile")
+            self.thread_profile = truncated
             # A flat crest centred exactly at profile X=0 is coincident with the
             # bottom end plane and can produce a null OCCT square/chamfer boolean.
             # A negligible axial phase shift avoids that coincidence.
@@ -748,7 +760,7 @@ class WhitworthThread(BasePartObject):
 
         if simple:
             super().__init__(part=Solid.make_box(1, 1, 1))
-            self.wrapped = TopoDS_Shape()
+            self.wrapped = TopoDS_Compound()
             return
 
         thread_sweep = _ThreadSweep(
@@ -883,11 +895,11 @@ class BSPPThread(WhitworthThread):
                 self.basic_pitch_diameter - class_factor * pitch_tolerance,
                 self.basic_pitch_diameter,
             )
-            self.major_diameter_limits = (
+            self.major_diameter_limits: tuple[float, float] | None = (
                 self.basic_major_diameter - data["external_major_tolerance"],
                 self.basic_major_diameter,
             )
-            self.minor_diameter_limits = None
+            self.minor_diameter_limits: tuple[float, float] | None = None
         else:
             self.pitch_diameter_limits = (
                 self.basic_pitch_diameter,
@@ -1049,7 +1061,7 @@ class IsoThread(BasePartObject):
         if simple:
             # Initialize with a valid shape then nullify
             super().__init__(part=Solid.make_box(1, 1, 1))
-            self.wrapped = TopoDS_Shape()
+            self.wrapped = TopoDS_Compound()
 
         else:
             bd_object = Thread(
@@ -1648,7 +1660,9 @@ class PlasticBottleThread(BasePartObject):
         if not self.external:
             self.apex_offset = -self.apex_offset
         self.pitch = 25.4 * MM / self.tpi
-        self.length = (_ASTM_D2911_FINISHES[self.finish]["min_turns"] + 0.75) * self.pitch
+        self.length = (
+            _ASTM_D2911_FINISHES[self.finish]["min_turns"] + 0.75
+        ) * self.pitch
         self.lead = self.pitch
         bd_object = Thread(
             apex_radius=self.apex_radius,

@@ -32,7 +32,7 @@ import copy
 from abc import ABC, abstractmethod
 from functools import cached_property
 from math import atan, degrees, floor, pi
-from typing import Literal
+from typing import ClassVar, Literal
 
 from build123d.build_common import (
     MM,
@@ -127,42 +127,39 @@ class Bearing(ABC, BasePartObject):
         """Return a dictionary of list of fastener types of this size"""
         return select_by_size_fn(cls, size)
 
-    @property
-    @abstractmethod
-    def bearing_data(cls):
-        """Each derived class must provide a bearing_data dictionary"""
-        return NotImplementedError  # pragma: no cover
+    bearing_data: ClassVar[dict[str, dict[str, str]]]
+    """Each derived class must provide a bearing_data dictionary"""
 
     @abstractmethod
     def inner_race_section(self) -> Solid:
         """Each derived class must provide the section of the inner race"""
-        return NotImplementedError  # pragma: no cover
+        raise NotImplementedError  # pragma: no cover
 
     @abstractmethod
     def outer_race_section(self) -> Solid:
         """Each derived class must provide the section of the outer race"""
-        return NotImplementedError  # pragma: no cover
+        raise NotImplementedError  # pragma: no cover
 
     @abstractmethod
     def roller(self) -> Solid:
         """Each derived class must provide the roller object - a sphere, cylinder or cone"""
-        return NotImplementedError  # pragma: no cover
+        raise NotImplementedError  # pragma: no cover
 
     @abstractmethod
-    def countersink_profile(self) -> Face:
+    def countersink_profile(self, interference: float = 0) -> Face:
         """Each derived class must provide the profile of a countersink cutter"""
-        return NotImplementedError  # pragma: no cover
+        raise NotImplementedError  # pragma: no cover
 
     @property
     @abstractmethod
     def roller_diameter(self):
         """Each derived class must provide the roller diameter"""
-        return NotImplementedError  # pragma: no cover
+        raise NotImplementedError  # pragma: no cover
 
     @property
     @abstractmethod
     def race_center_radius(self):
-        return NotImplementedError  # pragma: no cover
+        raise NotImplementedError  # pragma: no cover
 
     @property
     def roller_count(self):
@@ -658,23 +655,24 @@ class SingleRowTaperedRollerBearing(Bearing):
         roller_inner_edge = inner_edge.trim(GAP, 1 - GAP)
         c_inner_a = Axis(inner_edge)
         c_outer_a = Axis(outer_edge)
-        r_axis = Axis(
-            c_inner_a.intersect(c_outer_a),
-            (c_inner_a.direction + c_outer_a.direction * -1) / 2,
-        )
+        apex = c_inner_a.intersect(c_outer_a)
+        if not isinstance(apex, Vector):
+            raise RuntimeError("race section edges do not intersect")
+        r_axis = Axis(apex, (c_inner_a.direction + c_outer_a.direction * -1) / 2)
         roller_non_planar_face = Face.revolve(roller_inner_edge, 360, r_axis)
         roller_circles = roller_non_planar_face.edges().filter_by(GeomType.CIRCLE)
         roller_ends = [Face(Wire(e)) for e in roller_circles]
         roller = Solid(Shell(roller_ends + [roller_non_planar_face]))
         self._roller_diameters = [2 * e.radius for e in roller_circles]
-        self.cage_edge = section(roller, Plane.XZ).intersect(
+        cage_edges = section(roller, Plane.XZ).intersect(
             Axis(
                 r_axis.position + Vector(0.3 * min(self._roller_diameters), 0, 0),
                 r_axis.direction,
             )
         )
-        if isinstance(self.cage_edge, list):
-            self.cage_edge = self.cage_edge[0]
+        if not cage_edges:
+            raise RuntimeError("roller section does not cross the cage line")
+        self.cage_edge: Edge = cage_edges[0]
         self._race_center_radius = roller.faces().sort_by(Axis.Z)[-1].center().X
         roller.position -= (self._race_center_radius, 0, 0)
         return roller
@@ -745,15 +743,16 @@ class PressFitHole(BasePartObject):
         bearing: Bearing,
         interference: float = 0,
         fit: Literal["Close", "Normal", "Loose"] = "Normal",
-        depth: float = None,
+        depth: float | None = None,
         mode: Mode = Mode.SUBTRACT,
     ):
-        context: BuildPart = BuildPart._get_context(self)
+        context: BuildPart | None = BuildPart._get_context(self)
         validate_inputs(context, self)
 
         if not isinstance(bearing, Bearing):
             raise ValueError("pressFitHole only accepts bearings")
 
+        self.hole_depth: float
         if depth is None and context is not None:
             self.hole_depth = 2 * context.max_dimension
         else:

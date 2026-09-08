@@ -73,6 +73,7 @@ def _iso_286_hole_deviations(
             f"No ISO 286 hole deviations available for {nominal_size:g} mm"
         ) from error
 
+    deviations: tuple[float, float]
     if tolerance_class == "D10":
         deviations = (d_lower, d_lower + it10)
     elif tolerance_class == "H9":
@@ -86,7 +87,7 @@ def _iso_286_hole_deviations(
     else:
         raise ValueError(f"Unsupported ISO 286 hole tolerance {tolerance_class}")
 
-    return tuple(deviation / 1000 for deviation in deviations)
+    return (deviations[0] / 1000, deviations[1] / 1000)
 
 
 def _key_plan(length: float, width: float, key_form: KeyForm) -> Face:

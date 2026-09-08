@@ -47,7 +47,7 @@ from build123d.objects_part import BasePartObject
 from build123d.objects_sketch import Circle, Rectangle, SlotOverall
 from build123d.operations_generic import fillet, mirror, split
 from build123d.operations_part import extrude
-from build123d.topology import Edge, Face, Part, ShapeList, Solid, Wire
+from build123d.topology import Edge, Face, Part, Shape, ShapeList, Solid, Wire
 
 import bd_warehouse
 
@@ -59,7 +59,7 @@ def read_retaining_ring_parameters_from_csv(
     parameters = {}
     data_resource = resources.files(bd_warehouse) / f"data/{filename}"
 
-    with data_resource.open(encoding="utf-8", newline="") as csvfile:
+    with data_resource.open(encoding="utf-8", newline="") as csvfile:  # type: ignore[call-overload]  # typeshed omits newline= on Traversable.open
         reader = csv.DictReader(csvfile)
         if not reader.fieldnames:
             raise ValueError(f"No header found in {filename}")
@@ -75,6 +75,14 @@ def read_retaining_ring_parameters_from_csv(
             }
             parameters[size][size_field] = float(size)
     return parameters
+
+
+def _intersections(shape: Shape, axis: Axis) -> ShapeList:
+    """Intersections of a curve with an axis, raising if there are none."""
+    intersections = shape.intersect(axis)
+    if not intersections:
+        raise ValueError("curve and axis do not intersect")
+    return intersections
 
 
 class RetainingRing(ABC, BasePartObject):
@@ -193,11 +201,12 @@ class ExternalSnapRing(RetainingRing):
         else:
             # The helper circles locate a smooth tangent transition from the ring body
             # to one plier lug. Only half is retained and mirrored for exact symmetry.
-            c1_cntr = CenterArc((0, 0), d3 / 2 + b, 0, 90).intersect(
-                Axis((d3 / 5, 0), (0, 1))
+            c1_cntr = _intersections(
+                CenterArc((0, 0), d3 / 2 + b, 0, 90), Axis((d3 / 5, 0), (0, 1))
             )[0]
-            c2_cntr = CenterArc((0, 0), d3 / 2 + a, 270, 90).intersect(
-                Axis((a / 1.5 + 2.5 * d5, 0), (0, 1))
+            c2_cntr = _intersections(
+                CenterArc((0, 0), d3 / 2 + a, 270, 90),
+                Axis((a / 1.5 + 2.5 * d5, 0), (0, 1)),
             )[0]
             cntr_path = ThreePointArc(c2_cntr, ((d3 + a + b) / 2, 0), c1_cntr)
 
@@ -227,8 +236,9 @@ class ExternalSnapRing(RetainingRing):
             ring_plan -= Circle(d3 / 2)
             ring_plan -= Rectangle(d5, d3, align=(Align.CENTER, Align.MAX))
             ring_plan -= Pos(
-                CenterArc((0, 0), (d3 + a) / 2, 270, 90).intersect(
-                    Axis((1.5 * d5, 0), (0, 1))
+                _intersections(
+                    CenterArc((0, 0), (d3 + a) / 2, 270, 90),
+                    Axis((1.5 * d5, 0), (0, 1)),
                 )[0]
             ) * Circle(d5 / 2)
             ring_plan = split(ring_plan, Plane.YZ)
@@ -260,7 +270,7 @@ class InternalSnapRing(RetainingRing):
         # Sizes 8-11 need the smaller offset to keep their compact lug connected;
         # larger rings have enough material for a two-hole-diameter offset.
         a1 = Axis((1.5 * d5 if int(self.ring_size) < 12 else 2 * d5, 0), (0, 1))
-        i = c1.intersect(a1)[0]
+        i = _intersections(c1, a1)[0]
 
         ring_plan = base = Circle(d3 / 2)
         ring_plan -= (hole := Pos(Y=-b / 4) * Circle((d3 - 3 * b / 2) / 2))
@@ -274,10 +284,10 @@ class InternalSnapRing(RetainingRing):
         )
 
         # Build the squarish corner
-        l1 = ConstrainedLines((0, 0), end_loop.edge()).edges().sort_by(Axis.X)
-        i2 = ShapeList(Axis(l1[0]).intersect(base.edge())).sort_by(Axis.Y)[0]
+        l1 = ConstrainedLines(end_loop.edge(), (0, 0)).edges().sort_by(Axis.X)
+        i2 = _intersections(base.edge(), Axis(l1[0])).sort_by(Axis.Y)[0]
         l2 = Line(i2, l1[0].vertices().sort_by(Axis.Y)[0])
-        i3 = ShapeList(Axis(l1[1]).intersect(base.edge())).sort_by(Axis.X)[-1]
+        i3 = _intersections(base.edge(), Axis(l1[1])).sort_by(Axis.X)[-1]
         a2 = RadiusArc(i2, i3, -d3 / 2)
         l3 = Line(i, i3)
         l4 = Line(l1[0] @ 0, i)

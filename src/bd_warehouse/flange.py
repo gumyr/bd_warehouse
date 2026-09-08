@@ -145,8 +145,9 @@ license:
     limitations under the License.
 
 """
+
 from math import degrees, atan2
-from typing import Literal, Union
+from typing import Any, Literal, Union, cast, get_args
 from build123d import *
 from build123d import tuplify
 from bd_warehouse.pipe import Identifier, Material, Pipe
@@ -177,7 +178,7 @@ nps_to_dn = {
 }
 
 # ASME 16.5 Table 7 Templates for Drilling Class 150 Pipe Flanges and Flanged Fittings
-drilling_class_150 = {
+drilling_class_150: dict[str, list[Any]] = {
     "1/2":[90,60.3,"5/8",4,"1/2",55,"…",50],
     "3/4":[100,69.9,"5/8",4,"1/2",65,"…",50],
     "1":[110,79.4,"5/8",4,"1/2",65,75,55],
@@ -201,7 +202,7 @@ drilling_class_150 = {
     "24":[815,749.3,"1 3/8",20,"1 1/4",170,185,150],
 }
 # ASME 16.5 Table 9 Templates for Drilling Class 300 Pipe Flanges and Flanged Fittings
-drilling_class_300 = {
+drilling_class_300: dict[str, list[Any]] = {
     "1/2":[95,66.7,"5/8",4,"1/2",65,75,55],
     "3/4":[115,82.6,"3/4",4,"5/8",75,90,65],
     "1":[125,88.9,"3/4",4,"5/8",75,90,65],
@@ -225,7 +226,7 @@ drilling_class_300 = {
     "24":[915,812.8,"1 5/8",24,"1 1/2",230,255,205],
 }
 # ASME 16.5 Table 8 Dimensions of Class 150 Flanges
-flange_data_class_150 = {
+flange_data_class_150: dict[str, list[Any]] = {
     "1/2":[90,9.6,11.2,30,21.3,14,16,46,16,22.2,22.9,15.8,3,10],
     "3/4":[100,11.2,12.7,38,26.7,14,16,51,16,27.7,28.2,20.9,3,11],
     "1":[110,12.7,14.3,49,33.4,16,17,54,17,34.5,34.9,26.6,3,13],
@@ -249,7 +250,7 @@ flange_data_class_150 = {
     "24":[815,46.1,47.7,663,610.0,81,111,151,83,616.0,616.0,"Note (8)",13,"…"],
 }
 # ASME 16.5 Table 10 Dimensions of Class 300 Flanges
-flange_data_class_300 = {
+flange_data_class_300: dict[str, list[Any]] = {
     "1/2":[95,12.7,14.3,38,21.3,21,22,51,16,22.2,22.9,15.8,3,23.6,10],
     "3/4":[115,14.3,15.9,48,26.7,24,25,56,16,27.7,28.2,20.9,3,29.0,11],
     "1":[125,15.9,17.5,54,33.4,25,27,60,18,34.5,34.9,26.6,3,35.8,13],
@@ -273,7 +274,7 @@ flange_data_class_300 = {
     "24":[915,68.3,69.9,702,610.0,105,152,167,83,616.0,616.0,"Note (7)",13,614.4,"…"],
 }
 # nps |	Groove # | Pitch Dia, P	| Depth, E | Width, F | Rad at Bottom, R | Dia of Raised Portion, K | Distance Between Flanges |
-ring_joint_facings_class_150 = {
+ring_joint_facings_class_150: dict[str, list[Any]] = {
     "1":[15,47.63,6.35,8.74,0.8,63.5,4],
     "1 1/4":[17,57.15,6.35,8.74,0.8,73,4],
     "1 1/2":[19,65.07,6.35,8.74,0.8,82.5,4],
@@ -294,7 +295,7 @@ ring_joint_facings_class_150 = {
     "22":[80,615.95,6.35,8.74,0.8,648,3],
     "24":[76,673.1,6.35,8.74,0.8,711,3],
 }
-ring_joint_facings_class_300 = {
+ring_joint_facings_class_300: dict[str, list[Any]] = {
     "1/2":[11,34.14,5.54,7.14,0.8,51,3],
     "3/4":[13,42.88,6.35,8.74,0.8,63.5,4],
     "1":[16,50.8,6.35,8.74,0.8,70,4],
@@ -355,7 +356,7 @@ class Flange(BasePartObject):
         bolt_hole_count: int,
         bolt_hole_diameter: float,
         rotation: RotationLike = (0, 0, 0),
-        align: Union[Align, tuple[Align, Align, Align]] = (
+        align: Union[None, Align, tuple[Align, Align, Align]] = (
             Align.CENTER,
             Align.CENTER,
             Align.MIN,
@@ -371,7 +372,7 @@ class Flange(BasePartObject):
                 Hole(bolt_hole_diameter / 2)
 
         super().__init__(
-            part=flange_builder.part,
+            part=cast(Part, flange_builder.part),
             rotation=rotation,
             align=tuplify(align, 3),
             mode=mode,
@@ -381,7 +382,7 @@ class Flange(BasePartObject):
     def inputs_are_valid(
         nps: Nps,
         flange_class: FlangeClass,
-        face_type: FaceType,
+        face_type: FaceType | None,
     ) -> bool:
         """inputs_are_valid
 
@@ -400,17 +401,17 @@ class Flange(BasePartObject):
         Returns:
             bool: inputs are valid
         """
-        if nps not in Nps.__args__:
+        if nps not in get_args(Nps):
             raise ValueError(
-                f"Invalid nps value - the valid values are: {Nps.__args__}"
+                f"Invalid nps value - the valid values are: {get_args(Nps)}"
             )
-        if flange_class not in FlangeClass.__args__:
+        if flange_class not in get_args(FlangeClass):
             raise ValueError(
-                f"Invalid flange_class value - the valid values are: {FlangeClass.__args__}"
+                f"Invalid flange_class value - the valid values are: {get_args(FlangeClass)}"
             )
-        if face_type is not None and face_type not in FaceType.__args__:
+        if face_type is not None and face_type not in get_args(FaceType):
             raise ValueError(
-                f"Invalid face_type value - the valid values are: {FaceType.__args__}"
+                f"Invalid face_type value - the valid values are: {get_args(FaceType)}"
             )
         return True
 
@@ -441,7 +442,7 @@ class Flange(BasePartObject):
 
     @staticmethod
     def get_flange_data(
-        nps: Nps, flange_class: FlangeClass, face_type: FaceType
+        nps: Nps, flange_class: FlangeClass, face_type: FaceType | None
     ) -> tuple[list, list]:
         """get_flange_data
 
@@ -460,25 +461,15 @@ class Flange(BasePartObject):
         """
 
         # Read the data table and extract values
+        # face_type is accepted for API symmetry; the face data comes from
+        # get_face_section_data
+        del face_type
         if flange_class == 150:
             flange_data = flange_data_class_150[nps]
             bolt_data = drilling_class_150[nps]
-            if face_type is None:
-                face_data = []
-            elif face_type == "Raised":
-                E = 2 * MM if flange_class <= 300 else 7 * MM
-                face_data = [E]
-            elif face_type == "Ring":
-                face_data = ring_joint_facings_class_150[nps]
         elif flange_class == 300:
             flange_data = flange_data_class_300[nps]
             bolt_data = drilling_class_300[nps]
-            face_data = ring_joint_facings_class_300[nps]
-            if face_type == "Raised":
-                E = 2 * MM if flange_class <= 300 else 7 * MM
-                face_data.append([E])
-            elif face_type == "Ring":
-                face_data = ring_joint_facings_class_300[nps]
         else:
             raise ValueError("Unsupported flange class")
 
@@ -488,8 +479,8 @@ class Flange(BasePartObject):
     def get_face_section_data(
         nps: Nps,
         flange_class: FlangeClass,
-        face_type: FaceType,
-        face_thickness: float = None,
+        face_type: FaceType | None,
+        face_thickness: float | None = None,
     ) -> tuple[Union[Sketch, None], float]:
         """get_face_section_data
 
@@ -797,7 +788,8 @@ class LappedFlangeStub(BasePartObject):
 
         with BuildPart() as stub:
             with BuildSketch(Plane.XZ):
-                insert(face_profile)
+                if face_profile is not None:
+                    insert(face_profile)
                 Rectangle(
                     stub_pipe.id,
                     face_thickness,
@@ -814,7 +806,7 @@ class LappedFlangeStub(BasePartObject):
                 stub_pipe.thickness * 0.75,
             )
 
-        super().__init__(stub.part, rotation, tuplify(align, 3), mode)
+        super().__init__(cast(Part, stub.part), rotation, tuplify(align, 3), mode)
 
         # Add the joints
         RigidJoint("pipe", self, Location(Plane.YX.offset(-stub_length)))
@@ -954,8 +946,8 @@ class SocketWeldFlange(Flange):
     def get_face_section_data(
         nps: Nps,
         flange_class: FlangeClass,
-        face_type: FaceType,
-        face_thickness: float = None,
+        face_type: FaceType | None,
+        face_thickness: float | None = None,
     ) -> tuple[Union[Sketch, None], float]:
         flange_data, _ = Flange.get_flange_data(nps, flange_class, face_type)
         socket_depth_index = 13 if flange_class == 150 else 14
@@ -1005,9 +997,7 @@ class SocketWeldFlange(Flange):
             },
             "SocketWeldFlange",
         )
-        O, tf, X, Y, B11, B13, r = (
-            flange_data[i] for i in [0, 1, 3, 5, 9, 11, 12]
-        )
+        O, tf, X, Y, B11, B13, r = (flange_data[i] for i in [0, 1, 3, 5, 9, 11, 12])
         D = flange_data[socket_depth_index]
         W, d_imp, n = bolt_data[1], bolt_data[2], bolt_data[3]
         d = imperial_str_to_float(d_imp)
@@ -1085,8 +1075,8 @@ class WeldNeckFlange(Flange):
     def get_face_section_data(
         nps: Nps,
         flange_class: FlangeClass,
-        face_type: FaceType,
-        face_thickness: float = None,
+        face_type: FaceType | None,
+        face_thickness: float | None = None,
     ) -> tuple[Union[Sketch, None], float]:
         flange_data, _ = Flange.get_flange_data(nps, flange_class, face_type)
         Flange.require_numeric_dimensions(

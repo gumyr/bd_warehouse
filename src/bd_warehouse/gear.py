@@ -45,7 +45,7 @@ license:
     limitations under the License.
 """
 
-from math import sin, cos, tan, acos, atan, sqrt, radians, degrees, pi, inf, ceil
+from math import sin, cos, tan, acos, atan, sqrt, radians, degrees, pi, inf, nan, ceil
 from typing import Callable, Literal
 from build123d import *
 from OCP.BRep import BRep_Tool
@@ -155,15 +155,15 @@ class InvoluteToothProfile(BaseLineObject):
         close = (
             [
                 Edge.make_line(
-                    tooth.line.vertices().sort_by(Axis.Y)[-1].to_tuple(),
-                    tooth.line.vertices().sort_by(Axis.Y)[0].to_tuple(),
+                    tooth.vertices().sort_by(Axis.Y)[-1].to_tuple(),
+                    tooth.vertices().sort_by(Axis.Y)[0].to_tuple(),
                 )
             ]
             if closed
             else []
         )
 
-        super().__init__(Wire.combine(tooth.line.edges() + close)[0], mode=mode)
+        super().__init__(Wire.combine(tooth.edges() + close)[0], mode=mode)
 
 
 class RackGearPlan(BaseSketchObject):
@@ -730,6 +730,18 @@ def _uv_face(
     return Face(face), edges
 
 
+def _u_parameter(
+    z_start: float, root_offset: float, tip_offset: float, u_scale: float
+) -> Callable[[float, float], float]:
+    """Return ``u_at(z, v)``: the u parameter of a ruled helicoid at height ``z``
+    on the v = const isoline, given the axial offsets of its bounding helices."""
+
+    def u_at(z: float, v: float) -> float:
+        return (z - z_start - (1 - v) * root_offset - v * tip_offset) * u_scale
+
+    return u_at
+
+
 class _WormGeometry:
     """Derived dimensions of a cylindrical worm (ISO 54 / DIN 3975 nomenclature).
 
@@ -798,12 +810,14 @@ class _WormGeometry:
         if flank_form == "ZI":
             # cos γb = cos γ · cos αn relates the base and reference helices of an
             # involute helicoid; the lead is shared so r·tan(γ_r) is constant.
-            gamma_b = acos(cos(gamma) * cos(alpha_n))
-            self.base_lead_angle: float | None = degrees(gamma_b)
-            self.base_radius: float | None = self._advance / tan(gamma_b)
-            self._alpha_t1 = acos(self.base_radius / self.pitch_radius)
+            self._gamma_b = acos(cos(gamma) * cos(alpha_n))
+            self._base_radius = self._advance / tan(self._gamma_b)
+            self._alpha_t1 = acos(self._base_radius / self.pitch_radius)
+            self.base_lead_angle: float | None = degrees(self._gamma_b)
+            self.base_radius: float | None = self._base_radius
             self.transverse_pressure_angle: float | None = degrees(self._alpha_t1)
         else:
+            self._gamma_b = self._base_radius = self._alpha_t1 = nan
             self.base_lead_angle = None
             self.base_radius = None
             self.transverse_pressure_angle = None
@@ -827,7 +841,7 @@ class _WormGeometry:
                 * tan(radians(self.axial_pressure_angle))
                 / self._advance
             )
-        alpha_t = acos(self.base_radius / max(radius, self.base_radius))
+        alpha_t = acos(self._base_radius / max(radius, self._base_radius))
         return half_pitch_angle + _involute(self._alpha_t1) - _involute(alpha_t)
 
     def flank_helix(self, radius: float, side: int) -> tuple[float, float]:
@@ -849,13 +863,11 @@ class _WormGeometry:
         # by sqrt(r² − rb²)·tan(γb). Below the base cylinder the flank continues
         # radially (a plain helicoid), as an involute is undefined there.
         base_phase = side * (pi / (2 * self.starts) + _involute(self._alpha_t1))
-        if radius <= self.base_radius:
+        if radius <= self._base_radius:
             return base_phase, 0.0
         return (
-            base_phase + side * acos(self.base_radius / radius),
-            side
-            * sqrt(radius**2 - self.base_radius**2)
-            * tan(radians(self.base_lead_angle)),
+            base_phase + side * acos(self._base_radius / radius),
+            side * sqrt(radius**2 - self._base_radius**2) * tan(self._gamma_b),
         )
 
     def flank_angle(self, radius: float, side: int, z: float) -> float:
@@ -865,10 +877,10 @@ class _WormGeometry:
 
     def flank_radii(self) -> list[tuple[float, float]]:
         """Radial spans of the ruled surfaces making up one flank, root to tip."""
-        if self.flank_form == "ZI" and self.root_radius < self.base_radius:
+        if self.flank_form == "ZI" and self.root_radius < self._base_radius:
             return [
-                (self.root_radius, self.base_radius),
-                (self.base_radius, self.addendum_radius),
+                (self.root_radius, self._base_radius),
+                (self._base_radius, self.addendum_radius),
             ]
         return [(self.root_radius, self.addendum_radius)]
 
@@ -890,7 +902,7 @@ class _WormGeometry:
         """
         z_start, height = self.helix_span(length)
         total_angle = 2 * pi * height / self.lead
-        surfaces = []
+        surfaces: list[tuple[Geom_Surface, Callable[[float, float], float]]] = []
         for radii in self.flank_radii():
             helices, offsets = [], []
             for radius in radii:
@@ -906,11 +918,9 @@ class _WormGeometry:
             # z is linear along the helices (u) and along the rulings (v):
             # z(u, v) = z_start + advance·total_angle·u/u_max + (1−v)·offset0 + v·offset1
             u_scale = u_max / (self._advance * total_angle)
-
-            def u_at(z, v, offsets=tuple(offsets), u_scale=u_scale, z_start=z_start):
-                return (z - z_start - (1 - v) * offsets[0] - v * offsets[1]) * u_scale
-
-            surfaces.append((surface, u_at))
+            surfaces.append(
+                (surface, _u_parameter(z_start, offsets[0], offsets[1], u_scale))
+            )
         return surfaces
 
 
@@ -1148,7 +1158,7 @@ class Worm(BasePartObject):
         sewing.Perform()
         if sewing.NbFreeEdges() != 0:
             raise RuntimeError("worm surfaces did not sew into a closed shell")
-        solid = BRepBuilderAPI_MakeSolid(TopoDS.Shell_s(sewing.SewedShape())).Solid()
+        solid = BRepBuilderAPI_MakeSolid(TopoDS.Shell(sewing.SewedShape())).Solid()
         BRepLib.OrientClosedSolid_s(solid)
         worm = Solid(solid)
         if hand == "left":

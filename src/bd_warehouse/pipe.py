@@ -13,48 +13,48 @@ desc:
 
     * ASTM A312 is a standard specification issued by the American Society for
     Testing and Materials (ASTM) that covers seamless,  welded, and heavily
-    cold-worked austenitic stainless steel pipe intended for high-temperature 
-    and general corrosive service. The standard specifies various dimensions,  
-    mechanical properties,  testing requirements,  and acceptable manufacturing 
+    cold-worked austenitic stainless steel pipe intended for high-temperature
+    and general corrosive service. The standard specifies various dimensions,
+    mechanical properties,  testing requirements,  and acceptable manufacturing
     practices for stainless steel pipes.
     * ASME B36 is a standard issued by the American Society of Mechanical Engineers
-    (ASME) that provides guidelines for the dimensions, tolerances, and related 
-    requirements of steel pipes and fittings. It covers both seamless and welded 
-    pipes made from various materials, including carbon steel, stainless steel, 
-    and alloy steel. The standard specifies the nominal pipe sizes (NPS), outside 
-    diameters (OD), wall thicknesses, and length dimensions. ASME B36 aims to ensure 
-    consistency and compatibility in the design, manufacturing, and installation of 
-    steel pipes, facilitating efficient piping system construction and operation in 
+    (ASME) that provides guidelines for the dimensions, tolerances, and related
+    requirements of steel pipes and fittings. It covers both seamless and welded
+    pipes made from various materials, including carbon steel, stainless steel,
+    and alloy steel. The standard specifies the nominal pipe sizes (NPS), outside
+    diameters (OD), wall thicknesses, and length dimensions. ASME B36 aims to ensure
+    consistency and compatibility in the design, manufacturing, and installation of
+    steel pipes, facilitating efficient piping system construction and operation in
     various industries.
-    * ASTM B88 is a standard specification issued by ASTM International for seamless 
-    copper water tube used in plumbing applications. The standard defines the requirements 
-    for copper water tube in terms of its dimensions, chemical composition, mechanical 
-    properties, and permissible variations. It covers various sizes and types of copper 
-    water tube, including both hard-drawn and annealed tempers. ASTM B88 ensures the 
-    quality and reliability of copper water tube by providing specifications for its 
-    manufacturing and performance. It serves as a reference for manufacturers, engineers, 
-    and contractors involved in plumbing systems, ensuring compatibility, durability, 
+    * ASTM B88 is a standard specification issued by ASTM International for seamless
+    copper water tube used in plumbing applications. The standard defines the requirements
+    for copper water tube in terms of its dimensions, chemical composition, mechanical
+    properties, and permissible variations. It covers various sizes and types of copper
+    water tube, including both hard-drawn and annealed tempers. ASTM B88 ensures the
+    quality and reliability of copper water tube by providing specifications for its
+    manufacturing and performance. It serves as a reference for manufacturers, engineers,
+    and contractors involved in plumbing systems, ensuring compatibility, durability,
     and safe water transportation.
-    * ASTM F628 is a standard specification issued by ASTM International that pertains 
-    to the installation and performance requirements of plastic pipes in non-pressure 
-    applications. It specifically focuses on the installation of plastic pipes, such 
-    as PVC (Polyvinyl Chloride) and CPVC (Chlorinated Polyvinyl Chloride), for drainage, 
-    waste, and vent systems. The standard covers various aspects, including pipe sizes, 
-    materials, dimensions, joint methods, and testing procedures. ASTM F628 ensures the 
-    proper installation and performance of plastic pipes in non-pressure plumbing 
-    applications, promoting safe and efficient drainage and waste disposal systems in 
+    * ASTM F628 is a standard specification issued by ASTM International that pertains
+    to the installation and performance requirements of plastic pipes in non-pressure
+    applications. It specifically focuses on the installation of plastic pipes, such
+    as PVC (Polyvinyl Chloride) and CPVC (Chlorinated Polyvinyl Chloride), for drainage,
+    waste, and vent systems. The standard covers various aspects, including pipe sizes,
+    materials, dimensions, joint methods, and testing procedures. ASTM F628 ensures the
+    proper installation and performance of plastic pipes in non-pressure plumbing
+    applications, promoting safe and efficient drainage and waste disposal systems in
     residential and commercial buildings.
-    * ASTM D1785 is a standard specification issued by ASTM International for rigid 
+    * ASTM D1785 is a standard specification issued by ASTM International for rigid
     polyvinyl chloride (PVC) pipes used in pressure applications, primarily in potable
-    water systems. The standard outlines the requirements for PVC pipes in terms of 
-    their dimensions, material properties, and quality control procedures. It covers 
-    various aspects, including pipe sizes, wall thicknesses, chemical composition, 
-    hydrostatic pressure testing, and marking. ASTM D1785 ensures the durability, 
-    strength, and safety of PVC pipes by establishing guidelines for their manufacturing, 
-    performance, and testing. The standard serves as a reference for manufacturers, 
-    engineers, and regulatory bodies to ensure the reliable and efficient use of PVC 
+    water systems. The standard outlines the requirements for PVC pipes in terms of
+    their dimensions, material properties, and quality control procedures. It covers
+    various aspects, including pipe sizes, wall thicknesses, chemical composition,
+    hydrostatic pressure testing, and marking. ASTM D1785 ensures the durability,
+    strength, and safety of PVC pipes by establishing guidelines for their manufacturing,
+    performance, and testing. The standard serves as a reference for manufacturers,
+    engineers, and regulatory bodies to ensure the reliable and efficient use of PVC
     pipes in pressure applications.
-            
+
 license:
 
     Copyright 2023 Gumyr
@@ -72,10 +72,13 @@ license:
     limitations under the License.
 
 """
+
 from __future__ import annotations
 import csv
 import importlib.resources as pkg_resources
-from typing import Literal, Union
+
+from bd_materials import resolve as resolve_material
+from typing import Literal, Union, cast, get_args
 from build123d import *
 from build123d import tuplify
 import bd_warehouse
@@ -91,6 +94,20 @@ Identifier = Literal[
 ]
 # fmt: on
 Material = Literal["abs", "copper", "iron", "pvc", "stainless", "steel"]
+
+
+def _read_pipe_data() -> dict[str, tuple[float, float]]:
+    """Read pipe.csv as {nps + material + identifier: (od, thickness)} in inches."""
+    pipe_data: dict[str, tuple[float, float]] = {}
+    with pkg_resources.open_text(bd_warehouse, "pipe.csv") as csvfile:
+        reader = csv.reader(csvfile)
+        next(reader, None)  # skip the header row
+        for row in reader:
+            if len(row) == 0:  # skip blank rows
+                continue
+            nps, material, identifier, od, thickness = row
+            pipe_data[nps + material + identifier] = (float(od), float(thickness))
+    return pipe_data
 
 
 class PipeSection(BaseSketchObject):
@@ -112,16 +129,7 @@ class PipeSection(BaseSketchObject):
         ValueError: Invalid material
     """
 
-    # Read the pipe data
-    pipe_data = {}
-    with pkg_resources.open_text(bd_warehouse, "pipe.csv") as csvfile:
-        reader = csv.reader(csvfile)
-        next(reader, None)  # skip the header row
-        for row in reader:
-            if len(row) == 0:  # skip blank rows
-                continue
-            nps, material, identifier, od, thickness = row
-            pipe_data[nps + material + identifier] = (float(od), float(thickness))
+    pipe_data = _read_pipe_data()
 
     def __init__(
         self,
@@ -133,19 +141,19 @@ class PipeSection(BaseSketchObject):
     ):
         self.nps = nps
         self.sch = identifier
-        self.material = material
+        self.material = resolve_material(material)
 
-        if nps not in Nps.__args__:
+        if nps not in get_args(Nps):
             raise ValueError(
-                f"Invalid nps value - the valid values are: {Nps.__args__}"
+                f"Invalid nps value - the valid values are: {get_args(Nps)}"
             )
-        if identifier not in Identifier.__args__:
+        if identifier not in get_args(Identifier):
             raise ValueError(
-                f"Invalid identifier value - the valid values are: {Identifier.__args__}"
+                f"Invalid identifier value - the valid values are: {get_args(Identifier)}"
             )
-        if material not in Material.__args__:
+        if material not in get_args(Material):
             raise ValueError(
-                f"Invalid material value - the valid values are: {Material.__args__}"
+                f"Invalid material value - the valid values are: {get_args(Material)}"
             )
 
         try:
@@ -195,19 +203,20 @@ class Pipe(BasePartObject):
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
     ):
-        context: BuildPart = BuildPart._get_context(self)
+        context: BuildPart | None = BuildPart._get_context(self)
 
+        path_edges: list[Edge]
         if path is None:
             if context is not None and context.pending_edges:
                 # Get pending edges for the path
-                path = context.pending_edges
+                path_edges = list(context.pending_edges)
                 context.pending_edges = []
             else:
                 raise ValueError("A path must be provided")
         elif isinstance(path, Wire):
-            path = path.edges()
+            path_edges = list(path.edges())
         elif isinstance(path, Edge):
-            path = [path]
+            path_edges = [path]
         else:
             raise ValueError("Invalid path type")
 
@@ -215,22 +224,27 @@ class Pipe(BasePartObject):
         self.od = section.od
         self.id = section.id
         self.thickness = section.thickness
-        self.length = (
-            sum([p.length for p in path]) if isinstance(path, list) else path.length
-        )
+        self.length = sum(p.length for p in path_edges)
 
         with BuildPart() as pipe:
-            for p in path:
+            for p in path_edges:
                 insert(p)
                 with BuildSketch(Plane(origin=p @ 0, z_dir=p % 0)):
                     insert(section)
                 sweep()
 
         super().__init__(
-            part=pipe.part, rotation=rotation, align=tuplify(align, 3), mode=mode
+            part=cast(Part, pipe.part),
+            rotation=rotation,
+            align=tuplify(align, 3),
+            mode=mode,
         )
-        self.material = material
+        self.material = resolve_material(material)
 
         # Add the joints
-        RigidJoint("inlet", self, Location(Plane(path[0] @ 0, z_dir=-(path[0] % 0))))
-        RigidJoint("outlet", self, path[-1].location_at(1))
+        RigidJoint(
+            "inlet",
+            self,
+            Location(Plane(path_edges[0] @ 0, z_dir=-(path_edges[0] % 0))),
+        )
+        RigidJoint("outlet", self, path_edges[-1].location_at(1))

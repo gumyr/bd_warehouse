@@ -210,8 +210,8 @@ class Sprocket(BasePartObject):
         )
         if tooth_face.normal_at().Z == -1:
             tooth_face = -tooth_face
-        sprocket_plan = Face() + PolarLocations(0, self.num_teeth) * tooth_face
-        return sprocket_plan
+        sprocket_plan = Sketch() + PolarLocations(0, self.num_teeth) * tooth_face
+        return sprocket_plan.face()
 
     @staticmethod
     def sprocket_pitch_radius(num_teeth: int, chain_pitch: float) -> float:
@@ -296,7 +296,10 @@ class Sprocket(BasePartObject):
             arc5 = arc1.mirror(Plane.XZ)
             tooth_perimeter = Wire([arc1, arc2, arc3, arc4, arc5])
         else:
-            link_axis_pnt = link_circle.intersect(Axis.X).sort_by(Axis.X)[-1]
+            axis_crossings = link_circle.intersect(Axis.X)
+            if not axis_crossings:
+                raise RuntimeError("link circle does not cross the X axis")
+            link_axis_pnt = axis_crossings.sort_by(Axis.X)[-1]
             arc2 = link_circle.trim(roller_line_pnt, link_axis_pnt)
             arc3 = arc2.mirror(Plane.XZ)
             arc4 = arc1.mirror(Plane.XZ)

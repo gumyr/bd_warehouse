@@ -84,6 +84,14 @@ where = ["src"]
 [tool.setuptools_scm]
 write_to = "src/bd_warehouse/_version.py"
 
+[tool.mypy]
+files = ["src/bd_warehouse"]
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["ocp_vscode", "ocp_vscode.*"]
+ignore_missing_imports = true
+
 [tool.black]
 target-version = ["py310", "py311", "py312", "py313"]
 line-length = 88

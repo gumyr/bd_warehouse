@@ -37,7 +37,7 @@ import csv
 import math
 from abc import ABC, abstractmethod
 from math import atan, cos, pi, radians, sin, sqrt, tan
-from typing import Literal, Optional, Union
+from typing import ClassVar, Literal, Optional, Union, cast
 
 import bd_warehouse
 
@@ -94,6 +94,7 @@ from build123d.topology import (
     Edge,
     Face,
     Part,
+    ShapeList,
     Shell,
     Sketch,
     Solid,
@@ -106,7 +107,10 @@ from bd_materials.finishes import zinc_plate, black_oxide
 # pylint: disable=invalid-name
 
 
-def polygon_diagonal(width: float, num_sides: Optional[int] = 6) -> float:
+_EndFinish = Literal["raw", "square", "fade", "chamfer"]
+
+
+def polygon_diagonal(width: float, num_sides: int = 6) -> float:
     """Distance across polygon diagonals given width across flats"""
     return width / cos(pi / num_sides)
 
@@ -116,9 +120,11 @@ def read_fastener_parameters_from_csv(filename: str) -> dict:
 
     parameters = {}
     data_resource = resources.files(bd_warehouse) / f"data/{filename}"
-    with data_resource.open(encoding="utf-8", newline="") as csvfile:
+    with data_resource.open(encoding="utf-8", newline="") as csvfile:  # type: ignore[call-overload]  # typeshed omits newline= on Traversable.open
         reader = csv.DictReader(csvfile)
         fieldnames = reader.fieldnames
+        if fieldnames is None:
+            raise ValueError(f"No header found in {filename}")
         for row in reader:
             key = row[fieldnames[0]]
             row.pop(fieldnames[0])
@@ -216,9 +222,11 @@ def read_drill_sizes() -> dict:
     drill_sizes = {}
     data_resource = resources.files(bd_warehouse) / "data/drill_sizes.csv"
 
-    with data_resource.open(encoding="utf-8", newline="") as csvfile:
+    with data_resource.open(encoding="utf-8", newline="") as csvfile:  # type: ignore[call-overload]  # typeshed omits newline= on Traversable.open
         reader = csv.DictReader(csvfile)
         fieldnames = reader.fieldnames
+        if fieldnames is None:
+            raise ValueError("No header found in drill_sizes.csv")
         for row in reader:
             drill_sizes[row[fieldnames[0]]] = float(row[fieldnames[1]]) * IN
     return drill_sizes
@@ -251,7 +259,7 @@ def lookup_nominal_screw_lengths() -> dict:
     # Read the nominal screw length csv file and build a dictionary
     nominal_screw_lengths = {}
     data_resource = resources.files(bd_warehouse) / "data/nominal_screw_lengths.csv"
-    with data_resource.open(encoding="utf-8", newline="") as csvfile:
+    with data_resource.open(encoding="utf-8", newline="") as csvfile:  # type: ignore[call-overload]  # typeshed omits newline= on Traversable.open
         reader = csv.DictReader(csvfile)
         for row in reader:
             unit_factor = MM if row["Unit"] == "mm" else IN
@@ -338,10 +346,10 @@ def hexalobular_recess(size: str) -> tuple[Face, float]:
     with BuildSketch() as plan:
         with BuildLine(mode=Mode.PRIVATE) as arc:
             RadiusArc((0, A / 2), tangent_points[0], Re)
-            RadiusArc(*tangent_points, -Ri)
+            RadiusArc(tangent_points[0], tangent_points[1], -Ri)
             RadiusArc(tangent_points[1], (sqrt_3 * A / 4, A / 4), Re)
         with PolarLocations(0, 6):
-            insert(arc.line)
+            insert(arc.wire())
         make_face()
 
     return (plan.face(), 0.6 * A)
@@ -370,9 +378,16 @@ def square_recess(size: str) -> tuple[Face, float]:
     return (Face.make_rect(m, m), depths[size])
 
 
+def _first_piece(pieces: ShapeList | None) -> Solid:
+    """First solid of a boolean result, raising if the operation produced nothing"""
+    if not pieces:
+        raise RuntimeError("boolean operation produced no result")
+    return pieces[0]
+
+
 def select_by_size_fn(cls, size: str) -> dict:
     """Given a fastener size, return a dictionary of {class:[type,...]}"""
-    type_dict = {}
+    type_dict: dict[type, list[str]] = {}
     for fastener_class in cls.__subclasses__():
         for fastener_type in fastener_class.types():
             if size in fastener_class.sizes(fastener_type):
@@ -465,28 +480,25 @@ class Nut(ABC, BasePartObject):
         """Return a dictionary of list of fastener types of this size"""
         return select_by_size_fn(cls, size)
 
-    @property
-    @abstractmethod
-    def fastener_data(cls):  # pragma: no cover
-        """Each derived class must provide a fastener_data dictionary"""
-        return NotImplementedError
+    fastener_data: ClassVar[dict[str, dict[str, str]]]
+    """Each derived class must provide a fastener_data dictionary"""
 
     @abstractmethod
     def nut_profile(self) -> Face:  # pragma: no cover
         """Each derived class must provide the profile of the nut"""
-        return NotImplementedError
+        raise NotImplementedError
 
     @abstractmethod
     def nut_plan(self) -> Face:  # pragma: no cover
         """Each derived class must provide the plan of the nut"""
-        return NotImplementedError
+        raise NotImplementedError
 
     @abstractmethod
     def countersink_profile(
         self, fit: Literal["Close", "Normal", "Loose"]
     ) -> Face:  # pragma: no cover
         """Each derived class must provide the profile of a countersink cutter"""
-        return NotImplementedError
+        raise NotImplementedError
 
     @property
     def info(self):
@@ -537,8 +549,6 @@ class Nut(ABC, BasePartObject):
         mode: Mode = Mode.ADD,
     ):
         self.hole_locations: list[Location] = []  #: custom holes locations
-        self.nut_thickness: float  #: maximum thickness of the nut
-        self.nut_diameter: float  #: maximum diameter of the nut
 
         self.nut_size = size.strip()
         size_parts = self.nut_size.split("-")
@@ -609,9 +619,10 @@ class Nut(ABC, BasePartObject):
         nut_blank = extrude(
             self.nut_plan(), max_nut_height, (0, 0, 1)
         ) - Solid.make_cylinder(self.thread_diameter / 2, nut_thread_height)
-        nut = nut.intersect(nut_blank)
-        if isinstance(nut, list):
-            nut = nut[0]
+        nut_pieces = nut.intersect(nut_blank)
+        if nut_pieces is None:
+            raise RuntimeError("nut profile and plan do not intersect")
+        nut = nut_pieces[0]
 
         # Add a flange as it exists outside of the head plan
         if method_exists(self.__class__, "flange_profile"):
@@ -923,39 +934,30 @@ class HeatSetNut(Nut):
             )
             for i in range(tip_count)
         ]
-        # Connect the bottoms of the helical edges into a star shaped bottom face
-        bottom_edges = [
-            (
-                Edge.make_line(
-                    inside_edges[i].position_at(0), outside_edges[i].position_at(0)
-                ),
-                Edge.make_line(
-                    outside_edges[i].position_at(0),
-                    inside_edges[(i + 1) % tip_count].position_at(0),
-                ),
-            )
-            for i in range(tip_count)
-        ]
-        # Flatten the list of tuples to a list
-        bottom_edges = list(sum(bottom_edges, ()))
-
-        top_edges = [
-            (
-                Edge.make_line(
-                    inside_edges[i].position_at(1), outside_edges[i].position_at(1)
-                ),
-                Edge.make_line(
-                    outside_edges[i].position_at(1),
-                    inside_edges[(i + 1) % tip_count].position_at(1),
-                ),
-            )
-            for i in range(tip_count)
-        ]
-        top_edges = list(sum(top_edges, ()))
+        # Connect the ends of the helical edges into star shaped bottom and top
+        # faces: two zigzag lines per tip, inside -> outside -> next inside
+        bottom_edges: list[Edge] = []
+        top_edges: list[Edge] = []
+        for i in range(tip_count):
+            next_inside_edge = inside_edges[(i + 1) % tip_count]
+            for edges, end in ((bottom_edges, 0), (top_edges, 1)):
+                edges.append(
+                    Edge.make_line(
+                        inside_edges[i].position_at(end),
+                        outside_edges[i].position_at(end),
+                    )
+                )
+                edges.append(
+                    Edge.make_line(
+                        outside_edges[i].position_at(end),
+                        next_inside_edge.position_at(end),
+                    )
+                )
 
         # Build the faces from the edges
-        outside_faces = [
-            (
+        outside_faces: list[Face] = []
+        for i in range(tip_count):
+            outside_faces.append(
                 Face.make_surface(
                     [
                         inside_edges[i],
@@ -963,7 +965,9 @@ class HeatSetNut(Nut):
                         bottom_edges[2 * i],
                         top_edges[2 * i],
                     ],
-                ),
+                )
+            )
+            outside_faces.append(
                 Face.make_surface(
                     [
                         outside_edges[i],
@@ -971,11 +975,8 @@ class HeatSetNut(Nut):
                         bottom_edges[2 * i + 1],
                         top_edges[2 * i + 1],
                     ],
-                ),
+                )
             )
-            for i in range(tip_count)
-        ]
-        outside_faces = list(sum(outside_faces, ()))
 
         # Create the top and bottom faces with holes in them
         bottom_face = Face(
@@ -1107,13 +1108,17 @@ class HeatSetNut(Nut):
 
     def nut_profile(self) -> Face:  # pragma: no cover
         """Not used but required by the abstract base class"""
-        pass
+        raise NotImplementedError
 
     def nut_plan(self) -> Face:  # pragma: no cover
         """Not used but required by the abstract base class"""
-        pass
+        raise NotImplementedError
 
-    def countersink_profile(self, manufacturing_compensation: float = 0.0) -> Face:
+    # A heat set nut is pressed into plastic rather than passed through a fitted
+    # hole, so its cavity is sized by a print allowance instead of a fit class.
+    def countersink_profile(  # type: ignore[override]
+        self, manufacturing_compensation: float = 0.0
+    ) -> Face:
         """countersink_profile
 
         Create the profile for a cavity allowing the heatset nut to be countersunk into the plastic.
@@ -1434,7 +1439,7 @@ class Screw(ABC, BasePartObject):
     nominal_length_range = lookup_nominal_screw_lengths()
 
     @property
-    def tap_drill_sizes(self) -> dict[str:float]:
+    def tap_drill_sizes(self) -> dict[str, float]:
         """A dictionary of drill sizes for tapped holes"""
         try:
             return self.tap_hole_drill_sizes[self.thread_size]
@@ -1442,7 +1447,7 @@ class Screw(ABC, BasePartObject):
             raise ValueError(f"No tap hole data for size {self.thread_size}") from e
 
     @property
-    def tap_hole_diameters(self) -> dict[str:float]:
+    def tap_hole_diameters(self) -> dict[str, float]:
         """A dictionary of drill diameters for tapped holes"""
         try:
             return self.tap_hole_data[self.thread_size]
@@ -1450,7 +1455,7 @@ class Screw(ABC, BasePartObject):
             raise ValueError(f"No tap hole data for size {self.thread_size}") from e
 
     @property
-    def clearance_drill_sizes(self) -> dict[str:float]:
+    def clearance_drill_sizes(self) -> dict[str, float]:
         """A dictionary of drill sizes for clearance holes"""
         try:
             return self.clearance_hole_drill_sizes[self.thread_size.split("-")[0]]
@@ -1460,7 +1465,7 @@ class Screw(ABC, BasePartObject):
             ) from e
 
     @property
-    def clearance_hole_diameters(self) -> dict[str:float]:
+    def clearance_hole_diameters(self) -> dict[str, float]:
         """A dictionary of drill diameters for clearance holes"""
         try:
             return self.clearance_hole_data[self.thread_size.split("-")[0]]
@@ -1469,18 +1474,15 @@ class Screw(ABC, BasePartObject):
                 f"No clearance hole data for size {self.thread_size}"
             ) from e
 
-    @property
-    @abstractmethod
-    def fastener_data(cls):  # pragma: no cover
-        """Each derived class must provide a fastener_data dictionary"""
-        return NotImplementedError
+    fastener_data: ClassVar[dict[str, dict[str, str]]]
+    """Each derived class must provide a fastener_data dictionary"""
 
     @abstractmethod
     def countersink_profile(
         self, fit: Literal["Close", "Normal", "Loose"]
     ) -> Face:  # pragma: no cover
         """Each derived class must provide the profile of a countersink cutter"""
-        return NotImplementedError
+        raise NotImplementedError
 
     def make_body_hole(
         self, hole_radius: float, depth: float, head_offset: float = 0
@@ -1494,12 +1496,12 @@ class Screw(ABC, BasePartObject):
         )
 
     @classmethod
-    def select_by_size(cls, size: str) -> dict[str:float]:
+    def select_by_size(cls, size: str) -> dict[str, float]:
         """Return a dictionary of list of fastener types of this size"""
         return select_by_size_fn(cls, size)
 
     @classmethod
-    def types(cls) -> list[str]:
+    def types(cls) -> set[str]:
         """Return a set of the screw types"""
         return set(p.split(":")[0] for p in list(cls.fastener_data.values())[0].keys())
 
@@ -1743,9 +1745,9 @@ class Screw(ABC, BasePartObject):
         size: str,
         length: float,
         fastener_type: str,
-        hand: Optional[Literal["right", "left"]] = "right",
-        simple: Optional[bool] = True,
-        socket_clearance: Optional[float] = 6 * MM,
+        hand: Literal["right", "left"] = "right",
+        simple: bool = True,
+        socket_clearance: float = 6 * MM,
         rotation: RotationLike = (0, 0, 0),
         align: Union[None, Align, tuple[Align, Align, Align]] = None,
         mode: Mode = Mode.ADD,
@@ -1813,6 +1815,7 @@ class Screw(ABC, BasePartObject):
             raise ValueError(f"Invalid thread offset {self.thread_offset}")
         head = self.make_head()
 
+        ends: tuple[_EndFinish, _EndFinish]
         if head is None:  # A fully custom screw
             screw = None
             self.head_height = 0
@@ -1921,12 +1924,10 @@ class Screw(ABC, BasePartObject):
                 taper=recess_taper,
             ).translate((0, 0, max_head_height))
             head_blank = extrude(head_plan, max_head_height, (0, 0, 1)) - recess
-            head = head.intersect(head_blank)
+            head = _first_piece(head.intersect(head_blank))
         elif has_plan:
             head_blank = extrude(head_plan, max_head_height)
-            head = head.intersect(head_blank)
-        if isinstance(head, list):
-            head = head[0]
+            head = _first_piece(head.intersect(head_blank))
 
         # Add a flange as it exists outside of the head plan
         if has_flange:
@@ -2946,7 +2947,7 @@ class SetScrew(Screw):
                 RegularPolygon(s / 2, 6, major_radius=False)
             extrude(amount=-t, mode=Mode.SUBTRACT)
 
-        return screw.part.solid()
+        return screw.solid()
 
     def make_head(self):
         """There is no head on a setscrew"""
@@ -3314,16 +3315,13 @@ class Washer(ABC, BasePartObject):
                 f"No clearance hole data for size {self.thread_size}"
             ) from e
 
-    @property
-    @abstractmethod
-    def fastener_data(cls):  # pragma: no cover
-        """Each derived class must provide a fastener_data dictionary"""
-        return NotImplementedError
+    fastener_data: ClassVar[dict[str, dict[str, str]]]
+    """Each derived class must provide a fastener_data dictionary"""
 
     @abstractmethod
     def washer_profile(self) -> Face:  # pragma: no cover
         """Each derived class must provide the profile of the washer"""
-        return NotImplementedError
+        raise NotImplementedError
 
     @property
     def info(self):
@@ -3336,7 +3334,7 @@ class Washer(ABC, BasePartObject):
         return type(self).__name__
 
     @classmethod
-    def types(cls) -> list[str]:
+    def types(cls) -> set[str]:
         """Return a set of the washer types"""
         return set(p.split(":")[0] for p in list(cls.fastener_data.values())[0].keys())
 
@@ -3641,20 +3639,16 @@ class InternalToothLockWasher(Washer):
         c, d = h, sqrt((w1 / 2) ** 2 + (h / 2) ** 2 - h**2)
         angle = (-atan(d / c) + atan(a / b)) * 180 / pi
 
-        # tooth inner and outer faces pre projection
+        # tooth inner and outer faces, projected onto their cylinders
         f1 = (Rot(Y=angle) * (Plane.XZ * Rectangle(w1, h))).faces()[0]
         f2 = (Plane.XZ * Rectangle(w2, h)).faces()[0]
+        inner_face = f1.project_to_shape(Cylinder(d1 / 2, 10 * h), (0, -1, 0)).faces()
+        outer_face = f2.project_to_shape(Cylinder(dt / 2, 10 * h), (0, -1, 0)).faces()
 
         return Pos(Z=h / 2) * (
             Cylinder(d2 / 2, h)
             - Cylinder(dt / 2, h, mode=Mode.SUBTRACT)
-            + PolarLocations(0, n)
-            * loft(
-                [
-                    f1.project_to_shape(Cylinder(d1 / 2, 10 * h), (0, -1, 0)),
-                    f2.project_to_shape(Cylinder(dt / 2, 10 * h), (0, -1, 0)),
-                ]
-            )
+            + PolarLocations(0, n) * loft([inner_face[0], outer_face[0]])
         )
 
     washer_profile = Washer.default_washer_profile
@@ -3669,8 +3663,8 @@ def _make_fastener_hole(
     fastener: Union[Nut, Screw],
     countersink_profile: Face,
     depth: float,
-    fit: Literal["Close", "Normal", "Loose"] = None,
-    material: Literal["Soft", "Hard"] = None,
+    fit: Literal["Close", "Normal", "Loose"] | None = None,
+    material: Literal["Soft", "Hard"] | None = None,
     counter_sunk: bool = True,
     captive_nut: bool = False,
     threaded_hole: bool = False,
@@ -3713,6 +3707,8 @@ def _make_fastener_hole(
     # Setscrews' countersink_profile is None so check if it exists
     # countersink_profile = fastener.countersink_profile(fit)
     if captive_nut:
+        if fit is None:
+            raise ValueError("fit is required for a captive nut hole")
         clearance = fastener.clearance_hole_diameters[fit] - fastener.thread_diameter
         head_offset = countersink_profile.vertices().sort_by(Axis.Z)[-1].Z
         if isinstance(fastener, (DomedCapNut, HexNut, UnchamferedHexagonNut)):
@@ -3728,7 +3724,7 @@ def _make_fastener_hole(
             with BuildSketch():
                 RectangleRounded(rect_width, rect_height, fillet_radius)
             extrude(amount=-head_offset)
-        countersink_cutter = countersink_cutter_builder.part
+        countersink_cutter = cast(Part, countersink_cutter_builder.part)
 
     elif counter_sunk and not countersink_profile is None:
         head_offset = countersink_profile.vertices().sort_by(Axis.Z)[-1].Z
@@ -3816,13 +3812,13 @@ class ClearanceHole(BasePartObject):
         self,
         fastener: Union[Nut, Screw],
         fit: Literal["Close", "Normal", "Loose"] = "Normal",
-        depth: float = None,
+        depth: float | None = None,
         counter_sunk: bool = True,
         captive_nut: bool = False,
         rotation: RotationLike = (0, 0, 0),
         mode: Mode = Mode.SUBTRACT,
     ):
-        context: BuildPart = BuildPart._get_context(self)
+        context: BuildPart | None = BuildPart._get_context(self)
         validate_inputs(context, self)
 
         if isinstance(fastener, HeatSetNut):
@@ -3896,11 +3892,11 @@ class TapHole(BasePartObject):
         fastener: Union[Nut, Screw],
         material: Literal["Soft", "Hard"] = "Soft",
         fit: Literal["Close", "Normal", "Loose"] = "Normal",
-        depth: float = None,
+        depth: float | None = None,
         counter_sunk: bool = True,
         mode: Mode = Mode.SUBTRACT,
     ):
-        context: BuildPart = BuildPart._get_context(self)
+        context: BuildPart | None = BuildPart._get_context(self)
         validate_inputs(context, self)
 
         if isinstance(fastener, HeatSetNut):
@@ -3968,12 +3964,12 @@ class ThreadedHole(BasePartObject):
         fastener: Union[Nut, Screw],
         material: Literal["Soft", "Hard"] = "Soft",
         fit: Literal["Close", "Normal", "Loose"] = "Normal",
-        depth: float = None,
+        depth: float | None = None,
         counter_sunk: bool = True,
         simple: bool = True,
         mode: Mode = Mode.SUBTRACT,
     ):
-        context: BuildPart = BuildPart._get_context(self)
+        context: BuildPart | None = BuildPart._get_context(self)
         validate_inputs(context, self)
 
         if isinstance(fastener, HeatSetNut):
@@ -4094,11 +4090,11 @@ class InsertHole(BasePartObject):
         self,
         fastener: HeatSetNut,
         fit: Literal["Close", "Normal", "Loose"] = "Normal",
-        depth: float = None,
+        depth: float | None = None,
         manufacturing_compensation: float = 0.0,
         mode: Mode = Mode.SUBTRACT,
     ):
-        context: BuildPart = BuildPart._get_context(self)
+        context: BuildPart | None = BuildPart._get_context(self)
         validate_inputs(context, self)
 
         if depth is not None:

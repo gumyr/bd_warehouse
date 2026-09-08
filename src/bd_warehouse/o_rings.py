@@ -53,7 +53,7 @@ def read_parameters_from_csv(filename: str) -> dict:
     parameters = {}
     data_resource = resources.files(bd_warehouse) / f"data/{filename}"
 
-    with data_resource.open(encoding="utf-8", newline="") as csvfile:
+    with data_resource.open(encoding="utf-8", newline="") as csvfile:  # type: ignore[call-overload]  # typeshed omits newline= on Traversable.open
         reader = csv.DictReader(csvfile)
         fieldnames = reader.fieldnames
         if not fieldnames:
@@ -208,7 +208,7 @@ class ORing(BasePartObject):  # pylint: disable=too-many-instance-attributes
         if o_ring_type not in cls.types():
             raise ValueError(f"{o_ring_type} invalid, must be one of {cls.types()}")
 
-        results = {}
+        results: dict[str, tuple[str | None, ...]] = {}
         for width, diameter_entries in cls.o_ring_width_families[o_ring_type].items():
             entries = (
                 diameter_entries
@@ -404,12 +404,12 @@ class ORing(BasePartObject):  # pylint: disable=too-many-instance-attributes
         self.length = 2 * math.pi * self.major_radius  #: center line length
 
         o_ring = Solid.make_torus(self.major_radius, self.minor_radius)
-        self.gland_width = None
+        self.gland_width: float | None = None
         self.gland_width_tol = 0.13
-        self.gland_depth = None
-        self.gland_depth_tol = None
-        self.gland_radius = None
-        self.gland_radius_tol = None
+        self.gland_depth: float | None = None
+        self.gland_depth_tol: float | None = None
+        self.gland_radius: float | None = None
+        self.gland_radius_tol: float | None = None
         self.gland_profile: Sketch | None = None
 
         super().__init__(part=o_ring, rotation=rotation, align=align, mode=mode)
