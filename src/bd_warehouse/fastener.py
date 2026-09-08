@@ -36,30 +36,19 @@ from __future__ import annotations
 import csv
 import math
 from abc import ABC, abstractmethod
+from importlib import resources
 from math import atan, cos, pi, radians, sin, sqrt, tan
 from typing import ClassVar, Literal, Optional, Union, cast
 
-import bd_warehouse
-
-from importlib import resources
-from bd_warehouse.thread import IsoThread, imperial_str_to_float, is_safe
-from build123d.build_common import (
-    IN,
-    MM,
-    PolarLocations,
-    Locations,
-    validate_inputs,
-)
-
-# from build123d.build_constants import IN, MM
-# from build123d.build_enums import Align, LengthMode, Mode, SortBy
+from bd_materials.finishes import black_oxide, zinc_plate
+from bd_materials.materials.metals import mild_steel
+from build123d.build_common import IN, MM, Locations, PolarLocations, validate_inputs
 from build123d.build_enums import Align, Mode, SortBy
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
 from build123d.geometry import (
     Axis,
-    Color,
     Location,
     Plane,
     Pos,
@@ -86,22 +75,21 @@ from build123d.objects_sketch import (
     Trapezoid,
 )
 from build123d.operations_generic import chamfer, fillet, insert, split
-from build123d.operations_part import extrude, revolve, loft
+from build123d.operations_part import extrude, loft, revolve
 from build123d.operations_sketch import make_face
 from build123d.topology import (
     Compound,
-    Curve,
     Edge,
     Face,
     Part,
     ShapeList,
     Shell,
-    Sketch,
     Solid,
     Wire,
 )
-from bd_materials.materials.metals import mild_steel
-from bd_materials.finishes import zinc_plate, black_oxide
+
+import bd_warehouse
+from bd_warehouse.thread import IsoThread, imperial_str_to_float, is_safe
 
 # ISO standards use single variable dimension labels which are used extensively
 # pylint: disable=invalid-name
@@ -119,8 +107,12 @@ def read_fastener_parameters_from_csv(filename: str) -> dict:
     """Parse a csv parameter file into a dictionary of strings"""
 
     parameters = {}
-    data_resource = resources.files(bd_warehouse) / f"data/{filename}"
-    with data_resource.open(encoding="utf-8", newline="") as csvfile:  # type: ignore[call-overload]  # typeshed omits newline= on Traversable.open
+    with (
+        resources.as_file(
+            resources.files(bd_warehouse) / f"data/{filename}"
+        ) as data_resource,
+        data_resource.open(encoding="utf-8", newline="") as csvfile,
+    ):
         reader = csv.DictReader(csvfile)
         fieldnames = reader.fieldnames
         if fieldnames is None:
@@ -220,9 +212,12 @@ def isolate_fastener_type(target_fastener: str, fastener_data: dict) -> dict:
 def read_drill_sizes() -> dict:
     """Read the drill size csv file and build a drill_size dictionary (Ah, the imperial system)"""
     drill_sizes = {}
-    data_resource = resources.files(bd_warehouse) / "data/drill_sizes.csv"
-
-    with data_resource.open(encoding="utf-8", newline="") as csvfile:  # type: ignore[call-overload]  # typeshed omits newline= on Traversable.open
+    with (
+        resources.as_file(
+            resources.files(bd_warehouse) / "data/drill_sizes.csv"
+        ) as data_resource,
+        data_resource.open(encoding="utf-8", newline="") as csvfile,
+    ):
         reader = csv.DictReader(csvfile)
         fieldnames = reader.fieldnames
         if fieldnames is None:
@@ -258,8 +253,12 @@ def lookup_nominal_screw_lengths() -> dict:
 
     # Read the nominal screw length csv file and build a dictionary
     nominal_screw_lengths = {}
-    data_resource = resources.files(bd_warehouse) / "data/nominal_screw_lengths.csv"
-    with data_resource.open(encoding="utf-8", newline="") as csvfile:  # type: ignore[call-overload]  # typeshed omits newline= on Traversable.open
+    with (
+        resources.as_file(
+            resources.files(bd_warehouse) / "data/nominal_screw_lengths.csv"
+        ) as data_resource,
+        data_resource.open(encoding="utf-8", newline="") as csvfile,
+    ):
         reader = csv.DictReader(csvfile)
         for row in reader:
             unit_factor = MM if row["Unit"] == "mm" else IN
@@ -391,7 +390,7 @@ def select_by_size_fn(cls, size: str) -> dict:
     for fastener_class in cls.__subclasses__():
         for fastener_type in fastener_class.types():
             if size in fastener_class.sizes(fastener_type):
-                if fastener_class in type_dict.keys():
+                if fastener_class in type_dict:
                     type_dict[fastener_class].append(fastener_type)
                 else:
                     type_dict[fastener_class] = [fastener_type]
@@ -421,7 +420,8 @@ class Nut(ABC, BasePartObject):
         ValueError: invalid hand, must be one of 'left' or 'right'
         ValueError: invalid size
 
-    Each nut instance creates a set of instance variables that provide the CAD object as well as valuable
+    Each nut instance creates a set of instance variables that provide the CAD object as well as
+    valuable
     parameters, as follows (values intended for internal use are not shown):
 
     """
@@ -459,7 +459,9 @@ class Nut(ABC, BasePartObject):
     def clearance_drill_sizes(self):
         """A dictionary of drill sizes for clearance holes"""
         try:
-            return self.clearance_hole_drill_sizes[self.thread_size.split("-")[0]]
+            return self.clearance_hole_drill_sizes[
+                self.thread_size.split("-", maxsplit=1)[0]
+            ]
         except KeyError as e:
             raise ValueError(
                 f"No clearance hole data for size {self.thread_size}"
@@ -469,7 +471,7 @@ class Nut(ABC, BasePartObject):
     def clearance_hole_diameters(self):
         """A dictionary of drill diameters for clearance holes"""
         try:
-            return self.clearance_hole_data[self.thread_size.split("-")[0]]
+            return self.clearance_hole_data[self.thread_size.split("-", maxsplit=1)[0]]
         except KeyError as e:
             raise ValueError(
                 f"No clearance hole data for size {self.thread_size}"
@@ -530,7 +532,7 @@ class Nut(ABC, BasePartObject):
         """Calculate the maximum diameter of the nut"""
         bottom_vertices = self.nut_plan().vertices()
         if len(bottom_vertices) < 3:
-            raise Exception(f"Invalid nut: {type(self).__name__},{self.__dict__}")
+            raise ValueError(f"Invalid nut: {type(self).__name__},{self.__dict__}")
         bottom_arc = Edge.make_three_point_arc(*bottom_vertices[0:3])
         return 2 * bottom_arc.radius
 
@@ -554,7 +556,8 @@ class Nut(ABC, BasePartObject):
         size_parts = self.nut_size.split("-")
         if 3 > len(size_parts) < 2:
             raise ValueError(
-                f"{size_parts} invalid, must be formatted as size-pitch(-length) or size-TPI(-length) where length is optional"
+                f"{size_parts} invalid, must be formatted as size-pitch(-length)"
+                " or size-TPI(-length) where length is optional"
             )
         self.thread_size = "-".join(size_parts[:2])
         if len(size_parts) >= 3:
@@ -701,8 +704,8 @@ class DomedCapNut(Nut):
     DIN 1587 domed cap nuts, also known as acorn nuts, feature a high, rounded, closed-end top.
     These nuts are typically used to provide a finished appearance while also protecting exposed
     bolt threads from damage or corrosion. The dome prevents the entry of dirt and moisture, making
-    them suitable for applications where hygiene, safety, or aesthetics are important. Domed cap nuts
-    are often found in furniture, machinery, automotive, and architectural applications.
+    them suitable for applications where hygiene, safety, or aesthetics are important. Domed cap
+    nuts are often found in furniture, machinery, automotive, and architectural applications.
 
     These nuts are tightened like standard hex nuts but offer the added benefit of thread protection
     and a smoother exterior that reduces the risk of snagging or injury.
@@ -1116,7 +1119,7 @@ class HeatSetNut(Nut):
 
     # A heat set nut is pressed into plastic rather than passed through a fitted
     # hole, so its cavity is sized by a print allowance instead of a fit class.
-    def countersink_profile(  # type: ignore[override]
+    def countersink_profile(  # type: ignore[override]  # pylint: disable=arguments-renamed
         self, manufacturing_compensation: float = 0.0
     ) -> Face:
         """countersink_profile
@@ -1151,9 +1154,12 @@ class HexNut(Nut):
     assemblies.
 
     ISO 4032, ISO 4033, and ISO 4035 define different variants of metric hex nuts:
+
     - ISO 4032 specifies a regular height hex nut with a standard width across flats.
-    - ISO 4033 defines a heavy series hex nut, typically used for larger or more heavily loaded assemblies.
-    - ISO 4035 specifies a thin (jam) nut, used where space is limited or as a locknut against a standard nut.
+    - ISO 4033 defines a heavy series hex nut, typically used for larger or more heavily loaded
+      assemblies.
+    - ISO 4035 specifies a thin (jam) nut, used where space is limited or as a locknut against a
+      standard nut.
 
     These nuts are widely used across industries including automotive, aerospace, machinery, and
     construction. They are available in various grades and finishes to suit different strength,
@@ -1203,8 +1209,8 @@ class HexNutWithFlange(Nut):
 
     DIN 1665 specifies metric hex flange nuts used in general-purpose and structural applications.
     These nuts are often used in automotive, machinery, and assembly applications where ease of use,
-    improved load distribution, and vibration resistance are desired. The flanged base eliminates the
-    need for a separate washer in many cases, simplifying assembly and reducing part count.
+    improved load distribution, and vibration resistance are desired. The flanged base eliminates
+    the need for a separate washer in many cases, simplifying assembly and reducing part count.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -1277,15 +1283,16 @@ class HexNutWithFlange(Nut):
 class UnchamferedHexagonNut(Nut):
     """Unchamfered Hexagon Nut
 
-    ISO 4036 defines a thin, unchamfered hexagon nut, typically used in non-critical applications
-    or where space and weight constraints are a priority. Unlike standard hex nuts, these nuts lack
-    a chamfered edge and are manufactured with reduced height, which makes them suitable for
-    low-stress assemblies, locking applications (e.g., as a jam nut), or secondary fastening positions.
+    ISO 4036 defines a thin, unchamfered hexagon nut, typically used in non-critical applications or
+    where space and weight constraints are a priority. Unlike standard hex nuts, these nuts lack a
+    chamfered edge and are manufactured with reduced height, which makes them suitable for
+    low-stress assemblies, locking applications (e.g., as a jam nut), or secondary fastening
+    positions.
 
-    Due to their minimal height and absence of chamfers, they are generally not intended for high-load
-    structural use. Instead, they are ideal for internal assemblies, compact enclosures, or when used
-    in combination with standard nuts to resist loosening under vibration. ISO 4036 nuts are most often
-    found in light mechanical assemblies and electronics hardware.
+    Due to their minimal height and absence of chamfers, they are generally not intended for
+    high-load structural use. Instead, they are ideal for internal assemblies, compact enclosures,
+    or when used in combination with standard nuts to resist loosening under vibration. ISO 4036
+    nuts are most often found in light mechanical assemblies and electronics hardware.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -1294,7 +1301,8 @@ class UnchamferedHexagonNut(Nut):
         hand (Literal["right","left"], optional): thread direction. Defaults to "right".
         simple (bool, optional): simplify by not creating thread. Defaults to True.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
-        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults
+            to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
@@ -1333,10 +1341,10 @@ class SquareNut(Nut):
     are beneficial. Their larger surface area compared to hex nuts provides increased grip and load
     distribution, especially when used with flat washers or in slots.
 
-    DIN 557 specifies standard square nuts with a flat top and bottom and sharp or slightly chamfered
-    corners. These nuts are well-suited for tightening by hand or with simple tools, and are often
-    found in applications where ease of alignment or aesthetics are not critical. Their geometry makes
-    them less prone to rounding and easier to weld or lock in place.
+    DIN 557 specifies standard square nuts with a flat top and bottom and sharp or slightly
+    chamfered corners. These nuts are well-suited for tightening by hand or with simple tools, and
+    are often found in applications where ease of alignment or aesthetics are not critical. Their
+    geometry makes them less prone to rounding and easier to weld or lock in place.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -1458,7 +1466,9 @@ class Screw(ABC, BasePartObject):
     def clearance_drill_sizes(self) -> dict[str, float]:
         """A dictionary of drill sizes for clearance holes"""
         try:
-            return self.clearance_hole_drill_sizes[self.thread_size.split("-")[0]]
+            return self.clearance_hole_drill_sizes[
+                self.thread_size.split("-", maxsplit=1)[0]
+            ]
         except KeyError as e:
             raise ValueError(
                 f"No clearance hole data for size {self.thread_size}"
@@ -1468,7 +1478,7 @@ class Screw(ABC, BasePartObject):
     def clearance_hole_diameters(self) -> dict[str, float]:
         """A dictionary of drill diameters for clearance holes"""
         try:
-            return self.clearance_hole_data[self.thread_size.split("-")[0]]
+            return self.clearance_hole_data[self.thread_size.split("-", maxsplit=1)[0]]
         except KeyError as e:
             raise ValueError(
                 f"No clearance hole data for size {self.thread_size}"
@@ -1649,7 +1659,7 @@ class Screw(ABC, BasePartObject):
             "7/8": 2.25,
             "1": 2.50,
         }
-        size = self.thread_size.split("-")[0]
+        size = self.thread_size.split("-", maxsplit=1)[0]
         minimum_thread_length = minimum_thread_lengths[size] * IN
         first_partial_length = self.screw_data["short"]
 
@@ -1719,7 +1729,7 @@ class Screw(ABC, BasePartObject):
         if (
             range_min is None
             or range_max is None
-            or not self.fastener_type in Screw.nominal_length_range.keys()
+            or self.fastener_type not in Screw.nominal_length_range
         ):
             result = None
         else:
@@ -1733,7 +1743,8 @@ class Screw(ABC, BasePartObject):
     @property
     def info(self) -> str:
         """Return identifying information"""
-        return f"{self.screw_class}({self.fastener_type}): {self.thread_size}x{self.length}{' left hand thread' if self.hand=='left' else ''}"
+        hand = " left hand thread" if self.hand == "left" else ""
+        return f"{self.screw_class}({self.fastener_type}): {self.thread_size}x{self.length}{hand}"
 
     @property
     def screw_class(self) -> str:
@@ -1888,17 +1899,17 @@ class Screw(ABC, BasePartObject):
         has_plan = method_exists(self.__class__, "head_plan")
         has_recess = method_exists(self.__class__, "head_recess")
         has_flange = method_exists(self.__class__, "flange_profile")
-        # raise RuntimeError
-        if has_profile:
-            # pylint: disable=no-member
-            profile = self.head_profile()
-            profile_bbox = profile.bounding_box()
-            max_head_height = profile_bbox.size.Z
-            max_head_radius = profile_bbox.max.X
-            min_head_height = profile_bbox.min.Z
+        if not has_profile:
+            raise ValueError(f"{type(self).__name__} must define head_profile")
+        # pylint: disable=no-member
+        profile = self.head_profile()
+        profile_bbox = profile.bounding_box()
+        max_head_height = profile_bbox.size.Z
+        max_head_radius = profile_bbox.max.X
+        min_head_height = profile_bbox.min.Z
 
-            # Create the basic head shape
-            head = revolve(profile)
+        # Create the basic head shape
+        head = revolve(profile)
         if has_plan:
             # pylint: disable=no-member
             head_plan = self.head_plan()
@@ -1962,7 +1973,6 @@ class Screw(ABC, BasePartObject):
             recess = str(recess).upper()
             if recess.startswith("PH"):
                 recess_plan, recess_depth = cross_recess(recess)
-                recess_taper = 30  # TODO
                 recess_taper = 20
             elif recess.startswith("T"):
                 recess_plan, recess_depth = hexalobular_recess(recess)
@@ -2004,11 +2014,11 @@ class ButtonHeadScrew(Screw):
     finished appearance with moderate strength. The large head diameter provides a greater bearing
     surface, reducing the risk of pull-through and improving load distribution on softer materials.
 
-    Button head screws are commonly used in enclosures, furniture, robotics, and lightweight mechanical
-    assemblies where aesthetics and compact form factor are important. The internal hex socket allows
-    for easy installation with standard hex keys, and their shallow head height makes them well-suited
-    for space-constrained applications. However, they are not intended for high-torque or high-strength
-    applications due to their smaller head-to-shank transition area.
+    Button head screws are commonly used in enclosures, furniture, robotics, and lightweight
+    mechanical assemblies where aesthetics and compact form factor are important. The internal hex
+    socket allows for easy installation with standard hex keys, and their shallow head height makes
+    them well-suited for space-constrained applications. However, they are not intended for
+    high-torque or high-strength applications due to their smaller head-to-shank transition area.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2018,7 +2028,8 @@ class ButtonHeadScrew(Screw):
             hand (Literal["right","left"], optional): thread direction. Defaults to "right".
         simple (bool, optional): simplify by not creating thread. Defaults to True.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
-        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults
+            to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
@@ -2070,15 +2081,16 @@ class ButtonHeadWithCollarScrew(Screw):
     """Button Head With Collar Screw
 
     ISO 7380-2 defines hexagon socket button head screws with an integrated collar or washer face
-    beneath the head. This collar increases the bearing surface area, improving load distribution and
-    reducing surface deformation when fastening into softer materials. Compared to standard button
-    head screws (ISO 7380-1), the collar also adds stability and reduces the risk of loosening due to
-    vibration.
+    beneath the head. This collar increases the bearing surface area, improving load distribution
+    and reducing surface deformation when fastening into softer materials. Compared to standard
+    button head screws (ISO 7380-1), the collar also adds stability and reduces the risk of
+    loosening due to vibration.
 
     These screws retain the low-profile, rounded aesthetic of button head designs while providing
-    enhanced performance in critical applications. They are ideal for assemblies in robotics, consumer
-    electronics, machinery panels, and enclosures where a smooth finish and added clamping force are
-    needed. The internal hex drive allows for easy and secure installation using standard hex keys.
+    enhanced performance in critical applications. They are ideal for assemblies in robotics,
+    consumer electronics, machinery panels, and enclosures where a smooth finish and added clamping
+    force are needed. The internal hex drive allows for easy and secure installation using standard
+    hex keys.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2156,18 +2168,19 @@ class CheeseHeadScrew(Screw):
     """Cheese Head Screw
 
     Cheese head screws are cylindrical-head fasteners with vertical sides and a flat top, offering a
-    clean, compact profile. The head has a smaller diameter and taller profile than pan or button head
-    screws, providing a deep drive socket or slot for strong torque transmission. These screws are
-    commonly used where head space is limited or where components are recessed into counterbores.
+    clean, compact profile. The head has a smaller diameter and taller profile than pan or button
+    head screws, providing a deep drive socket or slot for strong torque transmission. These screws
+    are commonly used where head space is limited or where components are recessed into
+    counterbores.
 
     Multiple ISO standards define variations:
     - ISO 1207: Slotted cheese head machine screws for general applications.
     - ISO 7048: Cross-recessed (Phillips) cheese head screws.
     - ISO 14580: Hex socket cheese head screws, often used in precision assemblies.
 
-    Cheese head screws are widely used in electrical components, enclosures, and machinery where a tall
-    head is acceptable but a compact footprint is desired. Their straight vertical sides also make them
-    ideal for components that require precise guidance or centering in assembly features.
+    Cheese head screws are widely used in electrical components, enclosures, and machinery where a
+    tall head is acceptable but a compact footprint is desired. Their straight vertical sides also
+    make them ideal for components that require precise guidance or centering in assembly features.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2229,11 +2242,11 @@ class CheeseHeadScrew(Screw):
 class CounterSunkScrew(Screw):
     """CounterSunk Screw
 
-    Countersunk screws are flat-head fasteners designed to sit flush with or below the surface of the
-    material they are installed into. The conical underside of the head matches a countersunk hole,
-    allowing for a clean finish and reduced interference in assembled products. These screws are used
-    in applications where appearance, clearance, or aerodynamics are important, such as in enclosures,
-    electronics, automotive panels, and structural components.
+    Countersunk screws are flat-head fasteners designed to sit flush with or below the surface of
+    the material they are installed into. The conical underside of the head matches a countersunk
+    hole, allowing for a clean finish and reduced interference in assembled products. These screws
+    are used in applications where appearance, clearance, or aerodynamics are important, such as in
+    enclosures, electronics, automotive panels, and structural components.
 
     Multiple ISO standards define specific variations:
     - ISO 2009: Slotted countersunk head screws.
@@ -2248,7 +2261,7 @@ class CounterSunkScrew(Screw):
     Args:
         size (str): size specification, e.g. "M6-1"
         length (float): screw length
-        fastener_type (Literal[ "iso2009", "iso7046", "iso10642", "iso14581", "iso14582"], optional):
+        fastener_type (Literal["iso2009", "iso7046", "iso10642", "iso14581", "iso14582"], optional):
             Defaults to "iso10642".
             iso2009 - Slotted countersunk head screws
             iso7046 - Cross recessed countersunk flat head screws
@@ -2328,21 +2341,23 @@ class CounterSunkScrew(Screw):
 class HexHeadScrew(Screw):
     """Hex Head Screw
 
-    Hex head screws, also referred to as hex bolts or hex cap screws, are externally threaded fasteners
-    with a six-sided head designed for use with wrenches or sockets. They are widely used in
-    construction, machinery, automotive, and industrial applications where strong, reliable bolted joints
-    are required.
+    Hex head screws, also referred to as hex bolts or hex cap screws, are externally threaded
+    fasteners with a six-sided head designed for use with wrenches or sockets. They are widely used
+    in construction, machinery, automotive, and industrial applications where strong, reliable
+    bolted joints are required.
 
     DIN and ISO standards define their dimensional properties:
+
     - DIN 931: Hexagon head bolts with a partially threaded shank.
-    - ISO 4014: Hex head screws with a partially threaded shank, typically used where shear strength is
-    needed along the unthreaded portion.
-    - ISO 4017: Fully threaded hex head screws, used for general-purpose fastening where full thread
-    engagement is desired.
+    - ISO 4014: Hex head screws with a partially threaded shank, typically used where shear
+      strength is needed along the unthreaded portion.
+    - ISO 4017: Fully threaded hex head screws, used for general-purpose fastening where full
+      thread engagement is desired.
 
     These screws are available in a range of material grades and finishes, and are often used with
     corresponding hex nuts and washers to ensure uniform clamping force and load distribution. Their
-    standardized geometry ensures compatibility with automated assembly tools and industry-standard hardware.
+    standardized geometry ensures compatibility with automated assembly tools and industry-standard
+    hardware.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2436,17 +2451,17 @@ class HexHeadWithFlangeScrew(Screw):
     Hex head screws with flanges combine a standard hexagonal head with an integrated washer-like
     flange at the base. The flange increases the bearing surface area under the head, distributing
     clamping forces more evenly and reducing surface damage to the assembled material. This design
-    also improves resistance to loosening caused by vibration, especially when used without a separate
-    washer.
+    also improves resistance to loosening caused by vibration, especially when used without a
+    separate washer.
 
     DIN 1662 and DIN 1665 define common types of flanged hex screws:
     - DIN 1662: Hex flange screws with a partially threaded shank.
     - DIN 1665: Heavy-series hex flange screws with a partially threaded shank.
 
     These screws are frequently used in automotive, structural, and industrial applications where
-    secure fastening, reduced part count, and simplified assembly are important. The integrated flange
-    simplifies the design and assembly process by eliminating the need for a separate washer while
-    enhancing load distribution.
+    secure fastening, reduced part count, and simplified assembly are important. The integrated
+    flange simplifies the design and assembly process by eliminating the need for a separate washer
+    while enhancing load distribution.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2536,8 +2551,8 @@ class PanHeadScrew(Screw):
 
     Pan head screws feature a broad, low-profile head with gently curved sides and a flat bearing
     surface underneath. This shape provides a large contact area, reducing the likelihood of damage
-    to the fastened material and allowing for a clean, finished appearance. The rounded sides offer a
-    smoother look than hex or cheese heads while still accommodating a variety of drive types.
+    to the fastened material and allowing for a clean, finished appearance. The rounded sides offer
+    a smoother look than hex or cheese heads while still accommodating a variety of drive types.
 
     Several standards define pan head screws:
     - ISO 1580: Slotted pan head machine screws for general mechanical use.
@@ -2618,15 +2633,16 @@ class PanHeadScrew(Screw):
 class PanHeadWithCollarScrew(Screw):
     """Pan Head With Collar Screw
 
-    DIN 967 defines a pan head screw with an integrated collar or washer-like flange beneath the head.
-    The collar increases the bearing surface area, improving load distribution and reducing surface
-    indentation on the clamped material. The pan head retains a low-profile, rounded appearance,
-    while the collar eliminates the need for a separate washer in many applications.
+    DIN 967 defines a pan head screw with an integrated collar or washer-like flange beneath the
+    head. The collar increases the bearing surface area, improving load distribution and reducing
+    surface indentation on the clamped material. The pan head retains a low-profile, rounded
+    appearance, while the collar eliminates the need for a separate washer in many applications.
 
     These screws typically feature a slotted or cross-recessed (Phillips) drive and are widely used
     in automotive, appliance, and light mechanical assemblies where compactness, aesthetics, and
     vibration resistance are important. The combination of pan head geometry and an integral flange
-    makes them especially useful when fastening to softer materials such as plastics or thin sheet metal.
+    makes them especially useful when fastening to softer materials such as plastics or thin sheet
+    metal.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2691,14 +2707,16 @@ class RaisedCheeseHeadScrew(Screw):
     """Raised Cheese Head Screw
 
     ISO 7045 defines raised cheese head screws with a cylindrical, slightly domed head and a flat
-    underside. These screws combine the deep drive engagement and tall profile of standard cheese head
-    screws with a subtle domed surface for improved aesthetics and reduced edge sharpness. The result
-    is a screw that offers high torque capability while maintaining a more refined appearance.
+    underside. These screws combine the deep drive engagement and tall profile of standard cheese
+    head screws with a subtle domed surface for improved aesthetics and reduced edge sharpness. The
+    result is a screw that offers high torque capability while maintaining a more refined
+    appearance.
 
-    Raised cheese head screws are typically available with slotted or cross-recessed (Phillips) drives,
-    and are used in mechanical assemblies, consumer electronics, and enclosures where clearance is
-    limited but drive reliability is important. The tall head allows for secure tool engagement, while
-    the rounded top helps reduce snagging and cosmetic impact in visible assemblies.
+    Raised cheese head screws are typically available with slotted or cross-recessed (Phillips)
+    drives, and are used in mechanical assemblies, consumer electronics, and enclosures where
+    clearance is limited but drive reliability is important. The tall head allows for secure tool
+    engagement, while the rounded top helps reduce snagging and cosmetic impact in visible
+    assemblies.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2764,8 +2782,8 @@ class RaisedCounterSunkOvalHeadScrew(Screw):
 
     Raised countersunk screws—also known as oval head screws—feature a conical bearing surface like
     standard countersunk screws, but with a gently domed top. This combination provides a flush fit
-    with a slightly protruding decorative finish, making them suitable for applications where appearance
-    and smooth contours are important.
+    with a slightly protruding decorative finish, making them suitable for applications where
+    appearance and smooth contours are important.
 
     Multiple ISO standards define oval head screws with different drive types:
     - ISO 2010: Slotted raised countersunk head screws for general-purpose use.
@@ -2773,8 +2791,8 @@ class RaisedCounterSunkOvalHeadScrew(Screw):
     - ISO 14584: Hexalobular (Torx) drive version for high torque applications with reduced cam-out.
 
     These screws are commonly used in electronics, appliance housings, mechanical assemblies, and
-    consumer products where flush mounting is required but a low-profile dome provides a more refined
-    look and reduced snagging.
+    consumer products where flush mounting is required but a low-profile dome provides a more
+    refined look and reduced snagging.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -2868,9 +2886,9 @@ class SetScrew(Screw):
     """Set Screw
 
     ISO 4026 defines set screws with a flat point and a hexagon socket drive. These screws are fully
-    threaded and lack a head, allowing them to sit flush or recessed within a mating part. Set screws
-    are primarily used to secure one component against another—most commonly to fix a rotating part
-    such as a gear or pulley onto a shaft.
+    threaded and lack a head, allowing them to sit flush or recessed within a mating part. Set
+    screws are primarily used to secure one component against another—most commonly to fix a
+    rotating part such as a gear or pulley onto a shaft.
 
     The flat point provides secure contact without damaging the mating surface, making it ideal for
     use in applications where frequent adjustments or disassembly may be required. Set screws are
@@ -2885,7 +2903,8 @@ class SetScrew(Screw):
         hand (Literal["right","left"], optional): thread direction. Defaults to "right".
         simple (bool, optional): simplify by not creating thread. Defaults to True.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
-        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults
+            to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
@@ -3083,7 +3102,6 @@ class ShoulderScrew(Screw):
                 "dg2",
             ]
         )
-        d = self.thread_diameter
         rs = 0.15 if s <= 10 else 0.2
         with BuildSketch(Plane.XZ) as profile:
             with BuildLine() as perimeter:
@@ -3145,11 +3163,12 @@ class SocketHeadCapScrew(Screw):
     The tall head allows for deep socket engagement, reducing the risk of stripping.
 
     - ISO 4762 specifies metric socket head cap screws for general and precision mechanical use.
-    - ASME B18.3 defines the inch-based counterpart, widely used in North American engineering standards.
+    - ASME B18.3 defines the inch-based counterpart, widely used in North American engineering
+      standards.
 
     Socket head cap screws are commonly used in machinery, robotics, automotive assemblies, and
-    structural applications where compactness and reliability are important. Their strong clamping force
-    and clean geometry make them ideal for pre-tapped holes and locations with tight access.
+    structural applications where compactness and reliability are important. Their strong clamping
+    force and clean geometry make them ideal for pre-tapped holes and locations with tight access.
 
     Args:
         size (str): size specification, e.g. "M6-1"
@@ -3160,7 +3179,8 @@ class SocketHeadCapScrew(Screw):
         hand (Literal["right","left"], optional): thread direction. Defaults to "right".
         simple (bool, optional): simplify by not creating thread. Defaults to True.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
-        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults
+            to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
@@ -3222,10 +3242,12 @@ class LowProfileScrew(Screw):
 
     The large diameter head offers generous bearing area and good load distribution, while the low
     height ensures smooth movement of linear components and avoids interference with adjacent parts.
-    These screws typically feature an internal hex drive and come in standard metric thread sizes (e.g., M5).
+    These screws typically feature an internal hex drive and come in standard metric thread sizes
+    (e.g., M5).
 
     Low profile screws are ideal for use in DIY CNC machines, 3D printers, linear motion assemblies,
-    and other modular hardware systems where both mechanical performance and compactness are essential.
+    and other modular hardware systems where both mechanical performance and compactness are
+    essential.
 
     Args:
         size (str): size specification, e.g. "M5-0.8"
@@ -3235,7 +3257,8 @@ class LowProfileScrew(Screw):
         hand (Literal["right","left"], optional): thread direction. Defaults to "right".
         simple (bool, optional): simplify by not creating thread. Defaults to True.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
-        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults
+            to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
@@ -3309,7 +3332,7 @@ class Washer(ABC, BasePartObject):
     def clearance_hole_diameters(self):
         """A dictionary of drill diameters for clearance holes"""
         try:
-            return self.clearance_hole_data[self.thread_size.split("-")[0]]
+            return self.clearance_hole_data[self.thread_size.split("-", maxsplit=1)[0]]
         except KeyError as e:
             raise ValueError(
                 f"No clearance hole data for size {self.thread_size}"
@@ -3435,16 +3458,18 @@ class Washer(ABC, BasePartObject):
 class PlainWasher(Washer):
     """Plain Washer
 
-    Plain washers are flat, disc-shaped components used under the head of a screw or nut to distribute
-    the clamping load and protect the mating surface from damage. They also help reduce surface
-    deformation and prevent fasteners from loosening due to vibration or movement.
+    Plain washers are flat, disc-shaped components used under the head of a screw or nut to
+    distribute the clamping load and protect the mating surface from damage. They also help reduce
+    surface deformation and prevent fasteners from loosening due to vibration or movement.
 
     Several ISO standards define plain washers of different series:
+
     - ISO 7089: Normal series washers with standard outer diameter and thickness.
     - ISO 7091: Normal series washers with slightly tighter tolerances and more controlled flatness.
-    - ISO 7093: Large series washers with greater outer diameter for use with oversized or slotted holes.
-    - ISO 7094: Extra-large series washers, offering the greatest surface area and ideal for use with
-    soft materials or wide clearances.
+    - ISO 7093: Large series washers with greater outer diameter for use with oversized or slotted
+      holes.
+    - ISO 7094: Extra-large series washers, offering the greatest surface area and ideal for use
+      with soft materials or wide clearances.
 
     These washers are used in nearly all types of bolted assemblies across mechanical, structural,
     automotive, and industrial applications.
@@ -3457,7 +3482,8 @@ class PlainWasher(Washer):
             iso7093 - Plain washers — Large series
             iso7094 - Plain washers - Extra large series
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
-        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults
+            to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
@@ -3480,14 +3506,14 @@ class ChamferedWasher(Washer):
     """Chamfered Washer
 
     ISO 7090 defines chamfered washers, which are plain washers with a conical or beveled underside
-    designed to match the chamfer on fasteners such as countersunk or chamfered-head bolts. The chamfer
-    provides full surface contact between the washer and fastener head, improving load distribution and
-    alignment, especially in high-stress or structural applications.
+    designed to match the chamfer on fasteners such as countersunk or chamfered-head bolts. The
+    chamfer provides full surface contact between the washer and fastener head, improving load
+    distribution and alignment, especially in high-stress or structural applications.
 
     These washers help prevent damage to the mating surface by reducing point loading and ensuring
-    even contact. They are typically used with screws or bolts that have a 120° chamfer under the head—
-    such as ISO 7379 shoulder screws—or in assemblies requiring enhanced axial alignment and bearing
-    surface support.
+    even contact. They are typically used with screws or bolts that have a 120° chamfer under the
+    head— such as ISO 7379 shoulder screws—or in assemblies requiring enhanced axial alignment and
+    bearing surface support.
 
     Chamfered washers are commonly found in heavy machinery, construction, tooling fixtures, and
     high-precision assemblies where joint integrity is critical.
@@ -3497,7 +3523,8 @@ class ChamferedWasher(Washer):
         fastener_type (Literal["iso7090"], optional): Defaults to "iso7090".
             iso7090 - Plain washers, Form B
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
-        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults
+            to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
@@ -3530,14 +3557,15 @@ class ChamferedWasher(Washer):
 class CheeseHeadWasher(Washer):
     """Cheese Head Washer
 
-    ISO 7092 defines plain washers specifically designed for use with cheese head screws. These washers
-    have a reduced outer diameter and a thickness tailored to the narrow, cylindrical profile of cheese
-    head fasteners, ensuring proper seating and load distribution under the head without protruding
-    beyond its edges.
+    ISO 7092 defines plain washers specifically designed for use with cheese head screws. These
+    washers have a reduced outer diameter and a thickness tailored to the narrow, cylindrical
+    profile of cheese head fasteners, ensuring proper seating and load distribution under the head
+    without protruding beyond its edges.
 
-    Cheese head washers help prevent surface damage, distribute clamping forces more evenly, and improve
-    appearance in precision assemblies. Their compact size makes them ideal for use in electronics,
-    instrumentation, and machine components where space is limited and a clean, flush appearance is desired.
+    Cheese head washers help prevent surface damage, distribute clamping forces more evenly, and
+    improve appearance in precision assemblies. Their compact size makes them ideal for use in
+    electronics, instrumentation, and machine components where space is limited and a clean, flush
+    appearance is desired.
 
     These washers are especially useful when paired with ISO 1207 or ISO 14580 cheese head screws in
     counterbored holes or recessed applications.
@@ -3547,7 +3575,8 @@ class CheeseHeadWasher(Washer):
         fastener_type (Literal["iso7092"], optional): Defaults to "iso7092".
             iso7092 - Washers for cheese head screws
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
-        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults
+            to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
@@ -3580,25 +3609,27 @@ class CheeseHeadWasher(Washer):
 class InternalToothLockWasher(Washer):
     """Internal Tooth Lock Washer
 
-    Internal tooth lock washers are circular washers with multiple sharp, radially inward-facing teeth
-    designed to bite into the surface of the mating part and the underside of the fastener head. This
-    toothed profile increases friction and provides mechanical resistance to loosening caused by
-    vibration or rotation.
+    Internal tooth lock washers are circular washers with multiple sharp, radially inward-facing
+    teeth designed to bite into the surface of the mating part and the underside of the fastener
+    head. This toothed profile increases friction and provides mechanical resistance to loosening
+    caused by vibration or rotation.
 
     - DIN 6797 defines metric internal tooth lock washers commonly used in precision electrical and
     mechanical assemblies.
-    - ASME B18.21.1 provides similar specifications for inch-based applications and general-purpose use.
+    - ASME B18.21.1 provides similar specifications for inch-based applications and general-purpose
+      use.
 
     Because the teeth are located on the inner circumference, internal tooth lock washers are ideal
-    for use under round or pan head screws, where edge clearance is limited or appearance is important.
-    They are commonly used in electronics, appliance housings, and light-duty machinery to maintain
-    tight assemblies without chemical threadlockers or locking nuts.
+    for use under round or pan head screws, where edge clearance is limited or appearance is
+    important. They are commonly used in electronics, appliance housings, and light-duty machinery
+    to maintain tight assemblies without chemical threadlockers or locking nuts.
 
     Args:
         size (str): size specification, e.g. "M6"
         fastener_type (Literal["din6797", "asme_b18.21.1"], optional): Defaults to "din6797".
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
-        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults to None.
+        align (Union[None, Align, tuple[Align, Align, Align]], optional): object alignment. Defaults
+            to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
 
@@ -3634,7 +3665,8 @@ class InternalToothLockWasher(Washer):
         # |         | h
         # +---------+
         #      w1
-        # ref: https://math.stackexchange.com/questions/213545/solving-trigonometric-equations-of-the-form-a-sin-x-b-cos-x-c
+        # ref:
+        # https://math.stackexchange.com/questions/213545/solving-trigonometric-equations-of-the-form-a-sin-x-b-cos-x-c
         a, b = w1 / 2, h / 2
         c, d = h, sqrt((w1 / 2) ** 2 + (h / 2) ** 2 - h**2)
         angle = (-atan(d / c) + atan(a / b)) * 180 / pi
@@ -3703,9 +3735,9 @@ def _make_fastener_hole(
     """
     bore_direction = Vector(0, 0, -1)
     origin = Vector(0, 0, 0)
+    countersink_cutter: Part | None = None
 
     # Setscrews' countersink_profile is None so check if it exists
-    # countersink_profile = fastener.countersink_profile(fit)
     if captive_nut:
         if fit is None:
             raise ValueError("fit is required for a captive nut hole")
@@ -3719,6 +3751,8 @@ def _make_fastener_hole(
             fillet_radius = fastener.nut_diameter / 8
             rect_height = fastener.nut_diameter * math.sqrt(2) / 2 + clearance
             rect_width = rect_height + 2 * fillet_radius + clearance
+        else:
+            raise ValueError("captive nuts must be hex, domed cap or square nuts")
 
         with BuildPart(mode=Mode.PRIVATE) as countersink_cutter_builder:
             with BuildSketch():
@@ -3754,7 +3788,7 @@ def _make_fastener_hole(
             plane=Plane(origin, z_dir=bore_direction),
         )
     )
-    if counter_sunk and not countersink_profile is None:
+    if counter_sunk and countersink_cutter is not None:
         fastener_hole = countersink_cutter.fuse(shank_hole)
     else:
         fastener_hole = shank_hole

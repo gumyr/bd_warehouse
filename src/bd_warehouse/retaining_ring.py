@@ -57,9 +57,12 @@ def read_retaining_ring_parameters_from_csv(
 ) -> dict[str, dict[str, float]]:
     """Parse a metric retaining ring CSV parameter file."""
     parameters = {}
-    data_resource = resources.files(bd_warehouse) / f"data/{filename}"
-
-    with data_resource.open(encoding="utf-8", newline="") as csvfile:  # type: ignore[call-overload]  # typeshed omits newline= on Traversable.open
+    with (
+        resources.as_file(
+            resources.files(bd_warehouse) / f"data/{filename}"
+        ) as data_resource,
+        data_resource.open(encoding="utf-8", newline="") as csvfile,
+    ):
         reader = csv.DictReader(csvfile)
         if not reader.fieldnames:
             raise ValueError(f"No header found in {filename}")

@@ -30,21 +30,18 @@ license:
 
 import copy
 from abc import ABC, abstractmethod
-from functools import cached_property
 from math import atan, degrees, floor, pi
 from typing import ClassVar, Literal
 
-from build123d.build_common import (
-    MM,
-    Locations,
-    PolarLocations,
-    validate_inputs,
-)
-from build123d.build_enums import Align, GeomType, Kind, LengthMode, Mode, Side
+from bd_materials.finishes import black_oxide
+from bd_materials.materials.metals import AlloySteel, alloy_steel, mild_steel
+from bd_materials.materials.plastics import rubber
+from build123d.build_common import MM, Locations, PolarLocations, validate_inputs
+from build123d.build_enums import Align, GeomType, Kind, LengthMode, Mode
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
-from build123d.geometry import Axis, Color, Location, Plane, Pos, Vector
+from build123d.geometry import Axis, Location, Plane, Pos, Vector
 from build123d.joints import RigidJoint
 from build123d.objects_curve import JernArc, Line, PolarLine, Polyline, Spline
 from build123d.objects_part import BasePartObject, Sphere
@@ -52,10 +49,9 @@ from build123d.objects_sketch import Circle, Rectangle, RectangleRounded
 from build123d.operations_generic import fillet, insert, offset, sweep
 from build123d.operations_part import extrude, revolve, section
 from build123d.operations_sketch import make_face
-from build123d.topology import Compound, Edge, Face, Shell, Solid, Wire, Part
-from bd_materials.materials.metals import alloy_steel, AlloySteel, mild_steel
-from bd_materials.materials.plastics import rubber
-from bd_materials.finishes import black_oxide
+from build123d.pack import pack
+from build123d.topology import Compound, Edge, Face, Shell, Solid, Wire
+
 from bd_warehouse.fastener import (
     evaluate_parameter_dict,
     isolate_fastener_type,
@@ -159,10 +155,12 @@ class Bearing(ABC, BasePartObject):
     @property
     @abstractmethod
     def race_center_radius(self):
+        """Each derived class must provide the roller race center radius"""
         raise NotImplementedError  # pragma: no cover
 
     @property
     def roller_count(self):
+        """Number of rollers around the race"""
         return int(1.8 * pi * self.race_center_radius / self.roller_diameter)
 
     def default_race_center_radius(self):
@@ -227,7 +225,7 @@ class Bearing(ABC, BasePartObject):
 
         super().__init__(self.make_bearing())
         # Change position to match PressFitHole expectations
-        self.position += (0, 0, self.bearing_dict["B"] / 2)
+        self.position += (0, 0, self.bearing_dict["B"] / 2)  # pylint: disable=no-member
         bbox = self.bounding_box()
         RigidJoint("a", self, Pos(Z=bbox.min.Z))
         RigidJoint("b", self, Pos(Z=bbox.max.Z))
@@ -292,16 +290,19 @@ class Bearing(ABC, BasePartObject):
         return section.sketch.face()
 
     def default_countersink_profile(self, interference: float = 0) -> Face:
+        """Default press fit seat: the bearing outline less the interference"""
         D, B = (self.bearing_dict[p] for p in ["D", "B"])
         with BuildSketch(Plane.XZ) as profile:
             Rectangle(D / 2 - interference, B, align=Align.MIN)
         return profile.sketch.face()
 
     def default_roller(self) -> Solid:
+        """Default roller: a ball"""
         roller = Solid.make_sphere(self.roller_diameter / 2)
         return roller
 
     def default_cap(self) -> Solid:
+        """Default cap: a thin ring covering the raceway"""
         D1, d1, B = (self.bearing_dict[p] for p in ["D1", "d1", "B"])
         with BuildPart() as cap:
             with BuildSketch(Plane.XY.offset(B * 0.42)):
@@ -398,6 +399,7 @@ class SingleRowAngularContactBallBearing(Bearing):
 
     @property
     def contact_angle(self):
+        """Contact angle in degrees from the radial plane"""
         a, D = (self.bearing_dict[p] for p in ["a", "D"])
         return degrees(atan(a / (D / 2)))
 
@@ -451,9 +453,9 @@ class SingleRowAngularContactBallBearing(Bearing):
         return section.sketch.face()
 
     def cage(self):
-        d, d1, D, D1, d2, r12, r34, B = (
-            self.bearing_dict[p]
-            for p in ["d", "d1", "D", "D1", "d2", "r12", "r34", "B"]
+        """Cage holding the balls apart"""
+        d, d1, D, D1, d2, B = (
+            self.bearing_dict[p] for p in ["d", "d1", "D", "D1", "d2", "B"]
         )
         hole = Sphere(0.525 * self.roller_diameter)
         cage_t = 0.2 * (D1 - d2)
@@ -545,6 +547,15 @@ class SingleRowTaperedRollerBearing(Bearing):
         "single_row_tapered_roller_bearing_parameters.csv"
     )
 
+    # Derived while building the cup, cone and rollers
+    _outer_race_section_cache: Face | None = None
+    _inner_race_section_cache: Face | None = None
+    _roller_cache: Solid | None = None
+    _roller_diameters: list[float]
+    _race_center_radius: float
+    taper_length: float
+    cage_edge: Edge
+
     @property
     def roller_diameter(self) -> float:
         """Diameter of the larger end of the roller - increased diameter
@@ -570,17 +581,17 @@ class SingleRowTaperedRollerBearing(Bearing):
 
     def outer_race_section(self) -> Face:
         """Outer Cup"""
-        if not hasattr(self, "_outer_race_section_cache"):
+        if self._outer_race_section_cache is None:
             self._outer_race_section_cache = self._outer_race_section()
         return self._outer_race_section_cache
 
     def _outer_race_section(self) -> Face:
         """Non cached version of outer race"""
-        B, C, D, T, r34 = (self.bearing_dict[p] for p in ["B", "C", "D", "T", "r34"])
+        B, C, D, r34 = (self.bearing_dict[p] for p in ["B", "C", "D", "r34"])
         with BuildSketch(
             Plane((0, 0, -B / 2), x_dir=(1, 0, 0), z_dir=(0, -1, 0))
         ) as section:
-            with BuildLine() as bl:
+            with BuildLine():
                 l1 = Polyline(
                     (D / 2, 0),
                     (D / 2, C),
@@ -599,7 +610,7 @@ class SingleRowTaperedRollerBearing(Bearing):
 
     def inner_race_section(self) -> Face:
         """Central Cone"""
-        if not hasattr(self, "_inner_race_section_cache"):
+        if self._inner_race_section_cache is None:
             self._inner_race_section_cache = self._inner_race_section()
         return self._inner_race_section_cache
 
@@ -611,12 +622,12 @@ class SingleRowTaperedRollerBearing(Bearing):
         with BuildSketch(
             Plane((0, 0, T - B / 2), x_dir=(1, 0, 0), z_dir=(0, -1, 0))
         ) as section:
-            with BuildLine() as bl:
+            with BuildLine():
                 l1 = Polyline((da / 2 - r12, -B), (d / 2, -B), (d / 2, 0))
                 l2 = PolarLine(
                     l1 @ 0, B, 90 - inner_raceway_angle, length_mode=LengthMode.VERTICAL
                 )
-                l3 = Line(l1 @ 1, l2 @ 1)
+                Line(l1 @ 1, l2 @ 1)
             make_face()
             fillet(section.vertices().group_by(Axis.X)[0], r12)
             # Make a slot around the inner race to capture the rollers
@@ -635,9 +646,9 @@ class SingleRowTaperedRollerBearing(Bearing):
             )
         return section.sketch.face()
 
-    def roller(self) -> Face:
+    def roller(self) -> Solid:
         """Tapered Roller"""
-        if not hasattr(self, "_roller_cache"):
+        if self._roller_cache is None:
             self._roller_cache = self._roller()
         return self._roller_cache
 
@@ -672,9 +683,9 @@ class SingleRowTaperedRollerBearing(Bearing):
         )
         if not cage_edges:
             raise RuntimeError("roller section does not cross the cage line")
-        self.cage_edge: Edge = cage_edges[0]
+        self.cage_edge = cage_edges[0]
         self._race_center_radius = roller.faces().sort_by(Axis.Z)[-1].center().X
-        roller.position -= (self._race_center_radius, 0, 0)
+        roller.position -= (self._race_center_radius, 0, 0)  # pylint: disable=no-member
         return roller
 
     countersink_profile = Bearing.default_countersink_profile
@@ -797,8 +808,7 @@ class PressFitHole(BasePartObject):
 
 
 if __name__ == "__main__":
-    from ocp_vscode import Camera, set_defaults, show, show_all
-    from build123d import pack
+    from ocp_vscode import Camera, set_defaults, show
 
     set_defaults(reset_camera=Camera.CENTER)
 

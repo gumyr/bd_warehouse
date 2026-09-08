@@ -29,21 +29,77 @@ license:
 
 import copy
 import math
-from build123d import *
-from build123d import tuplify
 from typing import Literal, cast
+
+from bd_materials import finishes, metals, plastics
+from build123d import (
+    IN,
+    MM,
+    Align,
+    Axis,
+    BasePartObject,
+    BaseSketchObject,
+    Box,
+    BuildLine,
+    BuildPart,
+    BuildSketch,
+    Circle,
+    Color,
+    Compound,
+    CounterBoreHole,
+    CounterSinkHole,
+    Cylinder,
+    Edge,
+    Face,
+    FontStyle,
+    GeomType,
+    GridLocations,
+    Helix,
+    Hole,
+    JernArc,
+    Line,
+    LinearJoint,
+    Location,
+    Locations,
+    Mode,
+    Part,
+    Plane,
+    Polyline,
+    Pos,
+    Rectangle,
+    RectangleRounded,
+    RegularPolygon,
+    RevoluteJoint,
+    RigidJoint,
+    Rot,
+    RotationLike,
+    SlotCenterToCenter,
+    SlotOverall,
+    SortBy,
+    Text,
+    Vector,
+    chamfer,
+    extrude,
+    fillet,
+    insert,
+    make_face,
+    mirror,
+    pack,
+    revolve,
+    sweep,
+    tuplify,
+)
+
 from bd_warehouse.bearing import SingleRowCappedDeepGrooveBallBearing
 from bd_warehouse.fastener import (
     HexNut,
     LowProfileScrew,
     SetScrew,
     SocketHeadCapScrew,
-    ThreadedHole,
     TapHole,
+    ThreadedHole,
 )
-from bd_warehouse.thread import MetricTrapezoidalThread, TrapezoidalThread
-
-from bd_materials import finishes, metals, plastics
+from bd_warehouse.thread import TrapezoidalThread
 
 CAVITY_RADIUS = 2.3 * MM
 FILLET_RADIUS = 1.5 * MM
@@ -92,7 +148,7 @@ class AcmeAntiBacklashNutBlock8mm(BasePartObject):
     ):
 
         with BuildPart() as block:
-            with BuildSketch(Plane.XY.offset(-6)) as bs:
+            with BuildSketch(Plane.XY.offset(-6)):
                 RectangleRounded(34, 33, 3)
                 with Locations((-9, 6)):
                     Circle(2.5, mode=Mode.SUBTRACT)
@@ -102,11 +158,11 @@ class AcmeAntiBacklashNutBlock8mm(BasePartObject):
                 with Locations((10, -6.5), (-10, -6.5)):
                     Circle(2.55, mode=Mode.SUBTRACT)
             extrude(amount=12)
-            with BuildSketch(Plane.XY.offset(6)) as bs:
+            with BuildSketch(Plane.XY.offset(6)):
                 with Locations((10, -6.5), (-10, -6.5)) as mounts:
                     Circle(4.5)
             extrude(amount=-2, mode=Mode.SUBTRACT)
-            with BuildSketch(Plane.XY.offset(-6)) as bs:
+            with BuildSketch(Plane.XY.offset(-6)):
                 with Locations((10, -6.5), (-10, -6.5)):
                     RegularPolygon(4.618802153517, 6, rotation=30)
             extrude(amount=5, mode=Mode.SUBTRACT)
@@ -186,8 +242,8 @@ class AluminumSpacer(BasePartObject):
         - Color: Silver
 
     Args:
-        length (Literal['3mm', '1/8in', '6mm', '1/4in', '9mm', '10mm', '13.2mm', '20mm', '35mm', '1-1/2in', '40mm']):
-            valid lengths
+        length (str): one of '3mm', '1/8in', '6mm', '1/4in', '9mm', '10mm', '13.2mm', '20mm',
+            '35mm', '1-1/2in' or '40mm'
         rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0).
         align (Align | tuple[Align, Align, Align], optional): align min, center,
             or max of object. Defaults to (Align.CENTER, Align.CENTER, Align.MIN).
@@ -234,10 +290,10 @@ class AluminumSpacer(BasePartObject):
         }
         try:
             spacer_length = valid_lengths[length]
-        except KeyError:
+        except KeyError as exc:
             raise ValueError(
                 f"{length} is an invalid length, must be one of {tuple(valid_lengths.keys())}"
-            )
+            ) from exc
 
         with BuildPart() as spacer:
             with BuildSketch():
@@ -306,9 +362,8 @@ class CBeamAssembly(Compound):
             )
             bearing = SingleRowCappedDeepGrooveBallBearing(size="M8-16-5")
             end_plate.joints["bearing"].connect_to(bearing.joints["b"])
-            lm5s = [s := LowProfileScrew("M5-0.8", 25 * MM)] + [
-                copy.copy(s) for _ in range(3)
-            ]
+            lm5 = LowProfileScrew("M5-0.8", 25 * MM)
+            lm5s = [lm5] + [copy.copy(lm5) for _ in range(3)]
             for i in range(4):
                 end_plate.joints[f"screw-{i}"].connect_to(lm5s[i].joints["a"])
             if screw_length is None:
@@ -413,9 +468,8 @@ class CBeamCapped(Compound):
         self,
         length: float,
     ):
-        lm5s = [s := LowProfileScrew("M5-0.8", 25 * MM)] + [
-            copy.copy(s) for _ in range(7)
-        ]
+        lm5 = LowProfileScrew("M5-0.8", 25 * MM)
+        lm5s = [lm5] + [copy.copy(lm5) for _ in range(7)]
         rail = Rot(X=-90) * CBeamLinearRail(length=length)
         bearings = [
             b := SingleRowCappedDeepGrooveBallBearing(size="M8-16-5"),
@@ -833,7 +887,7 @@ class CBeamGantryPlateXLarge(BasePartObject):
         mode: Mode = Mode.ADD,
     ):
         with BuildPart() as plate:
-            with BuildSketch(Plane.XY) as plate_skt:
+            with BuildSketch(Plane.XY):
                 RectangleRounded(125, 125, 10)
                 with GridLocations(30, 30, 3, 3):
                     Circle(2.6, mode=Mode.SUBTRACT)
@@ -999,10 +1053,11 @@ class EccentricSpacer(BasePartObject):
         }
         try:
             cam_length = valid_heights[cam_height]
-        except KeyError:
+        except KeyError as exc:
             raise ValueError(
-                f"{cam_height} is an invalid cam height, must be one of {tuple(valid_heights.keys())}"
-            )
+                f"{cam_height} is an invalid cam height,"
+                f" must be one of {tuple(valid_heights.keys())}"
+            ) from exc
 
         # 10mm across the flats
         hex_radius = (2 / 3) * 10 * MM * math.sin(math.radians(60))
@@ -1083,10 +1138,11 @@ class FlexibleCoupler(BasePartObject):
         }
         try:
             d2 = valid_diameters[shaft_diameter]
-        except KeyError:
+        except KeyError as exc:
             raise ValueError(
-                f"{shaft_diameter} is an invalid shaft diameter, must be one of {tuple(valid_diameters.keys())}"
-            )
+                f"{shaft_diameter} is an invalid shaft diameter,"
+                f" must be one of {tuple(valid_diameters.keys())}"
+            ) from exc
 
         d1 = 5 * MM  # NEMA 17
 
@@ -1119,7 +1175,7 @@ class FlexibleCoupler(BasePartObject):
                 Hole(1.7)
             with BuildLine():
                 spiral = Helix(2, 2, 11, center=(0, 0, -18.2))
-            with BuildSketch(spiral ^ 0) as x_section:
+            with BuildSketch(spiral ^ 0):
                 Rectangle(10, 0.7, align=(Align.MIN, Align.MIN))
             spiral_cut = sweep(is_frenet=True, mode=Mode.PRIVATE).rotate(Axis.Z, 90)
             for i in range(0, 10, 2):
@@ -1227,19 +1283,19 @@ class LockCollar(Compound):
             "1/4in": (IN / 4, IN / 2, 7 * MM),
         }
         try:
-            id, od, h = valid_sizes[inside_diameter]
-        except KeyError:
+            bore, od, h = valid_sizes[inside_diameter]
+        except KeyError as exc:
             raise ValueError(
                 f"{inside_diameter} is an invalid inside diameter,"
                 f" must be one of {tuple(valid_sizes.keys())}"
-            )
+            ) from exc
         super().__init__()
 
         setscrew = SetScrew("M5-0.8", 4 * MM)
         with BuildPart() as collar:
             with BuildSketch():
                 Circle(od / 2)
-                Circle(id / 2, mode=Mode.SUBTRACT)
+                Circle(bore / 2, mode=Mode.SUBTRACT)
             extrude(amount=h)
             with Locations(Location((0, od / 2, h / 2), (1, 0, 0), -90)):
                 ThreadedHole(setscrew, depth=od / 2)
@@ -1349,6 +1405,7 @@ class RouterSpindleMount(BasePartObject):
         width = 90.8 * MM
         height = 30.6 * MM + 54.5 * MM
         thickness = 20 * MM
+        top_mount_centers: GridLocations | list[Location] = []
         if parts in ["base", "both"]:
             with BuildPart() as base:
                 # Create the basic shape
@@ -1412,12 +1469,12 @@ class RouterSpindleMount(BasePartObject):
                         CounterBoreHole(3, 5.1, 1.5)
 
                 # Sunken embossed text
-                with BuildSketch(faceplate.faces().sort_by(Axis.Y)[-1]) as s2:
+                with BuildSketch(faceplate.faces().sort_by(Axis.Y)[-1]):
                     RectangleRounded(27.45 * 2, 13, 2.5)
                 extrude(amount=-1 * MM, mode=Mode.SUBTRACT)
                 with BuildSketch(
                     faceplate.faces().filter_by(Axis.Y).sort_by(Axis.Y)[-2]
-                ) as s2:
+                ):
                     Text("OPENBUILDS", 7.5 * MM, font_style=FontStyle.BOLD)
                 extrude(amount=0.1 * MM)
 
@@ -1488,16 +1545,16 @@ class ShimWasher(BasePartObject):
             "FlatWasher": (0.75 * IN, 0.25 * IN, 0.08 * IN),
         }
         try:
-            od, id, thickness = dimensions[shim_type]
-        except KeyError:
+            od, bore, thickness = dimensions[shim_type]
+        except KeyError as exc:
             raise ValueError(
                 f"Invalid shim_type {shim_type} must be one of {tuple(dimensions.keys())}"
-            )
+            ) from exc
 
         with BuildPart() as shim:
             with BuildSketch():
                 Circle(od / 2)
-                Circle(id / 2, mode=Mode.SUBTRACT)
+                Circle(bore / 2, mode=Mode.SUBTRACT)
             extrude(amount=thickness)
             fillet(shim.edges().group_by(SortBy.LENGTH)[-1], thickness / 5)
 
@@ -1546,7 +1603,7 @@ class SpacerBlock(BasePartObject):
     ):
 
         with BuildPart() as plate:
-            with BuildSketch() as bs:
+            with BuildSketch():
                 RectangleRounded(86.4, 20, 3.36)
                 with GridLocations(30, 0, 3, 1):
                     Circle(3.6, mode=Mode.SUBTRACT)
@@ -2007,7 +2064,11 @@ class XtremeSolidVWheelAssembly(Compound):
         b1.joints["b"].connect_to(shim1.joints["a"])
         shim1.joints["b"].connect_to(spacer.joints["a"])
         screw = LowProfileScrew("M5-0.8", 30, simple=False)
-        screw.position += (0, 0, spacer.joints["b"].location.position.Z + 6 - 1.55)
+        screw.position += (  # pylint: disable=no-member
+            0,
+            0,
+            spacer.joints["b"].location.position.Z + 6 - 1.55,
+        )
         super().__init__()
         self.label = "XtremeSolidVWheelAssembly"
         self.children = [tire, b0, shim0, shim1, b1, spacer, nut, screw]
@@ -2075,10 +2136,10 @@ class StepperMotor(Compound):
         }
         try:
             length, shaft_d, flat, shaft_l1, shaft_l2 = motor_data[motor_type]
-        except KeyError:
+        except KeyError as exc:
             raise ValueError(
                 f"{motor_type} is invalid, must be one of {motor_data.keys()}"
-            )
+            ) from exc
 
         if motor_length is not None:
             if motor_length <= 0:
@@ -2108,7 +2169,7 @@ class StepperMotor(Compound):
                 extrude(amount=-length + skt1_length)
                 insert(skt1.face().located(Pos(Z=-length + skt1_length)))
                 extrude(amount=-skt1_length)
-                with BuildSketch() as skt2:
+                with BuildSketch():
                     RectangleRounded(28.2 * 2, 28.2 * 2, 4.6)
                     with GridLocations(23.57 * 2, 23.57 * 2, 2, 2) as mount_holes:
                         Circle(2.55, mode=Mode.SUBTRACT)
@@ -2122,7 +2183,7 @@ class StepperMotor(Compound):
                     Rectangle(21.209 * 2, 21.209 * 2)
                     Circle(26.5, mode=Mode.INTERSECT)
                 extrude(amount=-skt1_length)
-                with BuildSketch() as skt2:
+                with BuildSketch():
                     Rectangle(21.109 * 2, 21.109 * 2)
                     Circle(25, mode=Mode.INTERSECT)
                 extrude(amount=-length)
@@ -2165,17 +2226,8 @@ class StepperMotor(Compound):
 
 
 if __name__ == "__main__":
-    from ocp_vscode import show, show_all, set_defaults, Camera
+    from ocp_vscode import show
 
-    w = XtremeSolidVWheelAssembly(True)
-    s = EccentricSpacer("6mm")
-    show(w, s, render_joints=True)
-    exit()
-
-    n = TNut()
-    l = LBracket()
-    show(n, l)
-    exit()
     # AluminumSpacer("6mm")  # 2
     # AluminumSpacer("40mm")  # 2
     # FlexibleCoupler("1/4in")  # 1

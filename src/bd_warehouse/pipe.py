@@ -74,13 +74,33 @@ license:
 """
 
 from __future__ import annotations
+
 import csv
 import importlib.resources as pkg_resources
+from typing import Literal, Union, cast, get_args
 
 from bd_materials import resolve as resolve_material
-from typing import Literal, Union, cast, get_args
-from build123d import *
-from build123d import tuplify
+from build123d import (
+    IN,
+    Align,
+    BasePartObject,
+    BaseSketchObject,
+    BuildPart,
+    BuildSketch,
+    Circle,
+    Edge,
+    Location,
+    Mode,
+    Part,
+    Plane,
+    RigidJoint,
+    RotationLike,
+    Wire,
+    insert,
+    sweep,
+    tuplify,
+)
+
 import bd_warehouse
 
 # fmt: off
@@ -158,8 +178,10 @@ class PipeSection(BaseSketchObject):
 
         try:
             od_in, thickness_in = PipeSection.pipe_data[nps + material + identifier]
-        except:
-            raise ValueError(f"No pipe data for {nps}, {material}, {identifier}")
+        except KeyError as exc:
+            raise ValueError(
+                f"No pipe data for {nps}, {material}, {identifier}"
+            ) from exc
 
         self.od = od_in * IN
         self.thickness = thickness_in * IN

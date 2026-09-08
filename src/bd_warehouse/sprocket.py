@@ -31,8 +31,32 @@ license:
 """
 
 from math import cos, pi, radians, sqrt
-from build123d import *
-from build123d.geometry import TOLERANCE
+
+from build123d import (
+    IN,
+    Align,
+    Axis,
+    BasePartObject,
+    CenterArc,
+    Compound,
+    Cylinder,
+    Face,
+    GeomType,
+    Line,
+    Mode,
+    Plane,
+    PolarLine,
+    PolarLocations,
+    Pos,
+    RadiusArc,
+    RotationLike,
+    Sketch,
+    Solid,
+    Vector,
+    Wire,
+    chamfer,
+    extrude,
+)
 
 
 class Sprocket(BasePartObject):
@@ -134,7 +158,8 @@ class Sprocket(BasePartObject):
         """Ensure that the roller would fit in the chain"""
         if self.roller_diameter >= self.chain_pitch:
             raise ValueError(
-                f"roller_diameter {self.roller_diameter} is too large for chain_pitch {self.chain_pitch}"
+                f"roller_diameter {self.roller_diameter} is too large"
+                f" for chain_pitch {self.chain_pitch}"
             )
         if not isinstance(num_teeth, int) or num_teeth <= 2:
             raise ValueError(

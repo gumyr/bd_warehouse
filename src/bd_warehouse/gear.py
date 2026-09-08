@@ -45,9 +45,48 @@ license:
     limitations under the License.
 """
 
-from math import sin, cos, tan, acos, atan, sqrt, radians, degrees, pi, inf, nan, ceil
+from math import acos, atan, ceil, cos, degrees, inf, nan, pi, radians, sin, sqrt, tan
 from typing import Callable, Literal
-from build123d import *
+
+from bd_materials.finishes import black_oxide
+from bd_materials.materials.metals import AlloySteel, alloy_steel, bronze
+from build123d import (
+    MM,
+    Align,
+    Axis,
+    BaseLineObject,
+    BasePartObject,
+    BaseSketchObject,
+    BuildLine,
+    BuildPart,
+    BuildSketch,
+    Compound,
+    Edge,
+    Face,
+    GridLocations,
+    Helix,
+    Line,
+    Location,
+    Mode,
+    Plane,
+    PolarLocations,
+    Pos,
+    RadiusArc,
+    Rectangle,
+    RigidJoint,
+    Rot,
+    RotationLike,
+    Solid,
+    Spline,
+    Trapezoid,
+    Vector,
+    Wire,
+    extrude,
+    faces,
+    fillet,
+    mirror,
+    pack,
+)
 from OCP.BRep import BRep_Tool
 from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_MakeEdge,
@@ -64,8 +103,6 @@ from OCP.Geom import Geom_CylindricalSurface, Geom_Surface
 from OCP.gp import gp_Ax3, gp_Dir, gp_Pnt, gp_Pnt2d
 from OCP.StdFail import StdFail_NotDone
 from OCP.TopoDS import TopoDS
-from bd_materials.materials.metals import alloy_steel, AlloySteel, bronze
-from bd_materials.finishes import black_oxide
 
 
 class InvoluteToothProfile(BaseLineObject):
@@ -132,12 +169,12 @@ class InvoluteToothProfile(BaseLineObject):
             l1 = Spline(*rotated_pnts)
             root_flank = Vector(self.root_radius, 0).rotate(Axis.Z, -half_pitch_angle)
             l2 = Line(rotated_pnts[0], root_flank)
-            root = RadiusArc(
+            RadiusArc(
                 l2 @ 1,
                 Vector(self.root_radius, 0).rotate(Axis.Z, -2 * half_thick_angle),
                 self.root_radius,
             )
-            top_land = RadiusArc(
+            RadiusArc(
                 l1 @ 1,
                 Vector(self.addendum_radius, 0),
                 -self.addendum_radius,

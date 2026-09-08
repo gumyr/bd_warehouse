@@ -146,10 +146,41 @@ license:
 
 """
 
-from math import degrees, atan2
+from math import atan2, degrees
 from typing import Any, Literal, Union, cast, get_args
-from build123d import *
-from build123d import tuplify
+
+from build123d import (
+    IN,
+    MM,
+    Align,
+    Axis,
+    BasePartObject,
+    BuildPart,
+    BuildSketch,
+    Edge,
+    Face,
+    Hole,
+    Location,
+    Locations,
+    Mode,
+    Part,
+    Plane,
+    PolarLocations,
+    Rectangle,
+    RigidJoint,
+    RotationLike,
+    Select,
+    Sketch,
+    SortBy,
+    Trapezoid,
+    chamfer,
+    fillet,
+    insert,
+    revolve,
+    split,
+    tuplify,
+)
+
 from bd_warehouse.pipe import Identifier, Material, Pipe
 
 
@@ -273,7 +304,8 @@ flange_data_class_300: dict[str, list[Any]] = {
     "22":[840,65.1,66.7,640,558.8,100,145,164,"…",564.4,565.2,"Note (7)",13,"…","…"],
     "24":[915,68.3,69.9,702,610.0,105,152,167,83,616.0,616.0,"Note (7)",13,614.4,"…"],
 }
-# nps |	Groove # | Pitch Dia, P	| Depth, E | Width, F | Rad at Bottom, R | Dia of Raised Portion, K | Distance Between Flanges |
+# nps | Groove # | Pitch Dia, P | Depth, E | Width, F | Rad at Bottom, R |
+#     Dia of Raised Portion, K | Distance Between Flanges |
 ring_joint_facings_class_150: dict[str, list[Any]] = {
     "1":[15,47.63,6.35,8.74,0.8,63.5,4],
     "1 1/4":[17,57.15,6.35,8.74,0.8,73,4],
@@ -696,9 +728,7 @@ class LappedFlange(Flange):
         d = imperial_str_to_float(d_imp)
 
         # Get the face profile if any
-        face_profile, face_thickness = Flange.get_face_section_data(
-            nps, flange_class, None
-        )
+        _, face_thickness = Flange.get_face_section_data(nps, flange_class, None)
 
         self.od = O  #: Outside diameter
         self.id = B  #: Inside diameter
@@ -709,11 +739,10 @@ class LappedFlange(Flange):
             with Locations((0, face_thickness)):
                 Rectangle(X, Y, align=(Align.CENTER, Align.MIN))
                 Rectangle(O, tf, align=(Align.CENTER, Align.MIN))
-            vertices = [
-                v
-                for v in flange_profile.vertices().group_by(Axis.Y)[-1]
+            vertices = list(
+                flange_profile.vertices().group_by(Axis.Y)[-1]
                 + flange_profile.vertices().group_by(Axis.Y)[-2]
-            ]
+            )
             fillet(vertices, (Y - tf) / 4)
             Rectangle(
                 B,
@@ -876,7 +905,7 @@ class SlipOnFlange(Flange):
 
         # Get the flange parameters
         flange_data, bolt_data = Flange.get_flange_data(nps, flange_class, face_type)
-        O, tf, X, Y, B, r = (flange_data[i] for i in [0, 1, 3, 5, 9, 12])
+        O, tf, X, Y, B = (flange_data[i] for i in [0, 1, 3, 5, 9])
         W, d_imp, n = bolt_data[1], bolt_data[2], bolt_data[3]
         d = imperial_str_to_float(d_imp)
 
@@ -894,11 +923,10 @@ class SlipOnFlange(Flange):
             with Locations((0, face_thickness)):
                 Rectangle(X, Y, align=(Align.CENTER, Align.MIN))
                 Rectangle(O, tf, align=(Align.CENTER, Align.MIN))
-            vertices = [
-                v
-                for v in flange_profile.vertices().group_by(Axis.Y)[-1]
+            vertices = list(
+                flange_profile.vertices().group_by(Axis.Y)[-1]
                 + flange_profile.vertices().group_by(Axis.Y)[-2]
-            ]
+            )
             fillet(vertices, (Y - tf) / 4)
             if face_profile is not None:
                 insert(face_profile)
@@ -997,7 +1025,7 @@ class SocketWeldFlange(Flange):
             },
             "SocketWeldFlange",
         )
-        O, tf, X, Y, B11, B13, r = (flange_data[i] for i in [0, 1, 3, 5, 9, 11, 12])
+        O, tf, X, Y, B11, B13 = (flange_data[i] for i in [0, 1, 3, 5, 9, 11])
         D = flange_data[socket_depth_index]
         W, d_imp, n = bolt_data[1], bolt_data[2], bolt_data[3]
         d = imperial_str_to_float(d_imp)
@@ -1016,11 +1044,10 @@ class SocketWeldFlange(Flange):
             with Locations((0, face_thickness)):
                 Rectangle(X, Y, align=(Align.CENTER, Align.MIN))
                 Rectangle(O, tf, align=(Align.CENTER, Align.MIN))
-            vertices = [
-                v
-                for v in flange_profile.vertices().group_by(Axis.Y)[-1]
+            vertices = list(
+                flange_profile.vertices().group_by(Axis.Y)[-1]
                 + flange_profile.vertices().group_by(Axis.Y)[-2]
-            ]
+            )
             fillet(vertices, (Y - tf) / 4)
             if face_profile is not None:
                 insert(face_profile)
@@ -1121,7 +1148,7 @@ class WeldNeckFlange(Flange):
             },
             "WeldNeckFlange",
         )
-        O, tf, X, Ah, Y, B, r = [flange_data[i] for i in [0, 1, 3, 4, 7, 11, 12]]
+        O, tf, X, Ah, Y, B = (flange_data[i] for i in [0, 1, 3, 4, 7, 11])
         W, d_imp, n = bolt_data[1], bolt_data[2], bolt_data[3]
         d = imperial_str_to_float(d_imp)
 
@@ -1141,7 +1168,7 @@ class WeldNeckFlange(Flange):
                 Rectangle(O, tf, align=(Align.CENTER, Align.MIN))
             with Locations((0, face_thickness + tf)):
                 Trapezoid(X, Y - tf, trap_angle, align=(Align.CENTER, Align.MIN))
-            vertices = [v for v in flange_profile.vertices().group_by(Axis.Y)[-2]]
+            vertices = list(flange_profile.vertices().group_by(Axis.Y)[-2])
             fillet(vertices, tf / 6)  # What is the correct radius?
             vertices = flange_profile.vertices().group_by(Axis.Y)[-1]
             c = (Ah - B) / 2.5

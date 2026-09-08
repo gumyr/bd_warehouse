@@ -1,3 +1,5 @@
+"""bd_warehouse: a build123d parametric part collection"""
+
 from importlib.metadata import version, PackageNotFoundError
 
 try:

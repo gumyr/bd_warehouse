@@ -38,8 +38,6 @@ from importlib import resources
 from math import copysign, cos, radians, sin, tan
 from typing import Literal, Optional, Tuple, TypedDict, Union
 
-import bd_warehouse
-
 from build123d.build_common import IN, MM
 from build123d.build_enums import Align, Keep, Mode, SortBy
 from build123d.build_line import BuildLine
@@ -54,6 +52,8 @@ from build123d.operations_part import loft
 from build123d.operations_sketch import make_face
 from build123d.topology import Compound, Face, Shape, Solid, Wire, tuplify
 from OCP.TopoDS import TopoDS_Compound
+
+import bd_warehouse
 
 
 def is_safe(value: str) -> bool:
@@ -74,8 +74,12 @@ def imperial_str_to_float(measure: str) -> float:
 
 def _read_plastic_bottle_thread_csv(filename: str) -> list[dict[str, str]]:
     """Read a plastic bottle thread parameter table."""
-    data_resource = resources.files(bd_warehouse) / f"data/{filename}"
-    with data_resource.open(encoding="utf-8", newline="") as csvfile:  # type: ignore[call-overload]  # typeshed omits newline= on Traversable.open
+    with (
+        resources.as_file(
+            resources.files(bd_warehouse) / f"data/{filename}"
+        ) as data_resource,
+        data_resource.open(encoding="utf-8", newline="") as csvfile,
+    ):
         return list(csv.DictReader(csvfile))
 
 
@@ -135,8 +139,12 @@ _PCO1881_DATA = {
 
 def _read_bspp_thread_csv() -> list[dict[str, str]]:
     """Read the ISO 228-1 BSPP thread parameter table."""
-    data_resource = resources.files(bd_warehouse) / "data/iso_228_1.csv"
-    with data_resource.open(encoding="utf-8", newline="") as csvfile:  # type: ignore[call-overload]  # typeshed omits newline= on Traversable.open
+    with (
+        resources.as_file(
+            resources.files(bd_warehouse) / "data/iso_228_1.csv"
+        ) as data_resource,
+        data_resource.open(encoding="utf-8", newline="") as csvfile,
+    ):
         return list(csv.DictReader(csvfile))
 
 
@@ -247,29 +255,18 @@ class _ThreadSweep(BasePartObject):
 
             # Apply the end finishes. Note that it's significantly faster
             # to just apply the end finish to a single loop then the entire Compound
+            chamfer_shape = (
+                self._make_chamfer_shape() if "chamfer" in end_finishes else None
+            )
             # Bottom
-            if self.end_finishes.count("chamfer") != 0:
-                chamfer_shape = self._make_chamfer_shape()
             if end_finishes[0] == "fade":
                 start_tip = self._make_fade_end(True)
                 start_tip.label = "bottom_tip"
                 bd_object.children = list(bd_object.children) + [start_tip]
             elif end_finishes[0] in ["square", "chamfer"]:
-                children = list(bd_object.children)
-                bottom_loop = children.pop(0)
-                label = bottom_loop.label
-                kept: Shape | None
-                if end_finishes[0] == "square":
-                    kept = split(bottom_loop, bisect_by=Plane.XY, keep=Keep.TOP)
-                else:
-                    # A null boolean leaves nothing of this loop to keep
-                    pieces = bottom_loop.intersect(chamfer_shape)
-                    kept = None if pieces is None else pieces[0]
-                if kept is None:
-                    bd_object.children = children
-                else:
-                    kept.label = label
-                    bd_object.children = [kept] + children
+                bd_object.children = self._finish_start(
+                    list(bd_object.children), end_finishes[0], chamfer_shape
+                )
 
             # Top
             if end_finishes[1] == "fade":
@@ -277,40 +274,9 @@ class _ThreadSweep(BasePartObject):
                 end_tip.label = "top_tip"
                 bd_object.children = list(bd_object.children) + [end_tip]
             elif end_finishes[1] in ["square", "chamfer"]:
-                children = list(bd_object.children)
-                top_loops: list[Shape] = []
-                last_square = False
-                for _ in range(3):
-                    if not children:
-                        continue
-                    top_loop = children.pop(-1)
-                    label = top_loop.label
-                    # If this loop is entirely ABOVE the cut plane
-                    # Skip the operation and do not add it to top_loops
-                    bbox = top_loop.bounding_box()
-                    if bbox.min.Z > self.length:
-                        continue
-                    kept = top_loop
-                    if end_finishes[1] == "square":
-                        # If this loop is entirely BELOW the plane
-                        # Keep without splitting, stop checking future loops
-                        if bbox.max.Z < self.length:
-                            last_square = True
-                        else:
-                            kept = split(
-                                top_loop,
-                                bisect_by=Plane.XY.offset(self.length),
-                                keep=Keep.BOTTOM,
-                            )
-                    else:
-                        pieces = top_loop.intersect(chamfer_shape)
-                        kept = None if pieces is None else pieces[0]
-                    if kept is not None and kept.volume != 0:
-                        kept.label = label
-                        top_loops.append(kept)
-                    if last_square:
-                        break
-                bd_object.children = children + top_loops
+                bd_object.children = self._finish_end(
+                    list(bd_object.children), end_finishes[1], chamfer_shape
+                )
 
             # Locate the final loop objects in axial order so fade tips can be
             # positioned without retaining a link to the long loop chain.
@@ -328,6 +294,67 @@ class _ThreadSweep(BasePartObject):
                 final_loops[-1].joints["1"].connected_to = None
 
             super().__init__(part=bd_object, mode=Mode.PRIVATE)
+
+    @staticmethod
+    def _chamfer_loop(loop: Shape, chamfer_shape: Shape | None) -> Shape | None:
+        """Trim a loop to the chamfer cone; None when a null boolean leaves nothing"""
+        if chamfer_shape is None:
+            raise ValueError("a chamfered end needs a chamfer shape")
+        pieces = loop.intersect(chamfer_shape)
+        return None if pieces is None else pieces[0]
+
+    def _finish_start(
+        self, children: list[Shape], finish: str, chamfer_shape: Shape | None
+    ) -> list[Shape]:
+        """Square or chamfer the first loop, dropping it if nothing remains"""
+        bottom_loop = children.pop(0)
+        label = bottom_loop.label
+        kept: Shape | None
+        if finish == "square":
+            kept = split(bottom_loop, bisect_by=Plane.XY, keep=Keep.TOP)
+        else:
+            kept = self._chamfer_loop(bottom_loop, chamfer_shape)
+        if kept is None:
+            return children
+        kept.label = label
+        return [kept] + children
+
+    def _finish_end(
+        self, children: list[Shape], finish: str, chamfer_shape: Shape | None
+    ) -> list[Shape]:
+        """Square or chamfer the loops crossing the top of the thread"""
+        top_loops: list[Shape] = []
+        last_square = False
+        for _ in range(3):
+            if not children:
+                continue
+            top_loop = children.pop(-1)
+            label = top_loop.label
+            # If this loop is entirely ABOVE the cut plane
+            # Skip the operation and do not add it to top_loops
+            bbox = top_loop.bounding_box()
+            if bbox.min.Z > self.length:
+                continue
+            kept: Shape | None = top_loop
+            if finish == "square":
+                # If this loop is entirely BELOW the plane
+                # Keep without splitting, stop checking future loops
+                if bbox.max.Z < self.length:
+                    last_square = True
+                else:
+                    kept = split(
+                        top_loop,
+                        bisect_by=Plane.XY.offset(self.length),
+                        keep=Keep.BOTTOM,
+                    )
+            else:
+                kept = self._chamfer_loop(top_loop, chamfer_shape)
+            if kept is not None and kept.volume != 0:
+                kept.label = label
+                top_loops.append(kept)
+            if last_square:
+                break
+        return children + top_loops
 
     def _make_thread_loop(self, loop_height: float) -> Solid:
         """make_thread_loop
@@ -382,13 +409,13 @@ class _ThreadSweep(BasePartObject):
         Returns:
             Solid: The tip of the thread fading to almost nothing
         """
-        dir = -1 if bottom else 1
+        direction = -1 if bottom else 1
         height = min(self.pitch / 4, self.length / 2)
         with BuildPart() as fade_tip:
             with BuildLine():
                 fade_path_wire = Helix(
                     pitch=self.pitch,
-                    height=dir * height,
+                    height=direction * height,
                     radius=self.root_radius,
                     lefthand=not self.right_hand,
                 )
