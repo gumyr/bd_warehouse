@@ -34,7 +34,8 @@ from importlib import resources
 from typing import Literal
 
 from build123d.build_enums import Align, Mode
-from build123d.geometry import Axis, Color, Pos, RotationLike
+from build123d.geometry import Axis, Color, Location, Pos, RotationLike
+from build123d.joints import RigidJoint
 from build123d.objects_part import BasePartObject
 from build123d.objects_sketch import Rectangle
 from build123d.operations_generic import fillet
@@ -418,6 +419,7 @@ class ORing(BasePartObject):  # pylint: disable=too-many-instance-attributes
         super().__init__(part=o_ring, rotation=rotation, align=align, mode=mode)
         self.label = f"ORing-{self.o_ring_type}-{self.o_ring_size}"
         self.color = Color(0x202020)
+        RigidJoint("a", self, Location())
 
     @property
     def info(self) -> str:
