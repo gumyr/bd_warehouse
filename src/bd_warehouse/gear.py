@@ -45,7 +45,21 @@ license:
     limitations under the License.
 """
 
-from math import acos, atan, ceil, cos, degrees, inf, nan, pi, radians, sin, sqrt, tan
+from math import (
+    acos,
+    atan,
+    ceil,
+    cos,
+    degrees,
+    hypot,
+    inf,
+    nan,
+    pi,
+    radians,
+    sin,
+    sqrt,
+    tan,
+)
 from typing import Callable, Literal
 
 from bd_materials.finishes import black_oxide
@@ -98,9 +112,9 @@ from OCP.BRepBuilderAPI import (
 from OCP.BRepFill import BRepFill
 from OCP.BRepLib import BRepLib
 from OCP.BRepTools import BRepTools
-from OCP.GCE2d import GCE2d_MakeSegment
 from OCP.Geom import Geom_CylindricalSurface, Geom_Surface
-from OCP.gp import gp_Ax3, gp_Dir, gp_Pnt, gp_Pnt2d
+from OCP.Geom2d import Geom2d_Line, Geom2d_TrimmedCurve
+from OCP.gp import gp_Ax3, gp_Dir, gp_Dir2d, gp_Pnt, gp_Pnt2d
 from OCP.StdFail import StdFail_NotDone
 from OCP.TopoDS import TopoDS
 
@@ -758,7 +772,9 @@ def _uv_face(
     wire_builder = BRepBuilderAPI_MakeWire()
     edges = []
     for (u0, v0), (u1, v1) in zip(corners, corners[1:] + corners[:1]):
-        segment = GCE2d_MakeSegment(gp_Pnt2d(u0, v0), gp_Pnt2d(u1, v1)).Value()
+        # a line's parameter is distance along it; OCP 8 dropped GCE2d_MakeSegment
+        line = Geom2d_Line(gp_Pnt2d(u0, v0), gp_Dir2d(u1 - u0, v1 - v0))
+        segment = Geom2d_TrimmedCurve(line, 0.0, hypot(u1 - u0, v1 - v0))
         edge = BRepBuilderAPI_MakeEdge(segment, surface).Edge()
         BRepLib.BuildCurves3d_s(edge)
         wire_builder.Add(edge)
