@@ -98,3 +98,18 @@ PlasticBottleThread
 *******************
 
 .. autoclass:: thread.PlasticBottleThread
+    :members: identify, sizes, bottle_types
+
+Bottles are not marked with their thread, and the name of a finish follows the
+diameter over its thread crests rather than the neck's, so ``identify`` finds
+the standard threads that fit measurements taken off a bottle:
+
+.. code-block:: python
+
+    >>> for match in PlasticBottleThread.identify(neck_diameter=30, pitch=4, turns=1.5):
+    ...     print(match.size, match.major_diameter, match.min_turns)
+    M33SP400 (31.52, 32.13) 1.0
+    M33SP444 (31.52, 32.13) 1.125
+    M33SP100 (31.52, 32.13) 1.125
+
+.. autoclass:: thread.PlasticBottleThreadMatch

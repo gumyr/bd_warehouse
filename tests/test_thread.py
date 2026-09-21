@@ -429,6 +429,42 @@ class TestMetricTrapezoidalThread(unittest.TestCase):
 
 
 class TestPlasticBottleThread(unittest.TestCase):
+    def test_identify(self):
+        """A finish is named for the diameter over its threads, not the neck's"""
+        matches = PlasticBottleThread.identify(neck_diameter=30, pitch=4, turns=1.5)
+        self.assertEqual(matches[0].size, "M33SP400")
+        self.assertEqual(matches[0].major_diameter, (31.52, 32.13))
+        self.assertEqual(matches[0].neck_diameter, (29.14, 29.75))
+        self.assertAlmostEqual(matches[0].pitch, 25.4 / 6)
+        self.assertAlmostEqual(matches[0].error, 0.25 + (25.4 / 6 - 4))
+        # a bottle has at least the turns its finish requires
+        sizes = [match.size for match in matches]
+        self.assertNotIn("M33SP415", sizes)
+        self.assertIn(
+            "M33SP415",
+            [m.size for m in PlasticBottleThread.identify(neck_diameter=30, turns=2)],
+        )
+        # what is found can be built
+        thread = PlasticBottleThread(matches[0].size, external=False)
+        self.assertEqual(thread.diameter, 33)
+
+    def test_identify_across_standards(self):
+        (pco,) = PlasticBottleThread.identify(major_diameter=27.4, pitch=2.7)
+        self.assertEqual((pco.size, pco.bottle_type), ("28", "pco1881"))
+        self.assertIsNone(pco.min_turns)
+        self.assertAlmostEqual(pco.error, 0)
+        by_tpi = PlasticBottleThread.identify(major_diameter=27.5, tpi=6, style="L")
+        self.assertEqual(by_tpi[0].size, "L28SP400")
+        self.assertEqual(PlasticBottleThread.identify(major_diameter=200), [])
+
+    def test_identify_refusals(self):
+        with self.assertRaisesRegex(ValueError, "neck_diameter or major_diameter"):
+            PlasticBottleThread.identify(pitch=4)
+        with self.assertRaisesRegex(ValueError, "pitch or tpi"):
+            PlasticBottleThread.identify(neck_diameter=30, pitch=4, tpi=6)
+        with self.assertRaisesRegex(ValueError, "style"):
+            PlasticBottleThread.identify(neck_diameter=30, style="Q")
+
     def test_exterior_thread(self):
         """Simple validity check for an exterior thread"""
 

@@ -36,7 +36,7 @@ import csv
 import re
 from importlib import resources
 from math import copysign, cos, radians, sin, tan
-from typing import Literal, Optional, Tuple, TypedDict, Union
+from typing import Literal, NamedTuple, Optional, Tuple, TypedDict, Union
 
 from build123d.build_common import IN, MM
 from build123d.build_enums import Align, Keep, Mode, SortBy
@@ -1489,6 +1489,31 @@ class MetricTrapezoidalThread(TrapezoidalThread):
         )
 
 
+class PlasticBottleThreadMatch(NamedTuple):
+    """A bottle thread standard that fits a set of measurements
+
+    Attributes:
+        size: the ``size`` to give :class:`PlasticBottleThread`
+        bottle_type: the ``bottle_type`` to give :class:`PlasticBottleThread`
+        major_diameter: smallest and largest diameter over the thread crests,
+            ASTM D2911's T
+        neck_diameter: smallest and largest diameter of the neck between the
+            threads, ASTM D2911's E
+        pitch: distance from one thread to the next
+        min_turns: fewest turns of thread the finish allows, None where the
+            standard fixes a thread length instead
+        error: how far the measurements fall outside the standard, in mm
+    """
+
+    size: str
+    bottle_type: str
+    major_diameter: Tuple[float, float]
+    neck_diameter: Tuple[float, float]
+    pitch: float
+    min_turns: Optional[float]
+    error: float
+
+
 class PlasticBottleThread(BasePartObject):
     """Plastic bottle thread.
 
@@ -1562,6 +1587,129 @@ class PlasticBottleThread(BasePartObject):
             for diameter in data["diameters"]
             for style in ("L", "M")
         ]
+
+    @classmethod
+    def identify(
+        cls,
+        neck_diameter: Optional[float] = None,
+        major_diameter: Optional[float] = None,
+        pitch: Optional[float] = None,
+        tpi: Optional[float] = None,
+        turns: Optional[float] = None,
+        style: Literal["L", "M"] = "M",
+        tolerance: float = 0.5,
+    ) -> list[PlasticBottleThreadMatch]:
+        """The standard threads that fit measurements taken off a bottle
+
+        A finish is named for the diameter over its thread crests, which is
+        not the diameter of the neck: a neck of 30 is a 33 finish. Measure
+        either, or both, and as much of the rest as can be had. The distance
+        between threads separates the coarse sizes from the fine, and the
+        number of turns separates the finishes of one size: a bottle has at
+        least the turns its finish requires and usually a little more.
+
+        These are single start threads, so check that only one thread begins
+        at the top of the neck; on a multiple start thread the distance
+        between neighbouring threads is not the pitch. Finishes of one size
+        differ mostly in the height of the neck, which is not tabulated here,
+        so those the turns allow all come back, the finish made in the most
+        sizes first as the likeliest to be met.
+
+        Args:
+            neck_diameter: diameter of the neck between the threads.
+            major_diameter: diameter over the thread crests.
+            pitch: distance from one thread to the next.
+            tpi: threads per inch, in place of ``pitch``.
+            turns: times the thread wraps the neck.
+            style: ASTM D2911 thread style the sizes are given in, "L" or
+                "M". Defaults to "M".
+            tolerance: how far outside a standard a measured diameter or
+                pitch may fall and still fit. Defaults to 0.5.
+
+        Raises:
+            ValueError: neither diameter is given, both pitch and tpi are,
+                or style is invalid
+
+        Returns:
+            list[PlasticBottleThreadMatch]: what fits, best first
+
+        Example:
+            .. code-block:: python
+
+                best = PlasticBottleThread.identify(neck_diameter=30, pitch=4, turns=1.5)[0]
+                cap_thread = PlasticBottleThread(best.size, external=False)
+
+        """
+        if neck_diameter is None and major_diameter is None:
+            raise ValueError("one of neck_diameter or major_diameter is required")
+        if pitch is not None and tpi is not None:
+            raise ValueError("give pitch or tpi, not both")
+        if style not in ("L", "M"):
+            raise ValueError(f'style must be one of "L" or "M" not {style}')
+        if tpi is not None:
+            pitch = 25.4 * MM / tpi
+
+        def outside(measured: Optional[float], low: float, high: float) -> float:
+            """How far a measurement falls outside a range"""
+            if measured is None:
+                return 0.0
+            return max(low - measured, measured - high, 0.0)
+
+        # each standard thread, and how many sizes its finish is made in
+        standards: list[tuple[PlasticBottleThreadMatch, int]] = []
+        for diameter, dimensions in _ASTM_D2911_DIMENSIONS.items():
+            height = _ASTM_D2911_PROFILES[(style, dimensions["tpi"])]["thread_height"]
+            major = (dimensions["diameter_min"], dimensions["diameter_max"])
+            neck = (round(major[0] - 2 * height, 4), round(major[1] - 2 * height, 4))
+            standards += [
+                (
+                    PlasticBottleThreadMatch(
+                        f"{style}{diameter}SP{finish}",
+                        "astm_d2911",
+                        major,
+                        neck,
+                        25.4 * MM / dimensions["tpi"],
+                        data["min_turns"],
+                        0.0,
+                    ),
+                    len(data["diameters"]),
+                )
+                for finish, data in _ASTM_D2911_FINISHES.items()
+                if diameter in data["diameters"]
+            ]
+        standards += [
+            (
+                PlasticBottleThreadMatch(
+                    size,
+                    "pco1881",
+                    (data["bottle_major_diameter"],) * 2,
+                    (data["bottle_minor_diameter"],) * 2,
+                    data["pitch"],
+                    None,
+                    0.0,
+                ),
+                1,
+            )
+            for size, data in _PCO1881_DATA.items()
+        ]
+
+        matches = []
+        for standard, sizes_made in standards:
+            errors = [
+                outside(major_diameter, *standard.major_diameter),
+                outside(neck_diameter, *standard.neck_diameter),
+                outside(pitch, standard.pitch, standard.pitch),
+            ]
+            # a quarter turn is as close as turns can be counted
+            too_few = (
+                turns is not None
+                and standard.min_turns is not None
+                and turns < standard.min_turns - 0.25
+            )
+            if max(errors) <= tolerance and not too_few:
+                matches.append((sum(errors), -sizes_made, standard))
+        matches.sort(key=lambda match: match[:2])
+        return [standard._replace(error=error) for error, _, standard in matches]
 
     def __init__(
         self,
