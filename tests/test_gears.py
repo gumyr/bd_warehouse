@@ -75,6 +75,47 @@ def test_invalid_spur_gear_root_fillet():
         )
 
 
+def test_spur_gear_plan_tip_fillet():
+    module, tooth_count, pressure_angle, tip_fillet = (1.55, 35, 20, 0.2)
+    unfilleted = SpurGearPlan(module, tooth_count, pressure_angle)
+    zero_fillet = SpurGearPlan(module, tooth_count, pressure_angle, tip_fillet=0)
+    filleted = SpurGearPlan(module, tooth_count, pressure_angle, tip_fillet=tip_fillet)
+
+    assert zero_fillet.area == pytest.approx(unfilleted.area)
+    assert len(zero_fillet.edges()) == len(unfilleted.edges())
+    assert filleted.is_valid
+    assert filleted.area < unfilleted.area
+    tip_arcs = [
+        e
+        for e in filleted.edges().filter_by(GeomType.CIRCLE)
+        if e.radius == pytest.approx(tip_fillet)
+    ]
+    # Each tooth has two rounded tip corners
+    assert len(tip_arcs) == 2 * tooth_count
+    # The rounds stay on the tip land, so the outside diameter is unchanged
+    outside_arcs = filleted.edges().filter_by(GeomType.CIRCLE).group_by(Edge.radius)
+    assert outside_arcs[-1][0].radius == pytest.approx(unfilleted.addendum_radius)
+
+
+def test_spur_gear_tip_fillet():
+    sharp = SpurGear(1.55, 35, 20, 8, root_fillet=0.3)
+    rounded = SpurGear(1.55, 35, 20, 8, root_fillet=0.3, tip_fillet=0.2)
+
+    assert rounded.is_valid
+    assert rounded.volume < sharp.volume
+    assert rounded.area < sharp.area
+    # One cylindrical face per rounded tip corner
+    assert len(rounded.faces()) == len(sharp.faces()) + 2 * 35
+
+
+@pytest.mark.parametrize("tip_fillet", [-0.1, 0.95, 5])
+def test_invalid_spur_gear_tip_fillet(tip_fillet):
+    with pytest.raises(ValueError, match="tip_fillet|tip fillet"):
+        SpurGearPlan(
+            module=1.55, tooth_count=35, pressure_angle=20, tip_fillet=tip_fillet
+        )
+
+
 def test_spur_gear():
     module, tooth_count, pressure_angle, root_fillet, thickness = (2, 12, 14.5, 0.5, 5)
     spur_gear = SpurGear(
@@ -212,6 +253,24 @@ def test_rack_root_fillet():
         RackGearPlan(2, 8, 20, root_fillet=1)
 
 
+def test_rack_tip_fillet():
+    unfilleted = RackGearPlan(2, 8, 20)
+    zero_fillet = RackGearPlan(2, 8, 20, tip_fillet=0)
+    filleted = RackGearPlan(2, 8, 20, tip_fillet=0.5)
+    rack = RackGear(2, 8, 20, 8, root_fillet=0.5, tip_fillet=0.5)
+
+    assert zero_fillet.area == pytest.approx(unfilleted.area)
+    assert len(zero_fillet.edges()) == len(unfilleted.edges())
+    assert filleted.area < unfilleted.area
+    assert len(filleted.edges().filter_by(GeomType.CIRCLE)) == 2 * 8
+    assert filleted.bounding_box().max.Y == pytest.approx(filleted.addendum)
+    assert rack.is_valid
+    assert rack.tip_fillet == pytest.approx(0.5)
+
+    with pytest.raises(ValueError, match="Invalid tip fillet radius"):
+        RackGearPlan(2, 8, 20, tip_fillet=1.3)
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
@@ -222,6 +281,7 @@ def test_rack_root_fillet():
         {"helix_angle": 90},
         {"module_system": "invalid"},
         {"root_fillet": -0.1},
+        {"tip_fillet": -0.1},
         {"addendum": 0},
         {"dedendum": 0},
         {"base_height": 0},
@@ -271,6 +331,17 @@ def test_transverse_module_helical_gear():
     assert 2 * gear.pitch_radius == pytest.approx(20)
     assert 2 * gear.addendum_radius == pytest.approx(22)
     assert gear.transverse_module == pytest.approx(1)
+
+
+def test_helical_gear_tip_fillet():
+    unfilleted = HelicalGear(1.5, 30, 20, 15, 8)
+    filleted = HelicalGear(1.5, 30, 20, 15, 8, tip_fillet=0.2)
+
+    assert filleted.is_valid
+    assert filleted.volume < unfilleted.volume
+    assert filleted.addendum_radius == pytest.approx(unfilleted.addendum_radius)
+    with pytest.raises(ValueError, match="Invalid tip fillet radius"):
+        HelicalGear(1.5, 30, 20, 15, 8, tip_fillet=1.5)
 
 
 def test_zero_angle_helical_gear_matches_spur_gear():
