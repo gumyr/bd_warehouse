@@ -301,7 +301,7 @@ class _ThreadSweep(BasePartObject):
         if chamfer_shape is None:
             raise ValueError("a chamfered end needs a chamfer shape")
         pieces = loop.intersect(chamfer_shape)
-        return None if pieces is None else pieces[0]
+        return pieces[0] if pieces else None
 
     def _finish_start(
         self, children: list[Shape], finish: str, chamfer_shape: Shape | None

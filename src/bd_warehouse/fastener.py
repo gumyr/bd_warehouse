@@ -623,7 +623,7 @@ class Nut(ABC, BasePartObject):
             self.nut_plan(), max_nut_height, (0, 0, 1)
         ) - Solid.make_cylinder(self.thread_diameter / 2, nut_thread_height)
         nut_pieces = nut.intersect(nut_blank)
-        if nut_pieces is None:
+        if not nut_pieces:
             raise RuntimeError("nut profile and plan do not intersect")
         nut = nut_pieces[0]
 
