@@ -137,8 +137,15 @@ class InvoluteToothProfile(BaseLineObject):
         dedendum (float, optional): the radial distance between the pitch circle and
             the bottom of the gear tooth space. It defines the depth of the space
             between gear teeth below the pitch circle. Defaults to None (calculated).
+        tip_fillet (float, optional): radius of the fillet rounding the two tip
+            corners of the tooth. None or 0 leaves sharp tip corners.
+            Defaults to None.
         closed (bool, optional): create a closed wire. Defaults to False.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+    Raises:
+        ValueError: If root_fillet is too large, or tip_fillet is negative or too
+            large for the two tip fillets to fit on the tooth tip land.
     """
 
     _applies_to = [BuildLine._tag]
@@ -151,9 +158,12 @@ class InvoluteToothProfile(BaseLineObject):
         root_fillet: float | None = None,
         addendum: float | None = None,
         dedendum: float | None = None,
+        tip_fillet: float | None = None,
         closed: bool = False,
         mode: Mode = Mode.ADD,
     ):
+        if tip_fillet is not None and tip_fillet < 0:
+            raise ValueError("tip_fillet must be non-negative")
         self.module = module
         self.tooth_count = tooth_count
         self.pitch_radius = module * tooth_count / 2
@@ -166,6 +176,11 @@ class InvoluteToothProfile(BaseLineObject):
         half_pitch_angle = half_thick_angle + degrees(
             tan(radians(pressure_angle)) - radians(pressure_angle)
         )
+        if tip_fillet and not self._tip_fillet_fits(tip_fillet, half_pitch_angle):
+            raise ValueError(
+                "Invalid tip fillet radius, the fillets don't fit on the tooth tip,"
+                " try a smaller value"
+            )
         # # Create the involute curve points
         involute_size = self.addendum_radius - self.base_radius
         pnts = []
@@ -203,6 +218,19 @@ class InvoluteToothProfile(BaseLineObject):
 
             mirror(tooth.edges(), about=Plane.XZ)
 
+            if tip_fillet:
+                tip_corner = l1 @ 1
+                tip_vertices = [
+                    tooth.vertices().sort_by_distance(corner)[0]
+                    for corner in (tip_corner, Vector(tip_corner.X, -tip_corner.Y))
+                ]
+                try:
+                    fillet(tip_vertices, tip_fillet)
+                except (StdFail_NotDone, ValueError) as err:
+                    raise ValueError(
+                        "Invalid tip fillet radius, try a smaller value"
+                    ) from err
+
         close = (
             [
                 Edge.make_line(
@@ -215,6 +243,24 @@ class InvoluteToothProfile(BaseLineObject):
         )
 
         super().__init__(Wire.combine(tooth.edges() + close)[0], mode=mode)
+
+    def _tip_fillet_fits(self, radius: float, half_pitch_angle: float) -> bool:
+        """Check that a tip fillet ends on the tip land before the tooth centreline.
+
+        The fillet centre lies on the flank involute offset inwards by ``radius``,
+        which is the involute of the same base circle with its unwound string
+        shortened by ``radius``. Where that offset meets the circle of radius
+        ``addendum_radius - radius`` is the centre of the fillet tangent to both
+        the flank and the tip circle; it must not cross the tooth centreline,
+        otherwise the fillets on the two corners overlap.
+        """
+        centre_radius = self.addendum_radius - radius
+        if centre_radius <= self.base_radius:
+            return False
+        string_length = sqrt(centre_radius**2 - self.base_radius**2)
+        roll_angle = (string_length + radius) / self.base_radius
+        centre_angle = roll_angle - atan(string_length / self.base_radius)
+        return centre_angle < radians(half_pitch_angle)
 
 
 class RackGearPlan(BaseSketchObject):
@@ -239,6 +285,8 @@ class RackGearPlan(BaseSketchObject):
         addendum: Tooth height above the pitch line. Defaults to ``module``.
         dedendum: Tooth depth below the pitch line. Defaults to ``1.25 * module``.
         base_height: Material below the root line. Defaults to ``2 * module``.
+        tip_fillet: Optional radius of each convex tooth-tip fillet. A value of
+            zero leaves the tip corners sharp.
         rotation: In-plane rotation in degrees. Defaults to 0.
         align: Build123d sketch alignment. Defaults to Y=0 at the pitch line.
         mode: Build123d combination mode. Defaults to ``Mode.ADD``.
@@ -259,6 +307,7 @@ class RackGearPlan(BaseSketchObject):
         addendum: float | None,
         dedendum: float | None,
         base_height: float,
+        tip_fillet: float | None,
     ) -> None:
         """Validate values shared by the rack plan and solid."""
         if module <= 0:
@@ -283,6 +332,8 @@ class RackGearPlan(BaseSketchObject):
             raise ValueError("dedendum must be greater than zero")
         if base_height <= 0:
             raise ValueError("base_height must be greater than zero")
+        if tip_fillet is not None and tip_fillet < 0:
+            raise ValueError("tip_fillet must be non-negative")
 
     @staticmethod
     def _reference_values(
@@ -325,6 +376,7 @@ class RackGearPlan(BaseSketchObject):
         addendum: float | None = None,
         dedendum: float | None = None,
         base_height: float | None = None,
+        tip_fillet: float | None = None,
         rotation: float = 0,
         align: Align | tuple[Align, Align] = Align.NONE,
         mode: Mode = Mode.ADD,
@@ -340,6 +392,7 @@ class RackGearPlan(BaseSketchObject):
             addendum,
             dedendum,
             resolved_base_height,
+            tip_fillet,
         )
 
         (
@@ -357,6 +410,7 @@ class RackGearPlan(BaseSketchObject):
         self.addendum = module if addendum is None else addendum
         self.dedendum = 1.25 * module if dedendum is None else dedendum
         self.root_fillet = root_fillet
+        self.tip_fillet = tip_fillet
         self.base_height = resolved_base_height
         self.pitch = pi * self.transverse_module
         self.pitch_length = tooth_count * self.pitch
@@ -402,6 +456,22 @@ class RackGearPlan(BaseSketchObject):
                 raise ValueError(
                     "Invalid root fillet radius, try a smaller value"
                 ) from err
+        if tip_fillet not in (None, 0):
+            # The fillet's tangent length along the tip land must leave the
+            # fillets on the two corners of a tooth apart.
+            tangent_length = tip_fillet * tan(radians(45) - alpha_t / 2)
+            if tangent_length >= half_tip:
+                raise ValueError(
+                    "Invalid tip fillet radius, the fillets don't fit on the tooth"
+                    " tip, try a smaller value"
+                )
+            try:
+                tip_vertices = rack_profile.vertices().group_by(Axis.Y)[-1]
+                rack_profile = fillet(tip_vertices, tip_fillet)
+            except (StdFail_NotDone, ValueError) as err:
+                raise ValueError(
+                    "Invalid tip fillet radius, try a smaller value"
+                ) from err
 
         super().__init__(rack_profile, rotation, align, mode)
 
@@ -422,6 +492,7 @@ class RackGear(BasePartObject):
         addendum: Tooth height above the pitch line. Defaults to ``module``.
         dedendum: Tooth depth below the pitch line. Defaults to ``1.25 * module``.
         base_height: Material below the tooth root. Defaults to ``2 * module``.
+        tip_fillet: Optional convex tooth-tip fillet radius.
         rotation: Build123d object rotation. Defaults to no rotation.
         align: Build123d part alignment. Defaults to Z=0 at pitch line.
         mode: Build123d combination mode. Defaults to ``Mode.ADD``.
@@ -442,6 +513,7 @@ class RackGear(BasePartObject):
         addendum: float | None = None,
         dedendum: float | None = None,
         base_height: float | None = None,
+        tip_fillet: float | None = None,
         rotation: RotationLike = (0, 0, 0),
         align: Align | tuple[Align, Align, Align] | None = Align.NONE,
         mode: Mode = Mode.ADD,
@@ -459,6 +531,7 @@ class RackGear(BasePartObject):
             addendum=addendum,
             dedendum=dedendum,
             base_height=base_height,
+            tip_fillet=tip_fillet,
         )
         for attribute in (
             "module",
@@ -473,6 +546,7 @@ class RackGear(BasePartObject):
             "addendum",
             "dedendum",
             "root_fillet",
+            "tip_fillet",
             "base_height",
             "pitch",
             "pitch_length",
@@ -514,10 +588,18 @@ class SpurGearPlan(BaseSketchObject):
         dedendum (float, optional): the radial distance between the pitch circle and
             the bottom of the gear tooth space. It defines the depth of the space
             between gear teeth below the pitch circle. Defaults to None (calculated).
+        tip_fillet (float, optional): radius of the fillet rounding the two tip
+            corners of each tooth. None or 0 leaves sharp tip corners.
+            Defaults to None.
         closed (bool, optional): create a closed wire. Defaults to False.
         align (Align | tuple[Align, Align], optional): align min, center, or max
             of object. Defaults to (Align.CENTER, Align.CENTER).
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+    An internal gear can be made by subtracting the plan from a larger circle.
+    The plan's tooth tip then forms the bottom of the internal gear's tooth
+    space and the plan's root forms the internal tooth's tip, so ``tip_fillet``
+    rounds the internal gear's root and ``root_fillet`` its tooth tip.
     """
 
     _applies_to = [BuildSketch._tag]
@@ -530,12 +612,19 @@ class SpurGearPlan(BaseSketchObject):
         root_fillet: float | None = None,
         addendum: float | None = None,
         dedendum: float | None = None,
+        tip_fillet: float | None = None,
         rotation: float = 0,
         align: Align | tuple[Align, Align] = (Align.CENTER, Align.CENTER),
         mode: Mode = Mode.ADD,
     ):
         gear_tooth = InvoluteToothProfile(
-            module, tooth_count, pressure_angle, root_fillet, addendum, dedendum
+            module,
+            tooth_count,
+            pressure_angle,
+            root_fillet,
+            addendum,
+            dedendum,
+            tip_fillet,
         )
         self.pitch_radius = gear_tooth.pitch_radius
         self.base_radius = gear_tooth.base_radius
@@ -568,6 +657,9 @@ class SpurGear(BasePartObject):
         dedendum (float, optional): the radial distance between the pitch circle and
             the bottom of the gear tooth space. It defines the depth of the space
             between gear teeth below the pitch circle. Defaults to None (calculated).
+        tip_fillet (float, optional): radius of the fillet rounding the two tip
+            corners of each tooth. None or 0 leaves sharp tip corners.
+            Defaults to None.
         closed (bool, optional): create a closed wire. Defaults to False.
         align (Align | tuple[Align, Align, Align] | None, optional): align min,
             center, or max of object. Defaults to Align.CENTER.
@@ -585,12 +677,19 @@ class SpurGear(BasePartObject):
         root_fillet: float | None = None,
         addendum: float | None = None,
         dedendum: float | None = None,
+        tip_fillet: float | None = None,
         rotation: RotationLike = (0, 0, 0),
         align: Align | tuple[Align, Align, Align] | None = Align.CENTER,
         mode: Mode = Mode.ADD,
     ):
         gear_plan = SpurGearPlan(
-            module, tooth_count, pressure_angle, root_fillet, addendum, dedendum
+            module,
+            tooth_count,
+            pressure_angle,
+            root_fillet,
+            addendum,
+            dedendum,
+            tip_fillet,
         )
         self.pitch_radius = gear_plan.pitch_radius
         self.base_radius = gear_plan.base_radius
@@ -647,6 +746,9 @@ class HelicalGear(BasePartObject):
             the selected reference system is used.
         dedendum (float, optional): radial dedendum. When omitted, 1.25 times the
             module in the selected reference system is used.
+        tip_fillet (float, optional): radius of the fillet rounding the two tip
+            corners of each tooth, in the transverse plane like ``root_fillet``.
+            None or 0 leaves sharp tip corners. Defaults to None.
         rotation (RotationLike, optional): object rotation. Defaults to (0, 0, 0).
         align (Align | tuple[Align, Align, Align] | None, optional): object
             alignment. Defaults to Align.CENTER.
@@ -666,6 +768,7 @@ class HelicalGear(BasePartObject):
         root_fillet: float | None = None,
         addendum: float | None = None,
         dedendum: float | None = None,
+        tip_fillet: float | None = None,
         rotation: RotationLike = (0, 0, 0),
         align: Align | tuple[Align, Align, Align] | None = Align.CENTER,
         mode: Mode = Mode.ADD,
@@ -709,6 +812,7 @@ class HelicalGear(BasePartObject):
             root_fillet=root_fillet,
             addendum=reference_addendum,
             dedendum=reference_dedendum,
+            tip_fillet=tip_fillet,
         )
         self.module = module
         self.module_system = module_system
@@ -1242,6 +1346,7 @@ class WormWheel(HelicalGear):
         root_fillet: Optional radius of the tooth-root fillet.
         addendum: Radial addendum. Defaults to ``module``.
         dedendum: Radial dedendum. Defaults to ``1.2 * module`` (DIN 3975).
+        tip_fillet: Optional radius of the tooth-tip fillet.
         rotation: Build123d object rotation. Defaults to no rotation.
         align: Build123d part alignment. Defaults to ``Align.CENTER``.
         mode: Build123d combination mode. Defaults to ``Mode.ADD``.
@@ -1259,6 +1364,7 @@ class WormWheel(HelicalGear):
         root_fillet: float | None = None,
         addendum: float | None = None,
         dedendum: float | None = None,
+        tip_fillet: float | None = None,
         rotation: RotationLike = (0, 0, 0),
         align: Align | tuple[Align, Align, Align] | None = Align.CENTER,
         mode: Mode = Mode.ADD,
@@ -1278,6 +1384,7 @@ class WormWheel(HelicalGear):
             root_fillet=root_fillet,
             addendum=worm.addendum,
             dedendum=worm.dedendum,
+            tip_fillet=tip_fillet,
             rotation=rotation,
             align=align,
             mode=mode,
@@ -1310,6 +1417,7 @@ class WormGear(Compound):
         flank_form: Worm flank form. Defaults to ``"ZI"``.
         hand: Hand of the worm and wheel. Defaults to ``"right"``.
         root_fillet: Optional wheel tooth-root fillet radius.
+        tip_fillet: Optional wheel tooth-tip fillet radius.
     """
 
     def __init__(
@@ -1324,6 +1432,7 @@ class WormGear(Compound):
         flank_form: FlankForm = "ZI",
         hand: Hand = "right",
         root_fillet: float | None = None,
+        tip_fillet: float | None = None,
     ):
         super().__init__()
         worm = Worm(
@@ -1344,6 +1453,7 @@ class WormGear(Compound):
             pressure_angle,
             hand,
             root_fillet,
+            tip_fillet=tip_fillet,
         )
         self.center_distance = wheel.center_distance
         self.ratio = tooth_count / starts

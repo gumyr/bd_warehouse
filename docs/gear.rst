@@ -45,9 +45,14 @@ Spur Gears
 ``InvoluteToothProfile`` is the outline of a single involute tooth,
 ``SpurGearPlan`` repeats it into the complete 2D gear and ``SpurGear`` extrudes
 the plan to a solid. All three share the same ``module``, ``tooth_count``,
-``pressure_angle`` and optional ``root_fillet``, ``addendum`` and ``dedendum``
-parameters, and expose the calculated ``pitch_radius``, ``base_radius``,
-``addendum_radius`` and ``root_radius``.
+``pressure_angle`` and optional ``root_fillet``, ``tip_fillet``, ``addendum`` and
+``dedendum`` parameters, and expose the calculated ``pitch_radius``,
+``base_radius``, ``addendum_radius`` and ``root_radius``. ``root_fillet`` rounds
+the concave corners at the bottom of each tooth space and ``tip_fillet`` the two
+convex corners at the top of each tooth. An internal gear can be made by
+subtracting a ``SpurGearPlan`` from a larger circle; the roles of the two fillets
+then swap, with ``tip_fillet`` rounding the internal gear's root and
+``root_fillet`` its tooth tip.
 
 .. code-block:: python
 
