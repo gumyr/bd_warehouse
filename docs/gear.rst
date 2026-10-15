@@ -3,7 +3,7 @@ gear - parametric gears
 #######################
 
 This Python package enables the creation of a wide variety of standard ISO
-metric-module involute spur, helical, rack and worm gears. Involute gears have the advantage
+metric-module involute spur, helical, rack, worm and bevel gears. Involute gears have the advantage
 of continually meshing at a specific angle, known as the pressure angle, which
 prevents the stuttering that can occur with non-involute gears when the teeth
 lose contact.
@@ -181,6 +181,66 @@ This first version makes the following simplifications: the wheel is a plain
 dedendum ``1.2 * module``) with no profile shift, backlash or fillets, the worm
 ends are cut square, and the shaft angle is 90°.
 
+Bevel and Miter Gears
+=====================
+
+Bevel gears transmit motion between shafts whose axes intersect, most often at
+90°. ``BevelGear`` is a straight bevel gear with exact spherical-involute teeth
+built directly as a B-rep: the flanks are the true spherical involutes of the
+base cone rather than lofts between planar profiles, so a pair meshes at its
+pressure angle just as spur gears do.
+
+A bevel gear is always one of a pair. ``module``, ``pressure_angle``, ``addendum``
+and ``dedendum`` are specified at the outer (heel) end of the teeth, and the
+pitch cone angle follows from the two tooth counts and the ``shaft_angle``:
+
+.. math::
+	\tan\delta = \frac{\sin\Sigma}{z_{mate}/z + \cos\Sigma}
+
+so both gears of a pair share one cone distance and their face, pitch and root
+cones meet at a common apex, toward which the teeth taper. ``face_width`` is the
+tooth length along the pitch cone and is limited to one third of the cone
+distance, the standard design limit. The calculated geometry is available as
+attributes: ``pitch_cone_angle``, ``cone_distance``, ``pitch_diameter``,
+``outside_diameter``, ``mounting_distance``, ``apex`` and more.
+
+The gear is placed with its axis on +Z, its back face on z = 0 and the teeth
+facing +Z; the pitch apex is at ``(0, 0, mounting_distance)`` and a tooth is
+centred on +X. ``mate_location`` returns the location that puts the mating gear
+in mesh - pitch apexes coincident, axes at the shaft angle, teeth phased - for
+any rotation of the first gear, so a pair can be posed at any angle:
+
+.. code-block:: python
+
+	from build123d import *
+	from bd_warehouse.gear import BevelGear, MiterGear, SphericalInvoluteToothProfile
+
+	pinion = BevelGear(module=2, tooth_count=16, mate_tooth_count=32, face_width=10)
+	gear = BevelGear(module=2, tooth_count=32, mate_tooth_count=16, face_width=10)
+	pair = Compound([pinion, pinion.mate_location(gear) * gear])
+
+	# turn the pinion 10 degrees; the gear follows at the conjugate angle
+	turned = Compound([Rot(0, 0, 10) * pinion, pinion.mate_location(gear, 10) * gear])
+
+	miter = MiterGear(module=2, tooth_count=20, face_width=9, bore_diameter=8)
+
+	tooth = SphericalInvoluteToothProfile(
+		module=2, tooth_count=16, pitch_cone_angle=pinion.pitch_cone_angle
+	)
+
+``MiterGear`` is the equal-count special case: a 1:1 pair whose pitch cone angle
+is half the shaft angle (45° for the default 90° shafts); other shaft angles give
+angular miter gears. ``SphericalInvoluteToothProfile`` is the single-tooth outline
+developed onto the back cone, laid out like ``InvoluteToothProfile`` with the
+back-cone apex at the origin, and converges to the planar involute as the pitch
+cone angle approaches zero.
+
+The default pressure angle is 20°, the ISO/AGMA standard; 14.5° (legacy
+inch-series designs), 22.5° (heavily loaded, slow drives) and 25° (recommended by
+AGMA for 12-13 tooth pinions, to avoid undercut) are also in use. Both gears of a
+pair must use the same value. Crown gears (90° pitch cone) and internal bevel
+gears are not supported.
+
 .. autoclass:: gear.InvoluteToothProfile
 .. autoclass:: gear.SpurGearPlan
 .. autoclass:: gear.SpurGear
@@ -194,3 +254,8 @@ ends are cut square, and the shaft angle is 90°.
 .. autoclass:: gear.Worm
 .. autoclass:: gear.WormWheel
 .. autoclass:: gear.WormGear
+
+.. autoclass:: gear.SphericalInvoluteToothProfile
+.. autoclass:: gear.BevelGear
+    :members: mate_location
+.. autoclass:: gear.MiterGear
