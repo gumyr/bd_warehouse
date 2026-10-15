@@ -438,6 +438,28 @@ def test_iso7380_2022_nominal_lengths(screw_class, fastener_type):
     assert 100 not in screw_class("M8-1.25", 80, fastener_type).nominal_lengths
 
 
+def test_iso1580_nominal_lengths():
+    """A missing comma once read the 6 and 8 mm lengths as a single 68."""
+    lengths = PanHeadScrew("M3-0.5", 10, "iso1580").nominal_lengths
+    assert lengths == sorted(lengths)
+    assert 6 in lengths and 8 in lengths and 68 not in lengths
+
+
+def test_hex_nut_data_is_consistent():
+    """Every size is a valid designation, and ISO 4035 thin nuts share the
+    ISO 4032 widths across flats (the DIN 439 widths differ at M10-M14, M22)."""
+    from bd_warehouse.fastener import read_fastener_parameters_from_csv
+
+    data = read_fastener_parameters_from_csv("hex_nut_parameters.csv")
+    assert "M3-0.45" not in data
+    for size, row in data.items():
+        if row["iso4032:s"] and row["iso4035:s"]:
+            assert row["iso4035:s"] == row["iso4032:s"], size
+    assert "M3-0.5" in HexNut.sizes("iso4035")
+    assert "M3-0.5" in HexNut.sizes("iso4032")
+    assert HexNut("M3-0.5", "iso4035").nut_thickness == pytest.approx(1.8)
+
+
 @pytest.mark.parametrize(
     "screw_class,fastener_type",
     [
