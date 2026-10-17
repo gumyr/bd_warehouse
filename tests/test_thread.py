@@ -92,8 +92,7 @@ class TestThread(unittest.TestCase):
                 )
                 self.assertAlmostEqual(nominal.volume, unchanged.volume)
                 diameter_change = (
-                    compensated.bounding_box().size.X
-                    - nominal.bounding_box().size.X
+                    compensated.bounding_box().size.X - nominal.bounding_box().size.X
                 )
                 self.assertAlmostEqual(
                     diameter_change,
@@ -117,9 +116,7 @@ class TestThread(unittest.TestCase):
                 parameters = inspect.signature(thread_class.__init__).parameters
                 parameter = parameters["manufacturing_compensation"]
                 self.assertEqual(parameter.default, 0.0)
-                self.assertEqual(
-                    list(parameters)[-3:], ["rotation", "align", "mode"]
-                )
+                self.assertEqual(list(parameters)[-3:], ["rotation", "align", "mode"])
 
 
 class TestWhitworthThread(unittest.TestCase):
@@ -336,24 +333,12 @@ class TestIsoThread(unittest.TestCase):
                 major_diameter=5, pitch=1, length=5, end_finishes=("not", "supported")
             )
 
-    # def test_simple(self):
-    #     thread = IsoThread(
-    #         major_diameter=6 * MM, pitch=1 * MM, length=8 * MM, simple=True
-    #     )
-    #     self.assertTrue(thread.wrapped.IsNull())
     def test_simple(self):
         thread = IsoThread(
             major_diameter=6 * MM, pitch=1 * MM, length=8 * MM, simple=True
         )
-
-        try:
-            wrapped = thread.wrapped
-        except AssertionError:
-            # New build123d: wrapped asserts when no geometry exists
-            self.assertTrue(True)
-        else:
-            # Old build123d: wrapped exists but is null
-            self.assertTrue(wrapped.IsNull())
+        self.assertFalse(thread)
+        self.assertEqual(thread.solids(), [])
 
 
 class TestAcmeThread(unittest.TestCase):
@@ -516,9 +501,7 @@ class TestPlasticBottleThread(unittest.TestCase):
 
         # The male crest must fit between adjacent female thread roots.
         root_clearance = (
-            threads[False].pitch
-            - threads[False].root_width
-            - threads[True].apex_width
+            threads[False].pitch - threads[False].root_width - threads[True].apex_width
         )
         self.assertAlmostEqual(root_clearance, 0.24)
         self.assertGreater(root_clearance, 0)
