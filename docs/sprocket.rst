@@ -19,7 +19,7 @@ of python code using the :ref:`Sprocket <sprocket>` class:
 How does this code work?
 
 #. The first line imports the build123d CAD system
-#. The second line imports the Sprocket class from the sprocket sub-package of the cq_warehouse package
+#. The second line imports the Sprocket class from the sprocket sub-package of the bd_warehouse package
 #. The third line instantiates a 32 tooth sprocket named "sprocket32"
 #. The fourth line uses the build123d exporter functionality to save the generated
    sprocket object in STEP format
