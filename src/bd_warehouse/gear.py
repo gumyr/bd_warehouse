@@ -84,9 +84,11 @@ from build123d import (
     Helix,
     Line,
     Location,
+    Matrix,
     Mode,
     Plane,
     PolarLocations,
+    Polyline,
     Pos,
     RadiusArc,
     Rectangle,
@@ -97,31 +99,14 @@ from build123d import (
     Solid,
     Spline,
     Trapezoid,
+    UVFrame,
     Vector,
     Wire,
     extrude,
-    faces,
     fillet,
     mirror,
     pack,
 )
-from OCP.BRep import BRep_Tool
-from OCP.BRepBuilderAPI import (
-    BRepBuilderAPI_MakeEdge,
-    BRepBuilderAPI_MakeFace,
-    BRepBuilderAPI_MakeSolid,
-    BRepBuilderAPI_MakeWire,
-    BRepBuilderAPI_Sewing,
-)
-from OCP.BRepFill import BRepFill
-from OCP.BRepLib import BRepLib
-from OCP.BRepTools import BRepTools
-from OCP.Geom import Geom_ConicalSurface, Geom_CylindricalSurface, Geom_Surface
-from OCP.Geom2d import Geom2d_Line, Geom2d_TrimmedCurve
-from OCP.gp import gp_Ax3, gp_Dir, gp_Dir2d, gp_Pnt, gp_Pnt2d
-from OCP.ShapeFix import ShapeFix_Face
-from OCP.StdFail import StdFail_NotDone
-from OCP.TopoDS import TopoDS
 
 
 class InvoluteToothProfile(BaseLineObject):
@@ -201,7 +186,7 @@ class InvoluteToothProfile(BaseLineObject):
             if root_fillet is not None:
                 try:
                     fillet(tooth.vertices().sort_by(Axis.X)[1], root_fillet)
-                except StdFail_NotDone as err:
+                except ValueError as err:
                     raise ValueError(
                         "Invalid root radius, try a smaller value"
                     ) from err
@@ -403,7 +388,7 @@ class RackGearPlan(BaseSketchObject):
                     rack_profile.vertices().group_by(Axis.Y)[1].sort_by(Axis.X)[1:-1]
                 )
                 rack_profile = fillet(root_vertices, root_fillet)
-            except (StdFail_NotDone, ValueError) as err:
+            except ValueError as err:
                 raise ValueError(
                     "Invalid root fillet radius, try a smaller value"
                 ) from err
@@ -762,32 +747,28 @@ def _involute(angle: float) -> float:
     return tan(angle) - angle
 
 
-def _uv_face(
-    surface: Geom_Surface, corners: list[tuple[float, float]]
-) -> tuple[Face, list[Edge]]:
-    """Face on ``surface`` bounded by straight segments between ``corners`` in its
-    (u, v) parameter space.
+def _uv_faces(surface: Face, corners: list[tuple[float, float]]) -> list[Face]:
+    """Faces on ``surface`` bounded by straight segments between ``corners`` in
+    its (u, v) parameter space.
 
     Every worm face has such a domain: helices are straight lines in a cylinder's
     (angle, z) space, and on a ruled helicoid z is linear in both parameters so
-    z = const trims are straight lines too. Building faces from pcurves avoids
-    surface/surface intersections entirely.
-
-    Returns:
-        the face and its edges in ``corners`` order (edge i runs corner i → i+1)
+    z = const trims are straight lines too. Writing the outline into parameter
+    space avoids surface/surface intersections entirely. An outline crossing the
+    seam of a cylinder comes back as one face on each side of it.
     """
-    wire_builder = BRepBuilderAPI_MakeWire()
-    edges = []
-    for (u0, v0), (u1, v1) in zip(corners, corners[1:] + corners[:1]):
-        # a line's parameter is distance along it; OCP 8 dropped GCE2d_MakeSegment
-        line = Geom2d_Line(gp_Pnt2d(u0, v0), gp_Dir2d(u1 - u0, v1 - v0))
-        segment = Geom2d_TrimmedCurve(line, 0.0, hypot(u1 - u0, v1 - v0))
-        edge = BRepBuilderAPI_MakeEdge(segment, surface).Edge()
-        BRepLib.BuildCurves3d_s(edge)
-        wire_builder.Add(edge)
-        edges.append(Edge(edge))
-    face = BRepBuilderAPI_MakeFace(surface, wire_builder.Wire()).Face()
-    return Face(face), edges
+    outline = Face(Polyline(*corners, close=True))
+    return list(UVFrame(surface, Matrix()).write_face(outline))
+
+
+def _edges_at_z(faces: list[Face], z: float, tolerance: float = 1e-5) -> list[Edge]:
+    """The edges of ``faces`` lying in the plane at height ``z``."""
+    return [
+        edge
+        for face in faces
+        for edge in face.edges()
+        if all(abs(edge.position_at(t).Z - z) < tolerance for t in (0, 0.5, 1))
+    ]
 
 
 def _u_parameter(
@@ -953,7 +934,7 @@ class _WormGeometry:
 
     def flank_surfaces(
         self, side: int, tooth_angle: float, length: float
-    ) -> list[tuple[Geom_Surface, Callable[[float, float], float]]]:
+    ) -> list[tuple[Face, Callable[[float, float], float]]]:
         """Ruled helicoid surfaces of one flank of the tooth centred on ``tooth_angle``.
 
         Returns:
@@ -962,7 +943,7 @@ class _WormGeometry:
         """
         z_start, height = self.helix_span(length)
         total_angle = 2 * pi * height / self.lead
-        surfaces: list[tuple[Geom_Surface, Callable[[float, float], float]]] = []
+        surfaces: list[tuple[Face, Callable[[float, float], float]]] = []
         for radii in self.flank_radii():
             helices, offsets = [], []
             for radius in radii:
@@ -972,9 +953,9 @@ class _WormGeometry:
                 )
                 helices.append(helix.rotate(Axis.Z, degrees(tooth_angle + phase)))
                 offsets.append(offset)
-            ruled = BRepFill.Face_s(helices[0].wrapped, helices[1].wrapped)
-            surface = BRep_Tool.Surface_s(ruled)
-            _, u_max, _, _ = BRepTools.UVBounds_s(ruled)
+            surface = Face.make_surface_from_curves(helices[0], helices[1])
+            # the ruled surface's u is the first helix's parameter
+            u_max = helices[0].param_at(1.0)
             # z is linear along the helices (u) and along the rulings (v):
             # z(u, v) = z_start + advance·total_angle·u/u_max + (1−v)·offset0 + v·offset1
             u_scale = u_max / (self._advance * total_angle)
@@ -1071,7 +1052,8 @@ class WormFlank(Face):
             1 if side == "lower" else -1, 0, length
         )[-1]
         z0, z1 = -length / 2, length / 2
-        face, _ = _uv_face(
+        # a ruled surface has no seam, so the outline writes as one face
+        (face,) = _uv_faces(
             surface,
             [(u_at(z0, 0), 0), (u_at(z0, 1), 1), (u_at(z1, 1), 1), (u_at(z1, 0), 0)],
         )
@@ -1158,17 +1140,11 @@ class Worm(BasePartObject):
         band_count = ceil(length / geometry.lead)
         z_lines = [-length / 2 + length * i / band_count for i in range(band_count + 1)]
         advance = geometry._advance
-        faces: list[Face] = []
-        cap_edges: tuple[list[Edge], list[Edge]] = ([], [])
+        bands: list[Face] = []
 
-        def add_bands(surface, corners_at):
-            for i, (z_lo, z_hi) in enumerate(zip(z_lines, z_lines[1:])):
-                face, edges = _uv_face(surface, corners_at(z_lo, z_hi))
-                faces.append(face)
-                if i == 0:
-                    cap_edges[0].append(edges[0])
-                if i == band_count - 1:
-                    cap_edges[1].append(edges[2])
+        def add_bands(surface: Face, corners_at):
+            for z_lo, z_hi in zip(z_lines, z_lines[1:]):
+                bands.extend(_uv_faces(surface, corners_at(z_lo, z_hi)))
 
         for start in range(starts):
             tooth_angle = 2 * pi * start / starts
@@ -1196,8 +1172,10 @@ class Worm(BasePartObject):
                 (geometry.addendum_radius, tip_lo, tip_hi),
                 (geometry.root_radius, root_lo, root_hi),
             ):
-                cylinder = Geom_CylindricalSurface(
-                    gp_Ax3(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), radius
+                cylinder = (
+                    Solid.make_cylinder(radius, length)
+                    .faces()
+                    .filter_by(GeomType.CYLINDER)[0]
                 )
                 add_bands(
                     cylinder,
@@ -1208,19 +1186,15 @@ class Worm(BasePartObject):
                         (lo + z_hi / advance, z_hi),
                     ],
                 )
-        faces += [Face(Wire(edges)) for edges in cap_edges]
+        # the end caps are bounded by the band edges in the end planes
+        caps = [Face(Wire(_edges_at_z(bands, z))) for z in (z_lines[0], z_lines[-1])]
 
         # The band edges of adjacent faces are separately approximated copies of
         # the same helix, so sew with a tolerance above the approximation error.
-        sewing = BRepBuilderAPI_Sewing(1e-5)
-        for face in faces:
-            sewing.Add(face.wrapped)
-        sewing.Perform()
-        if sewing.NbFreeEdges() != 0:
+        shell = Shell(bands + caps, tolerance=1e-5)
+        if not shell.is_manifold:
             raise RuntimeError("worm surfaces did not sew into a closed shell")
-        solid = BRepBuilderAPI_MakeSolid(TopoDS.Shell(sewing.SewedShape())).Solid()
-        BRepLib.OrientClosedSolid_s(solid)
-        worm = Solid(solid)
+        worm = Solid(shell)
         if hand == "left":
             worm = worm.mirror(Plane.XZ)
 
@@ -1552,7 +1526,7 @@ class SphericalInvoluteToothProfile(BaseLineObject):
             if root_fillet:
                 try:
                     fillet(tooth.vertices().sort_by(Axis.X)[1], root_fillet)
-                except (StdFail_NotDone, ValueError) as err:
+                except ValueError as err:
                     raise ValueError(
                         "Invalid root radius, try a smaller value"
                     ) from err
@@ -1642,20 +1616,15 @@ def _coaxial_cone_face(
 
     ``(radius, z_position)`` is a point on the cone's meridian and ``semi_angle``
     the angle between the cone generators and the axis, in radians.
-    The face is bounded by the closed ``outer_edges`` loop and ``inner_edge``.
-    build123d has no public constructor for a curved face bounded by a 3D
-    edge loop, so the OCCT face builder is used directly.
+    The face is bounded by the closed ``outer_edges`` loop and ``inner_edge``,
+    which lie on the cone. The cone's surface comes from a cone solid with the
+    same apex and semi-angle; its extent does not matter.
     """
-    surface = Geom_ConicalSurface(
-        gp_Ax3(gp_Pnt(0, 0, z_position), gp_Dir(0, 0, -1)), semi_angle, radius
+    cone = Solid.make_cone(
+        radius, 0, radius / tan(semi_angle), Plane(origin=(0, 0, z_position))
     )
-    builder = BRepBuilderAPI_MakeFace(surface, Wire(outer_edges).wrapped, True)
-    builder.Add(Wire([inner_edge]).wrapped)
-    if not builder.IsDone():
-        raise ValueError("unable to create a conical bevel-gear blank face")
-    fixer = ShapeFix_Face(builder.Face())
-    fixer.Perform()
-    return Face(fixer.Face())
+    surface = cone.faces().filter_by(GeomType.CONE)[0]
+    return Face(Wire(outer_edges), [Wire([inner_edge])], surface=surface)
 
 
 def _annulus(z_position: float, outer_radius: float, inner_radius: float) -> Face:
