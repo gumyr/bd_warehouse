@@ -27,8 +27,6 @@ license:
 
 """
 
-# pylint has trouble with the OCP imports
-# pylint: disable=no-name-in-module, import-error
 # pylint: disable=too-many-lines
 
 import copy
@@ -50,8 +48,7 @@ from build123d.objects_part import BasePartObject
 from build123d.operations_generic import insert, mirror, scale, split
 from build123d.operations_part import loft
 from build123d.operations_sketch import make_face
-from build123d.topology import Compound, Face, Shape, Solid, Wire, tuplify
-from OCP.TopoDS import TopoDS_Compound
+from build123d.topology import Compound, Face, Part, Shape, Solid, Wire, tuplify
 
 import bd_warehouse
 
@@ -599,9 +596,8 @@ class Thread(BasePartObject):
         self.thread_profile = thread_face.faces()[0]
 
         if simple:
-            # Initialize with a valid shape then nullify
-            super().__init__(part=Solid.make_box(1, 1, 1))
-            self.wrapped = TopoDS_Compound()
+            # a Part with nothing in it: the profile is kept, the sweep is not
+            super().__init__(part=Part([]))
             return
 
         thread_sweep = _ThreadSweep(
@@ -786,8 +782,8 @@ class WhitworthThread(BasePartObject):
             self.thread_profile.move(Location((1e-6, 0, 0)))
 
         if simple:
-            super().__init__(part=Solid.make_box(1, 1, 1))
-            self.wrapped = TopoDS_Compound()
+            # a Part with nothing in it: the profile is kept, the sweep is not
+            super().__init__(part=Part([]))
             return
 
         thread_sweep = _ThreadSweep(
@@ -1086,10 +1082,8 @@ class IsoThread(BasePartObject):
         self.root_radius = self.min_radius if external else self.major_diameter / 2
         root_width = 3 * self.pitch / 4 if external else 7 * self.pitch / 8
         if simple:
-            # Initialize with a valid shape then nullify
-            super().__init__(part=Solid.make_box(1, 1, 1))
-            self.wrapped = TopoDS_Compound()
-
+            # a Part with nothing in it
+            super().__init__(part=Part([]))
         else:
             bd_object = Thread(
                 apex_radius=self.apex_radius,

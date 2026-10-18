@@ -17,7 +17,7 @@ authors = [
 ]
 description = "A build123d parametric part collection"
 readme = "README.md"
-requires-python = ">=3.10, <3.15"
+requires-python = ">=3.11, <3.15"
 keywords = [
     "3d models",
     "3d printing",
@@ -36,7 +36,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "build123d >=0.12.0, <0.14.0",
+    "build123d >=0.14.0, <1.0.0",
     "typing_extensions >= 4.4.0, <5",
     "bd_materials >= 0.2.0, < 0.3.0",
 ]
@@ -93,5 +93,5 @@ module = ["ocp_vscode", "ocp_vscode.*"]
 ignore_missing_imports = true
 
 [tool.black]
-target-version = ["py310", "py311", "py312", "py313"]
+target-version = ["py311", "py312", "py313"]
 line-length = 88
