@@ -72,6 +72,7 @@ Table Of Contents
     o_rings.rst
     pipe.rst
     retaining_ring.rst
+    rod_end.rst
     shaft_key.rst
     sprocket.rst
     thread.rst
