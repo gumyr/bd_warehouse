@@ -48,7 +48,11 @@ from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
 
-# from build123d.build_sheet import BuildSheet
+try:  # BuildSheet is not yet in a released build123d
+    from build123d.build_sheet import BuildSheet
+except ImportError:
+    BuildSheet = None  # type: ignore[assignment, misc]
+
 from build123d.geometry import (
     Axis,
     Location,
@@ -98,6 +102,13 @@ from bd_warehouse.thread import IsoThread, imperial_str_to_float, is_safe
 
 
 _EndFinish = Literal["raw", "square", "fade", "chamfer"]
+
+
+# Builders that accept ClearanceHole / TapHole. BuildSheet is included only when
+# the installed build123d provides it.
+_HOLE_BUILDER_TAGS = [BuildPart._tag, BuildSketch._tag]
+if BuildSheet is not None:
+    _HOLE_BUILDER_TAGS.append(BuildSheet._tag)
 
 
 def polygon_diagonal(width: float, num_sides: int = 6) -> float:
@@ -3848,8 +3859,7 @@ class ClearanceHole(BasePartObject):
         ValueError: No depth provided
     """
 
-    # _applies_to = [BuildPart._tag, BuildSketch._tag, BuildSheet._tag]
-    _applies_to = [BuildPart._tag, BuildSketch._tag]
+    _applies_to = _HOLE_BUILDER_TAGS
 
     def __init__(
         self,
@@ -3928,8 +3938,7 @@ class TapHole(BasePartObject):
         ValueError: No depth provided
     """
 
-    # _applies_to = [BuildPart._tag, BuildSketch._tag, BuildSheet._tag]
-    _applies_to = [BuildPart._tag, BuildSketch._tag]
+    _applies_to = _HOLE_BUILDER_TAGS
 
     def __init__(
         self,
