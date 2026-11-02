@@ -47,7 +47,8 @@ from build123d.build_enums import Align, Mode, SortBy
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
-from build123d.build_sheet import BuildSheet
+
+# from build123d.build_sheet import BuildSheet
 from build123d.geometry import (
     Axis,
     Location,
@@ -3847,7 +3848,8 @@ class ClearanceHole(BasePartObject):
         ValueError: No depth provided
     """
 
-    _applies_to = [BuildPart._tag, BuildSketch._tag, BuildSheet._tag]
+    # _applies_to = [BuildPart._tag, BuildSketch._tag, BuildSheet._tag]
+    _applies_to = [BuildPart._tag, BuildSketch._tag]
 
     def __init__(
         self,
@@ -3926,7 +3928,8 @@ class TapHole(BasePartObject):
         ValueError: No depth provided
     """
 
-    _applies_to = [BuildPart._tag, BuildSketch._tag, BuildSheet._tag]
+    # _applies_to = [BuildPart._tag, BuildSketch._tag, BuildSheet._tag]
+    _applies_to = [BuildPart._tag, BuildSketch._tag]
 
     def __init__(
         self,
