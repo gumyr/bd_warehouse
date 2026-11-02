@@ -3148,11 +3148,17 @@ class ShoulderScrew(Screw):
         """Return a stepped cutter for the precision shoulder and threaded end."""
         thread_hole = super().make_body_hole(hole_radius, depth, head_offset)
         shoulder_hole = Solid.make_cylinder(
-            radius=self.screw_data["ds"] / 2,
+            radius=self.shoulder_radius,
             height=min(head_offset + self.length, depth),
             plane=Plane(Vector(0, 0, 0), z_dir=Vector(0, 0, -1)),
         )
         return shoulder_hole.fuse(thread_hole)
+
+    @property
+    def shoulder_radius(self) -> float:
+        """Nominal ISO 7379 shoulder radius (f9 tolerance) - the bearing
+        surface for pivots and guides, distinct from thread_diameter."""
+        return self.screw_data["ds"] / 2
 
 
 class SocketHeadCapScrew(Screw):

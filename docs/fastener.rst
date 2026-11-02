@@ -514,6 +514,7 @@ Reference
 .. autoclass:: RaisedCheeseHeadScrew
 .. autoclass:: RaisedCounterSunkOvalHeadScrew
 .. autoclass:: SetScrew
+.. autoclass:: ShoulderScrew
 .. autoclass:: SocketHeadCapScrew
 .. autoclass:: PlainWasher
 .. autoclass:: ChamferedWasher

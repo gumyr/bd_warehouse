@@ -350,6 +350,21 @@ def test_iso7379_min_hole_depth_includes_threaded_end():
 
 
 @pytest.mark.parametrize(
+    "size,expected", [("M5-0.8", 3.25), ("M6-1", 4), ("M8-1.25", 5)]
+)
+def test_iso7379_shoulder_radius(size, expected):
+    """shoulder_radius is half the ISO 7379 shoulder diameter ds, not the thread."""
+    screw = ShoulderScrew(size, 16)
+
+    assert screw.shoulder_radius == pytest.approx(expected)
+    assert screw.shoulder_radius == pytest.approx(screw.screw_data["ds"] / 2)
+    assert screw.shoulder_radius > screw.thread_diameter / 2
+    # the shoulder bore cut for this screw matches the shoulder radius
+    body_hole = screw.make_body_hole(screw.thread_diameter / 2, 30)
+    assert body_hole.bounding_box().size.X == pytest.approx(2 * screw.shoulder_radius)
+
+
+@pytest.mark.parametrize(
     "screw_class,fastener_type",
     [
         (HexHeadScrew, "din931"),
