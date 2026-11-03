@@ -723,6 +723,11 @@ class DomedCapNut(Nut):
     These nuts are tightened like standard hex nuts but offer the added benefit of thread protection
     and a smoother exterior that reduces the risk of snagging or injury.
 
+    Unlike symmetric nuts, both joints are on the open bearing face: joint "a" has its Z axis
+    pointing into the nut towards the dome and joint "b" has its Z axis pointing out of the nut.
+    Connect whichever one matches the direction of the target joint so the dome always faces
+    away from the part.
+
     Args:
         size (str): size specification, e.g. "M6-1"
         fastener_type (Literal["din1587"], optional): Defaults to "din1587".
@@ -749,6 +754,9 @@ class DomedCapNut(Nut):
         mode: Mode = Mode.ADD,
     ):
         super().__init__(size, fastener_type, hand, simple, rotation, align, mode)
+        # Both joints are on the bearing face: "a" with Z pointing into the nut and
+        # "b" with Z pointing out of it, so the dome is never placed against the part
+        RigidJoint("b", self, Location((0, 0, 0), (180, 0, 0)))
 
     def nut_profile(self) -> Face:
         """Create 2D profile of hex nuts with double chamfers"""
@@ -1225,6 +1233,11 @@ class HexNutWithFlange(Nut):
     improved load distribution, and vibration resistance are desired. The flanged base eliminates
     the need for a separate washer in many cases, simplifying assembly and reducing part count.
 
+    Unlike symmetric nuts, both joints are on the flange bearing face: joint "a" has its Z axis
+    pointing into the nut and joint "b" has its Z axis pointing out of the nut. Connect
+    whichever one matches the direction of the target joint so the flange always sits
+    against the part.
+
     Args:
         size (str): size specification, e.g. "M6-1"
         fastener_type (Literal["din1665"], optional): Defaults to "din1665".
@@ -1252,6 +1265,9 @@ class HexNutWithFlange(Nut):
         mode: Mode = Mode.ADD,
     ):
         super().__init__(size, fastener_type, hand, simple, rotation, align, mode)
+        # Both joints are on the bearing face: "a" with Z pointing into the nut and
+        # "b" with Z pointing out of it, so the flange is never placed against the part
+        RigidJoint("b", self, Location((0, 0, 0), (180, 0, 0)))
 
     nut_profile = Nut.default_nut_profile
     nut_plan = Nut.default_nut_plan
