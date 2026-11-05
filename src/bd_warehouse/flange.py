@@ -171,7 +171,6 @@ from build123d import (
     RotationLike,
     Select,
     Sketch,
-    SortBy,
     Trapezoid,
     chamfer,
     fillet,
@@ -831,7 +830,7 @@ class LappedFlangeStub(BasePartObject):
             self.stub_edges = stub.edges(Select.NEW)
             fillet(stub.edges(Select.NEW), LappedFlangeStub.weld_radius)
             chamfer(
-                stub.edges().group_by(Axis.Z)[-1].sort_by(SortBy.RADIUS)[-1],
+                stub.edges().group_by(Axis.Z)[-1].sort_by(Edge.radius)[-1],
                 stub_pipe.thickness * 0.75,
             )
 

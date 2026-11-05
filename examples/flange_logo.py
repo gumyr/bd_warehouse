@@ -73,7 +73,7 @@ with BuildPart() as pipes:
     welded_edges = (
         vertical_pipe.edges()
         .filter_by_position(Axis.Z, 0, trunk_pipe.od / 2)
-        .group_by(SortBy.LENGTH)[-1]
+        .group_by(Edge.length)[-1]
     )
     fillet(welded_edges, 8 * MM)
 
@@ -98,7 +98,7 @@ with BuildPart() as pipes:
     welded_edges = (
         horizontal_pipe.edges()
         .filter_by_position(Axis.Y, -trunk_pipe.od / 2, 0)
-        .group_by(SortBy.LENGTH)[-1]
+        .group_by(Edge.length)[-1]
     )
     fillet(welded_edges, 8 * MM)
 

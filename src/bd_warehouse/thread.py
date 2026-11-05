@@ -37,7 +37,7 @@ from math import copysign, cos, radians, sin, tan
 from typing import Literal, NamedTuple, Optional, Tuple, TypedDict, Union
 
 from build123d.build_common import IN, MM
-from build123d.build_enums import Align, Keep, Mode, SortBy
+from build123d.build_enums import Align, Keep, Mode
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
@@ -48,7 +48,7 @@ from build123d.objects_part import BasePartObject
 from build123d.operations_generic import insert, mirror, scale, split
 from build123d.operations_part import loft
 from build123d.operations_sketch import make_face
-from build123d.topology import Compound, Face, Part, Shape, Solid, Wire, tuplify
+from build123d.topology import Compound, Edge, Face, Part, Shape, Solid, Wire, tuplify
 
 import bd_warehouse
 
@@ -476,7 +476,7 @@ class _ThreadSweep(BasePartObject):
                     chamfer_shape.edges()
                     .group_by(Axis.Z, reverse=i != 0)[0]
                     .sort_by(
-                        SortBy.RADIUS,
+                        Edge.radius,
                         reverse=self.apex_radius > self.root_radius,
                     )[0:1],
                 )

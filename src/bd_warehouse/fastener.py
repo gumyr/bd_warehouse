@@ -43,7 +43,7 @@ from typing import ClassVar, Literal, Optional, Union, cast
 from bd_materials.finishes import black_oxide, zinc_plate
 from bd_materials.materials.metals import mild_steel
 from build123d.build_common import IN, MM, Locations, PolarLocations, validate_inputs
-from build123d.build_enums import Align, Mode, SortBy
+from build123d.build_enums import Align, Mode
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
@@ -302,7 +302,7 @@ def cross_recess(size: str) -> tuple[Face, float]:
     with BuildSketch() as recess:
         Rectangle(m, m / 6)
         Rectangle(m / 6, m)
-        fillet(recess.vertices().group_by(SortBy.DISTANCE)[0], m / 3)
+        fillet(recess.vertices().group_by(lambda v: v.center().length)[0], m / 3)
     return (recess.face(), depths[size])
 
 

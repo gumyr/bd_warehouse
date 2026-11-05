@@ -75,7 +75,6 @@ from build123d import (
     RotationLike,
     SlotCenterToCenter,
     SlotOverall,
-    SortBy,
     Text,
     Vector,
     chamfer,
@@ -1556,7 +1555,7 @@ class ShimWasher(BasePartObject):
                 Circle(od / 2)
                 Circle(bore / 2, mode=Mode.SUBTRACT)
             extrude(amount=thickness)
-            fillet(shim.edges().group_by(SortBy.LENGTH)[-1], thickness / 5)
+            fillet(shim.edges().group_by(Edge.length)[-1], thickness / 5)
 
         super().__init__(
             cast(Part, shim.part), rotation=rotation, align=align, mode=mode
