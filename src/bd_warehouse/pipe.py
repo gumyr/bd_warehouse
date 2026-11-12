@@ -76,7 +76,7 @@ license:
 from __future__ import annotations
 
 import csv
-import importlib.resources as pkg_resources
+from importlib import resources
 from typing import Literal, Union, cast, get_args
 
 from bd_materials import resolve as resolve_material
@@ -119,7 +119,12 @@ Material = Literal["abs", "copper", "iron", "pvc", "stainless", "steel"]
 def _read_pipe_data() -> dict[str, tuple[float, float]]:
     """Read pipe.csv as {nps + material + identifier: (od, thickness)} in inches."""
     pipe_data: dict[str, tuple[float, float]] = {}
-    with pkg_resources.open_text(bd_warehouse, "pipe.csv") as csvfile:
+    with (
+        resources.as_file(
+            resources.files(bd_warehouse) / "data/pipe.csv"
+        ) as data_resource,
+        data_resource.open(encoding="utf-8", newline="") as csvfile,
+    ):
         reader = csv.reader(csvfile)
         next(reader, None)  # skip the header row
         for row in reader:
